@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shioaji Codex Trader</title>
+  <style>
+    :root{color-scheme:dark;font-family:Consolas,"Microsoft JhengHei",monospace;background:#10151c;color:#dce4ef;font-size:14px}
+    body{margin:0;padding:22px;max-width:1400px}h1{font-size:21px;margin:0 0 6px;color:#8bddac}p{line-height:1.6;margin:8px 0;color:#a7b8cc}
+    button,select,input,textarea{font:inherit;border:1px solid #344355;border-radius:5px;background:#1b2532;color:inherit;padding:8px}
+    button{cursor:pointer}button:hover{background:#293b4b}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #8bddac}
+    .controls{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}pre{white-space:pre-wrap;word-break:break-word;line-height:1.6;background:#0c1118;padding:16px;border:1px solid #243242;border-radius:6px;min-height:80px}
+    #status{min-height:260px}#logs{max-height:300px;overflow:auto;font-size:12px}#message{min-height:24px;color:#8bddac}#error{color:#ffb791}#command-form{display:flex;gap:8px}#command{flex:1}details{margin-top:15px}summary{cursor:pointer;padding:8px 0}textarea{box-sizing:border-box;width:100%;min-height:380px;line-height:1.5}label{display:block;margin:10px 0 5px}#ack{width:95%}.danger{color:#ffb791}footer{font-size:12px;color:#8194ab;margin:20px 0}
+  </style>
+</head>
+<body>
+  <h1>Shioaji Codex Trader · TypeScript</h1>
+  <p>Codex 定時分析，程式持續監控。關閉或最小化視窗會縮到系統匣；點圖示即可重開。</p>
+  <div class="controls">
+    <button data-command="decide">立即分析</button><button data-command="review">盤後檢討</button>
+    <button data-command="pause">暫停買進</button><button data-command="resume">恢復買進</button>
+    <button data-command="auto on">自動執行</button><button data-command="auto off">停止自動</button>
+    <button data-command="reconcile">核對帳戶</button><button data-command="stop" class="danger">停止新委託</button>
+    <button id="hide">縮到系統匣</button><button id="exit">結束程式</button>
+  </div>
+  <p id="error" role="alert"></p><p id="message" role="status"></p>
+  <pre id="status" aria-label="交易狀態">載入中…</pre>
+  <form id="command-form"><input id="command" autocomplete="off" aria-label="文字指令" placeholder="輸入 help 查看指令，例如 pause、cancel-all、calendar 2027"><button type="submit">執行</button></form>
+  <details><summary>連線與模式</summary>
+    <p>每種模式各自保存資料。先用 DEMO，再用唯讀核對帳戶與交割資料。PAPER 使用真實行情及模擬資金。</p>
+    <div class="controls"><select id="mode" aria-label="交易模式"><option value="demo">DEMO 虛構行情</option><option value="readonly">READONLY 帳戶唯讀</option><option value="paper">PAPER 模擬成交</option><option value="live">LIVE 實盤監控</option></select><button id="switch">切換並重新連線</button></div>
+  </details>
+  <details><summary>本機設定（JSON）</summary>
+    <p>金額與比率使用字串，股數與時間間隔使用整數。設定保存到 SQLite；不要填入 API 金鑰或 CA 密碼。</p>
+    <textarea id="settings" spellcheck="false" aria-label="本機 JSON 設定"></textarea>
+    <div class="controls"><button id="save">儲存設定</button><button id="reset">重新載入設定</button></div>
+  </details>
+  <details><summary class="danger">本機實盤授權</summary>
+    <p>須先確認手續費、交割款正負號、可賣股數及官方服務的正式模式。智慧停損只在本機執行，電腦休眠、斷線或程式關閉時無法監控；觸發價格不保證成交。</p>
+    <label for="ack">輸入：我確認啟用現股自動實盤交易並了解零股不可當沖</label>
+    <input id="ack" autocomplete="off"><div class="controls"><button id="authorize" class="danger">授權這台電腦的實盤交易</button></div>
+  </details>
+  <details><summary>本機事件紀錄</summary><pre id="logs"></pre></details>
+  <footer>限價現股／盤中零股 1–999 股。今日買進量禁止當日賣出。stop 停止新委託；cancel-all 核對本程式掛單的撤單狀態。</footer>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

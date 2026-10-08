@@ -1,0 +1,38 @@
+{
+  "name": "shioaji-codex-trader",
+  "version": "0.2.0",
+  "private": true,
+  "description": "TypeScript Taiwan odd-lot trading desktop with scheduled Codex analysis",
+  "main": "dist/src/desktop/main.js",
+  "type": "module",
+  "engines": {"node": ">=24.0.0"},
+  "scripts": {
+    "build": "tsc && node scripts/assets.ts",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "demo": "npm run build && node dist/src/cli.js --demo",
+    "start": "npm run build && electron .",
+    "doctor": "npm run build && node dist/src/cli.js --doctor",
+    "pack:win": "npm run build && electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "0.161.0",
+    "decimal.js": "10.6.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "typescript": "7.0.2"
+  },
+  "build": {
+    "appId": "tw.shioaji.codex.trader",
+    "productName": "Shioaji Codex Trader",
+    "asar": true,
+    "files": ["dist/src/**/*", "package.json", "node_modules/**/*"],
+    "asarUnpack": ["node_modules/@openai/codex*/**/*"],
+    "win": {"target": "portable", "signAndEditExecutable": false},
+    "portable": {"artifactName": "Shioaji-Codex-Trader-${version}-Windows-x64.exe"},
+    "directories": {"output": "release"}
+  }
+}

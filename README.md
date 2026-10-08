@@ -1,131 +1,190 @@
-# Shioaji Codex Trader
+# Shioaji Codex Trader（全 TypeScript）
 
-Windows 文字介面／系統匣股票交易程式。Python 持續監控行情與委託，Codex CLI 定時提出選股、股數、限價、停損及移動停利計畫，程式驗證後才執行。以盤中零股為主，整股預設關閉；不支援當沖、融資融券或放空。
+Windows 系統匣程式，開啟後是文字介面。Codex 定時分析動態股票池，Node.js 交易引擎持續監控行情、智慧條件、風控與委託。
 
-**初始模式是虛構行情 demo，自動執行關閉。本專案沒有使用你的券商帳號，也沒有實際下單。** 核心模擬已驗證；Windows GUI、打包、Codex 真實登入及券商連線需本機驗證。這是可測試的第一版，不是已完成券商驗收的產品。
+應用程式、交易引擎、Codex 整合、Electron 介面、測試及打包腳本全部使用 TypeScript。透過 **Shioaji 官方 HTTP API + SSE** 連接券商，沒有自製 Python 橋接程式。官方原生 `shioaji` 服務與 Codex 原生執行檔是外部依賴。
 
-## Windows 安裝
+預設為 `demo`，自動執行與真實下單均關閉。DEMO 只使用虛構代碼、行情、資金及成交。程式不提供獲利保證；完成程式測試不代表已驗證你的券商帳戶或實際成交。
 
-準備 Windows 10/11、Python 3.12 x64；需要 AI 分析時另裝 Node.js LTS 與官方 Codex CLI。下載／clone 原始碼後，在專案目錄用 PowerShell 執行：
+## 功能
+
+| 部分 | 行為 |
+|---|---|
+| 桌面 | Electron 文字視窗、系統匣、關閉／最小化隱藏、點圖示重開、系統匣暫停與停止 |
+| 模式 | DEMO 虛構行情、READONLY 帳戶唯讀、PAPER 真實行情＋模擬資金、LIVE 實盤；資料庫各自獨立 |
+| 動態股票池 | Shioaji 成交金額、成交量、漲跌幅排行榜合併，過濾非普通股票、暫停／處置股及注意股 |
+| 選股 | Codex 每輪列出 5–20 檔候選；可全部 HOLD，沒有固定買進名單 |
+| 分析資料 | 已完成日 K、MA5/20/60、簡單 RSI14（不是 Wilder 平滑）、ATR14、量比、20 日支撐壓力、月營收、重大訊息 |
+| Codex | 官方 TypeScript SDK，獨立分析設定目錄、唯讀 sandbox、禁用網路工具，schema 與快照／效期核對 |
+| 定時分析 | 台北時間 08:40 盤前、盤中每 60 分鐘、14:00 盤後；可在文字設定修改 |
+| 智慧條件 | 限價、立即／價格以下／价格以上進場、停損、停利、移動停損；既有停損不得由 AI 放寬 |
+| 零股 | `IntradayOdd`，1–999 股，現股 `Cash`、限價 `LMT`、當日有效 `ROD`；不用盤後零股 |
+| 不當沖 | 核對庫存明細取得日及股數單位；今日新增股數不會用於 SELL，舊庫存可賣 |
+| 委託 | 送單前持久化、部分成交、重啟核對、外部掛單預留資金、未知委託凍結，不盲目重送 |
+| 保護出場 | 每筆最多 999 股；撤單確認＋更新可賣股數後才重掛，最多每天每檔 10 次嘗試 |
+| 保存 | SQLite WAL、完整同步寫入、單一寫入佇列、程序鎖、計畫／保護／事件紀錄持久化 |
+| 操作 | 暫停買進、緊急停止新委託、逐筆／本程式全部撤單、手動核對、立即分析與盤後檢討 |
+| 行事曆 | 官方 TWSE 每日開休市；附 2026 核對資料，未知年份禁止委託；可更新 |
+
+僅開放上市櫃普通現股，禁止融資、融券、借券、當沖及槓桿／反向 ETF。整股預設關閉，啟用後仍須為 1000 股倍數。其他券商 API 功能（期貨、選擇權、借券、保留額度等）沒有開放給交易策略。
+
+## Windows 啟動
+
+1. 在 GitHub 的 **Actions → TypeScript checks and Windows app** 選最新成功的工作流程。
+2. 下載 **Shioaji-Codex-Trader-TypeScript-Windows-x64** artifact，解壓後開啟 EXE。
+3. 預設開啟 DEMO。按「立即分析」及「自動執行」可測試虛構流程；真實交易需另行設定。
+
+Portable EXE 包含 Electron、Node.js 及應用程式。下載檔沒有程式碼簽章，Windows 可能要求確認來源。資料保存於 Electron 的本機使用者資料目錄 `Shioaji Codex Trader/state/`；portable 解壓位置不是資料保存位置。
+
+開發者可用 Node.js **24 以上**：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install.ps1
-.\.venv\Scripts\python.exe -m shioaji_trader doctor
-.\.venv\Scripts\python.exe -m shioaji_trader demo
-.\.venv\Scripts\shioaji-trader-desktop.exe
+git clone https://github.com/jackyname1/shioaji-codex-trader.git
+cd shioaji-codex-trader
+npm ci
+npm test
+npm run demo
+npm start
 ```
 
-`demo` 用 2026-10-08 虛擬時鐘展示一次買進與今日不可賣庫存；不連線券商。桌面 demo 依目前台北時間及已載入行事曆运行，休市時不送模擬單。
+`npm run demo` 使用固定的虛構交易時間驗證下單、成交及今日不可賣流程，完全不連券商或 Codex。測試也不使用真實帳戶。
 
-桌面最小化或關閉視窗會收進系統匣；雙擊圖示開啟文字介面。退出請用系統匣「結束」或 `exit`。無系統匣的環境會保留視窗。`--minimized` 可啟動隱藏。預設阻止 Windows 自動睡眠，但不阻止關螢幕；手動睡眠、關機與斷網仍會中斷監控。
+## Shioaji 官方本機服務
+
+需在實際使用電腦安裝官方原生 `shioaji` CLI／HTTP 服務。不需要安裝或執行本專案的 Python 程式。
+
+依 [官方其他語言安裝說明](https://sinotrade.github.io/env_setup/other/) 安裝 Windows 版本。官方安裝命令如下，請先在本機核對網址及腳本內容：
+
+```powershell
+irm https://github.com/Sinotrade/Shioaji/releases/latest/download/install.ps1 | iex
+```
+
+在另一個本機服務目錄建立 `.env`，參考本專案 `.env.example`。於本機填入 `SJ_API_KEY`、`SJ_SEC_KEY`、CA 路徑及 CA 密碼。先使用 `SJ_PRODUCTION=false`；正式服務依官方說明使用 `SJ_PRODUCTION=true` 並啟用有效 CA。
+
+```powershell
+shioaji server start
+shioaji server status --streams
+```
+
+預設服務為 `http://127.0.0.1:8080`。程式只接受本機 loopback 網址，不會把金鑰放入網址、提示詞、SQLite 設定或 GitHub。原生服務依你的本機設定管理券商登入；本應用程式不登入或登出整個共享服務。
+
+連接前會核對 `/info`、`/health`、帳戶簽署狀態及 `/openapi.json` 必要端點。API 欄位、CA 狀態或日期無法核對時停止新增委託；不會猜測未知欄位。
+
+在「連線與模式」先切換 READONLY，核對銀行現金、交割款、庫存與可賣股數；再使用 PAPER 驗證行情與策略。設定 `stock_account_index` 選取官方服務回傳的證券帳戶順序，切换需重新連線；帳戶或服務模式變更須使用新的獨立資料庫，禁止混用。
+
+PAPER 與 DEMO 成交模型依五檔首檔量模擬部分成交，按委託累計金額計費。PAPER 沒有完整模擬 T+2 入扣款、排隊順位、券商拒單或成交價格；不能作為實際交易能力驗收。PAPER 只用真實行情，不向券商送單。
+
+## Codex 本機登入與設定
+
+先依 [Codex 官方文件](https://developers.openai.com/codex/cli/) 安裝並登入 Codex CLI。Windows 建議使用官方支援的本機環境。若唯讀 sandbox 不受支援，分析會失敗，程式不會退回 unrestricted 模式。
+
+```powershell
+npm install -g @openai/codex
+codex login
+```
+
+程式使用官方 `@openai/codex-sdk`，預設使用 SDK 內附執行檔，可在設定指定 `codex_path`。設定 `codex_enabled: true`；`codex_model` 留空使用你的 Codex 預設模型，`codex_reasoning` 可用 `default/low/medium/high/xhigh`。分析可能消耗你的方案額度或 API 費用。
+
+分析使用獨立 `codex-analysis-profile`，只複製你的 Codex 登入檔，不沿用個人 MCP、技能或外掛設定。登入檔維持本機權限，不能上傳或分享。傳給模型的快照沒有帳號、身分證字號、委託識別碼、券商金鑰、CA 路徑或密碼；子程序不繼承任何 `SJ_*` 環境值。
+
+限制 shell／檔案修改／MCP／網路搜尋工具並檢查 SDK 事件。模型只回傳 JSON 決策，交易引擎獨立驗證後才執行。唯讀 sandbox 與環境過濾不等於抵抗同一 OS 使用者的所有惡意程式；需要更強隔離時，應將分析執行在不同 OS 使用者或受控執行環境中。
+
+分析逾時或結果不符會停止新買進並核對撤銷本程式的買進掛單；既有持倉保護獨立持續。盤後檢討只接受 HOLD 決策。
+
+## 設定與預設風控
+
+設定存在 SQLite，以介面中的 JSON 編輯，不使用 `config.yaml` 或固定股票清單。金額與比率使用十進位字串，整數股數不接受小數；未知欄位會被拒絕。
+
+| 設定 | 預設 |
+|---|---:|
+| `min_cash_fraction` | 至少保留 25% 淨資產現金 |
+| `max_order_fraction` | 單筆不超過可投入淨資產的 10% |
+| `max_symbol_fraction` | 單檔不超過淨資產 20% |
+| `max_exposure_fraction` | 總股票曝險不超過 75% |
+| `max_daily_buy_fraction` | 單日新增買進不超過淨資產 20% |
+| `max_daily_buy_orders` | 每日最多 5 筆買進 |
+| `daily_loss_fraction` | 達到 2% 日損失停止新買進，仍可賣出舊庫存 |
+| `quote_max_age` | 成交與五檔各自最多 30 秒 |
+| `account_max_age` | 帳戶快照最多 60 秒 |
+| `max_spread_fraction` | 最大買賣價差 2% |
+| `price_deviation_fraction` | 委託價距最新成交最多 3% |
+| `cooldown_seconds` | 同標的非保護委託間隔 120 秒 |
+| `plan_max_minutes` | 計畫最多有效 120 分鐘 |
+| `fee_rate / minimum_fee` | 保守估算 0.1425%／NT$20，須核對你的實際券商費率 |
+| `sell_tax_rate` | 普通現股賣出稅 0.3%，不適用當沖減稅 |
+
+現金扣除待付交割款及未完成買單資金；未入帳賣出交割款不立即用於下單。日損失基準為程式本交易日第一次完整帳戶快照，盤中開啟時不是當日開盤淨資產。
+
+實盤前須將 `fee_verified` 設為 `true`，並依你實際交割明細確認 `settlement_debit_sign: "positive"` 或 `"negative"`。預設 `"unverified"` 遇非零交割款會凍結委託，禁止自行推測符號。
+
+## 實盤啟用
+
+此專案建置與測試不會替你啟用實盤、索取金鑰或傳送真實委託。使用者在本機完成下列流程：
+
+1. 先用 READONLY/PAPER 核對你的帳戶、行情、交易日曆、庫存單位與手續費。
+2. 官方原生服務使用正式模式，有效 CA 與必要權限；只綁定本機。
+3. 本機啟動應用程式時明確設定 `LIVE_TRADING=true`：
+
+```powershell
+$env:LIVE_TRADING = 'true'
+& '.\Shioaji-Codex-Trader-0.2.0-Windows-x64.exe' --mode=live
+```
+
+4. 在 LIVE 的獨立設定核對 `fee_verified`、交割款符號及風控。帳戶必須完整且符合正式服務模式。
+5. 在「本機實盤授權」輸入指定文字並接受原生授權視窗。最後再使用 `auto on`。
+
+實盤同時要求 LIVE 模式、環境旗標、與選定帳戶相符的本機授权、有效登入與 CA、自動執行及風控通過。改 JSON 不能跳過這些條件。
+
+如果官方服务啟用 **Agent Harness**，需要可信任主機的逐次能力票證。本版沒有原生票證簽發服務，因此會停止真實委託，顯示需要受信任 broker；不會關閉、繞過或偽造票證。標準官方服務預設 `off` 的情況使用普通 HTTP。若你的使用環境必須使用 Harness，應先整合官方支持的可信任 broker 才能實盤；本機授權不能取代官方能力票證。
 
 ## 文字指令
 
 | 指令 | 行為 |
 |---|---|
-| `decide` | 非重疊地準備快照與呼叫 Codex；demo 未啟用 Codex 時用虛構範例 |
-| `auto on` / `auto off` | 開關自動執行，不改變交易模式 |
-| `pause` / `resume` | 暫停／恢復買進，既有保護條件繼續 |
-| `stop` / `continue` | 停止／恢復全部新委託；不會自動撤掉券商既有掛單 |
-| `cancel` | 撤銷本程式記錄且可核對的掛單，不撤其他程式或人工單 |
-| `settings` | JSON 文字設定，保存在本機 SQLite |
-| `calendar` | 更新本年度證交所開休市表 |
-| `help` / `exit` | 說明／結束程式 |
+| `status` | 顯示模式、帳戶、計畫、保護與委託 |
+| `decide` / `review` | 立即分析／盤後只讀檢討 |
+| `pause` / `resume` | 暫停／恢復新增買進，持倉保護持續 |
+| `stop` / `continue` | 停止／恢復所有新委託；不自動撤銷券商掛單 |
+| `auto on` / `auto off` | 啟用／停止自動執行 |
+| `cancel ID前綴` | 核對撤銷指定本機委託 |
+| `cancel-all` | 核對撤銷本程式的掛單，不操作外部委託 |
+| `reconcile` | 重新核對券商委託與帳戶 |
+| `calendar 2027` | 從官方取得指定年度交易日曆 |
+| `help` / `exit` | 顯示指令／結束本機監控 |
 
-## 本機設定與資料
+CLI：`node dist/src/cli.js --mode=readonly --doctor` 或 `node dist/src/cli.js --mode=paper`。可用 `--db=絕對路徑` 指定獨立資料庫；只有桌面介面提供本機實盤授權。
 
-預設資料在 `%LOCALAPPDATA%\ShioajiCodexTrader\state.db`。模型設定、委託意圖、庫存、保護條件、事件與每日基準存在 SQLite。CLI 全域 `--db PATH` 必須放子命令之前；GUI 也接受 `--db PATH`。一個資料庫同時只能有一個引擎。**同一券商帳號只運行一套實盤引擎；不要藉不同資料庫重複啟動。** 改模式前結束程式；建議 demo、paper、live 分別使用資料庫。
+## 智慧單與異常處理
 
-```powershell
-.\.venv\Scripts\python.exe -m shioaji_trader settings
-.\.venv\Scripts\python.exe -m shioaji_trader set start_minimized true
-.\.venv\Scripts\python.exe -m shioaji_trader set codex_enabled true
-.\.venv\Scripts\python.exe -m shioaji_trader set decision_interval_minutes 60
-```
+智慧條件由本機程式實作，沒有假設券商提供原生 stop/oco。需讓電腦、官方 Shioaji 服務和程式持續運作。介面預設阻止程式自動休眠，但無法阻止手動休眠、關機或網路中斷。
 
-盤前 08:40、盤中每 60 分鐘、盤後 14:00 為預設排程；可調整時間與間隔。盤後僅檢討 HOLD，不補掛盤後零股。關機期間的排程不補追單。未載入年度行事曆時，未知日期拒單；已附官方 2026 年資料，跨年前更新下一年度。不是以政府辦公日判斷股市開市。
+零股當日新增量不可當沖。停損當日觸發也可能只能等待下一個交易日，並重新評估當時行情；停損不能消除這段持有風險。所有出場仍使用限價單，行情跳空或流動性不足時可能無法成交。
 
-## Codex
+送單前先保存完整意圖及唯一短標籤。回應逾時、欄位不符或券商狀態未知時標記 UNKNOWN，禁止新委託並重新查詢，不會直接重送。撤單不是立即成功；須看到最終 CANCELLED 或 FILLED，更新持倉後才允許重掛。UNKNOWN 不會因找不到委託而自動清除，需人工核對券商；避免把延遲回報誤判為沒有下單。
 
-```powershell
-npm install -g @openai/codex
-codex login
-codex --version
-.\.venv\Scripts\python.exe -m shioaji_trader set codex_enabled true
-```
+同一帳戶只執行一套自動程式。資料庫程序鎖防止同一資料庫重複啟動；桌面還有單實例鎖。不同資料庫／不同程式仍可能連到同一券商帳戶，請勿同時啟用。
 
-沿用本機 Codex CLI 登入；實際可用模型與額度依你的帳號及官方支援而定。`codex_model` 空白使用 CLI 預設，`codex_path` 可指定執行檔路徑。每次執行 `codex exec`，使用唯讀模式、暫存目錄及 JSON Schema。回傳格式、標的範圍、快照、期限與風控不合即拒絕；超時不啟用新計畫。Codex 思考在背景工作執行緒，交易監控仍持續。
-
-快照包含動態成交額／成交量／漲幅 scanner 股票池、MA5/20/60、簡單 RSI14、ATR14、支撐壓力、量能、現金／待交割款／可賣庫存，以及可取得的官方月營收與重大訊息。資料缺漏會列出限制，不編造消息。候選通常 5–20 檔，訊號不足可以不交易。報價及帳戶核對會序列化 SDK 呼叫，因此網路慢時仍可能延遲監控，不能保證即時出場。
-
-券商金鑰、憑證密碼及帳戶 ID 不放進 AI 快照；傳給 CLI 的環境移除 `SJ_`／`SHIOAJI_`、`LIVE_TRADING`、GitHub Token。這不是 OS 層級隔離：Codex 與券商使用同一使用者執行時，仍需保護該使用者的本機權限。模型若回報執行外部工具，計畫會被拒絕。
-
-## Shioaji 連線與模擬資金
-
-先完成永豐帳戶/API 權限與憑證申請。金鑰與憑證只在自己的電腦輸入：
-
-```powershell
-.\.venv\Scripts\python.exe -m shioaji_trader credentials
-.\.venv\Scripts\python.exe -m shioaji_trader readonly-test
-```
-
-輸入項目：`SJ_API_KEY`、`SJ_SEC_KEY`、`SJ_CA_PATH`、`SJ_CA_PASSWD`。使用 Windows Credential Manager/keyring；也可由本機環境提供。不要貼到聊天、GitHub 或設定 JSON，不上傳 CA 檔案。
-
-唯讀測試使用真實 API 登入，讀取餘額、交割、部位及委託，不啟用 CA 下單。`paper` 使用真實市場行情及本程式模擬帳本，**不是 Shioaji simulation**：
-
-```powershell
-.\.venv\Scripts\python.exe -m shioaji_trader set mode paper
-.\.venv\Scripts\python.exe -m shioaji_trader set codex_enabled true
-.\.venv\Scripts\shioaji-trader-desktop.exe
-```
-
-先檢查 `decide` 的計畫，再開 `auto on` 進行模擬。Paper 帳本預設十萬元，成交按可見五檔與深度模擬；不含完整排隊、滑價或 T+2 交割，手續費按每次成交保守計算。不能當作實盤績效回測。
-
-## 零股與風控
-
-零股每單 1–999 股，現股、LMT、ROD；整股啟用後輸入股數需為 1000 倍數。整股與零股行情分開。零股改價採撤單、確認成功、再掛剩餘數量；部分成交不重買已成交數量。重啟先核對券商委託，送單逾時寫入 UNKNOWN，停止新委託，不能盲目重送。
-
-今日新增庫存排除可賣量；既有庫存仍可卖。保護条件觸發但全是今日新買時，不送出賣單，下一交易日以當時行情重判。停損／停利是程式監控的條件限價單，**不是券商伺服器保證执行的智慧單**；斷網、關機、跌停無量、隔夜跳空都可能無法成交。
-
-預設保留現金 25%、單筆最多可投入資金 10%、单一股票淨資產 20%、總持倉 75%、每日新增買進 20%與最多五筆；日損失 2%停止買進，保護賣出仍可執行。日損基準是本日第一次完整帳戶快照，不是歷史開盤資產。資金扣除待付交割及未成交買單，交割收入不當成可立即動用現金。價格跳動、漲跌停、報價時效、庫存、注意／處置／停牌等均另行檢查。
-
-一檔股票每次最多撤換十次保護單／日；大於 999 股的部位分次零股出場，可能跨越多次檢查。模型未為人工已有持倉提供保護条件时，不會凭空補出停損；請在計畫中核對每個持倉。
-
-## 本機實盤啟用
-
-這些步驟會啟用真實自動交易，請在完成唯讀與 paper 核對後自行執行。先關閉執行中的程式，核對實際手續費、零股最低費用與證交稅，再設定 `fee_rate`、`minimum_fee`、`sell_tax_rate`。交割款正負號依券商明細確認，設 `settlement_debit_sign` 為 `positive` 或 `negative`；無法確認時保留 `unverified`，有非零交割資料會拒單。
-
-```powershell
-.\.venv\Scripts\python.exe -m shioaji_trader set fee_verified true
-# 下行僅在已核對「正數代表待付款」時使用；否則改 negative
-.\.venv\Scripts\python.exe -m shioaji_trader set settlement_debit_sign positive
-.\.venv\Scripts\python.exe -m shioaji_trader readonly-test
-.\.venv\Scripts\python.exe -m shioaji_trader enable-live --ack 'ENABLE CASH STOCK AUTO TRADING'
-$env:LIVE_TRADING = 'true'
-.\.venv\Scripts\shioaji-trader-desktop.exe
-```
-
-`enable-live` 本身只保存本機設定；啟動仍須 `LIVE_TRADING=true`、CA 啟用成功与完整帳戶核對。這不是本次聊天已替你核准的實盤操作；我們目前只開發與模擬。`disable-live` 保存停用設定，但正在執行的引擎需退出重啟；立即停止新單用 GUI `stop`，撤既有掛單另用 `cancel` 或券商介面。
-
-## 打包／開機啟動
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build.ps1
-powershell -ExecutionPolicy Bypass -File scripts/startup.ps1 -Executable .\dist\ShioajiTrader\ShioajiTrader.exe
-# 移除開機捷徑
-powershell -ExecutionPolicy Bypass -File scripts/startup.ps1 -Executable .\dist\ShioajiTrader\ShioajiTrader.exe -Remove
-```
-
-傳送整個 `dist/ShioajiTrader` 與 `dist/ShioajiTraderCLI` 目錄，不只 exe。CLI exe 支援相同子命令。開機捷徑不保存金鑰或啟用實盤環境變數。GitHub Actions 在 Linux/Windows 跑核心測試，再於 Windows 建置并上傳 artifact；首次推送後需確認 Actions 結果，不能把配置檔當作已成功打包。
+斷線、SSE gap、資料格式異常、休眠或跨日都會清除行情並重新核對。格式異常需重新啟動。未知年份／非已確認交易日禁止下單。2026-12-07 前盤中零股自 09:10 開始，生效日後改為 09:00；收盤 13:30 排除。
 
 ## 開發與驗證
 
-```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
-PYTHONPATH=src python -m compileall -q src tests
-PYTHONPATH=src python -m shioaji_trader demo
+```powershell
+npm test
+npm run demo
+npm run pack:win
 ```
 
-目前涵蓋 26 個核心／整合模擬測試。Codex subprocess 用 mock 驗證指令、Schema、環境过滤與重疊拒絕；尚未實際呼叫登入服務。雲端環境無法安裝 PySide6/Shioaji 等外部套件，Windows GUI、CA、API 資料格式与建置需本機驗收。實盤前逐一確認：新版本 API 契約、零股行情、交割正負號、舊庫存可賣量、部分成交与撤單回報、睡眠恢复、断线与 UNKNOWN 处理。
+GitHub Actions 在 Linux 與 Windows 執行 TypeScript 編譯、單元／整合測試及 DEMO；Windows 另驗證 Electron 文字介面、IPC 隔離、指令及視窗隱藏／重開，再驗證打包後 EXE。
 
-官方參考：[Shioaji](https://sinotrade.github.io/) · [Codex CLI](https://developers.openai.com/codex/cli/) · [證交所開休市表](https://www.twse.com.tw/zh/trading/holiday.html)
+測試涵蓋部分成交、計費、禁止同日賣出、未知委託不重送、過期計畫撤單、保護持續、重啟、價格跳動單位、資金與交割預留、日損失、SDK 輸出驗證、環境隔離及 API/SSE 單位解析。真實登入、CA、零股成交、券商費率與 Codex 認證須在你的電腦另外驗收；CI 沒有使用這些帳戶。
+
+舊 Python 版本保留於 Git 歷史，新版預設分支只包含 TypeScript 實作，不會自動匯入舊帳戶資料庫。
+
+## 官方參考
+
+- [Shioaji 官方文件](https://sinotrade.github.io/)
+- [官方其他語言／HTTP 安裝](https://sinotrade.github.io/env_setup/other/)
+- [官方 TypeScript／JavaScript HTTP 範例](https://github.com/Sinotrade/Shioaji/blob/master/plugins/shioaji/skills/shioaji/references/JAVASCRIPT.md)
+- [官方 HTTP API](https://github.com/Sinotrade/Shioaji/blob/master/plugins/shioaji/skills/shioaji/references/HTTP_API.md)
+- [官方 Agent Harness](https://github.com/Sinotrade/Shioaji/blob/master/plugins/shioaji/skills/shioaji/references/AGENT_HARNESS.md)
+- [Codex SDK](https://developers.openai.com/codex/sdk/)

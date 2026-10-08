@@ -1,0 +1,54 @@
+name: TypeScript checks and Windows app
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run demo
+      - name: Electron Windows text UI smoke test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath node_modules/electron/dist/electron.exe -ArgumentList @('.', '--smoke-test') -PassThru -Wait -NoNewWindow
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+  windows:
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run pack:win
+      - name: Packaged app smoke test
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release/Shioaji-Codex-Trader-*-Windows-x64.exe | Select-Object -First 1
+          $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shioaji-Codex-Trader-TypeScript-Windows-x64
+          path: release/Shioaji-Codex-Trader-*-Windows-x64.exe
+          if-no-files-found: error
+          retention-days: 30
