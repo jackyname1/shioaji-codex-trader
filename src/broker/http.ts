@@ -270,7 +270,8 @@ export class ShioajiHttpBroker implements Broker {
     const states: Record<string, Order['status']> = { Filled: 'FILLED', Cancelled: 'CANCELLED', PartFilled: 'PARTIAL',
       Failed: 'REJECTED', Inactive: 'REJECTED', Submitted: 'PENDING', PreSubmitted: 'SUBMITTING', PendingSubmit: 'SUBMITTING' };
     const mapped = states[status.status] ?? 'UNKNOWN';
-    const price = d(status.modified_price ?? native.price);
+    const modifiedPrice = d(status.modified_price ?? '0');
+    const price = modifiedPrice.gt(0) ? modifiedPrice : d(native.price);
     if (local) {
       if (local.symbol !== trade.contract.code || local.action !== action || local.shares !== quantity
         || !d(local.limit_price).eq(price) || native.custom_field !== local.tag

@@ -122,6 +122,7 @@ test('native order normalization checks identity, units, cumulative fills and pe
     account:{account_type:'S',broker_id:'test',account_id:'test',signed:true}},
     status:{status:'PartFilled',order_ts:now.getTime()/1000,order_quantity:30,deal_quantity:17}};
   assert.equal(broker.normalizeTrade(trade,local).status,'CANCEL_PENDING');
+  assert.equal(broker.normalizeTrade({...trade,status:{...trade.status,modified_price:'0'}},local).limit_price,'30.05');
   assert.throws(() => broker.normalizeTrade({...trade,status:{...trade.status,deal_quantity:9}},local));
   assert.throws(() => broker.normalizeTrade({...trade,order:{...trade.order,price:'30.1'}},local));
   assert.equal(broker.normalizeTrade({...trade,order:{...trade.order,order_lot:'Common',quantity:1},
