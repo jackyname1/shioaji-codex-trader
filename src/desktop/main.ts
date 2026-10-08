@@ -28,7 +28,7 @@ else {
     if (service?.engine.settings.keep_awake) blocker = powerSaveBlocker.start('prevent-app-suspension');
     if (service?.engine.settings.start_minimized && tray && !smoke) window!.hide();
     if (smoke) await smokeTest();
-  }).catch(() => { console.error('桌面啟動失敗'); app.exit(1); });
+  }).catch(error => { console.error(smoke ? error : '桌面啟動失敗'); app.exit(1); });
 }
 async function connect(nextMode: Settings['mode']): Promise<void> {
   if (service) await service.close(); service = undefined; initialError = ''; mode = nextMode;
@@ -48,25 +48,21 @@ function createWindow(): void {
   void window.loadFile(join(directory,'index.html'));
 }
 function trayIcon(): Electron.NativeImage {
-  // Embedded uncompressed BMP avoids image/network/native rendering dependencies.
-  const size = 16, stride = size * 4, buffer = Buffer.alloc(54 + stride * size);
-  buffer.write('BM'); buffer.writeUInt32LE(buffer.length,2); buffer.writeUInt32LE(54,10);
-  buffer.writeUInt32LE(40,14); buffer.writeInt32LE(size,18); buffer.writeInt32LE(size,22);
-  buffer.writeUInt16LE(1,26); buffer.writeUInt16LE(32,28); buffer.writeUInt32LE(stride * size,34);
+  const size = 16, stride = size * 4, buffer = Buffer.alloc(stride * size);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const offset = 54 + y * stride + x * 4, highlight = x >= 3 && x <= 12 && y >= 4 && y <= 6 || x >= 7 && x <= 9 && y >= 4 && y <= 12;
+    const offset = y * stride + x * 4, highlight = x >= 3 && x <= 12 && y >= 4 && y <= 6 || x >= 7 && x <= 9 && y >= 4 && y <= 12;
     buffer[offset] = highlight ? 170 : 32; buffer[offset + 1] = highlight ? 220 : 24;
     buffer[offset + 2] = highlight ? 70 : 16; buffer[offset + 3] = 255;
   }
-  return nativeImage.createFromBuffer(buffer);
+  return nativeImage.createFromBitmap(buffer,{width:size,height:size});
 }
 function createTray(): void {
   try {
     tray = new Tray(trayIcon()); tray.setToolTip('Shioaji Codex Trader');
     tray.setContextMenu(Menu.buildFromTemplate([
       {label:'開啟文字介面',click:() => {window?.show();window?.focus();}},
-      {label:'暫停新增買進',click:() => void service?.command('pause')},
-      {label:'停止全部新委託',click:() => void service?.command('stop')},
+      {label:'暫停新增買進',click:() => void service?.command('pause').catch(() => undefined)},
+      {label:'停止全部新委託',click:() => void service?.command('stop').catch(() => undefined)},
       {type:'separator'},{label:'結束程式',click:() => void exit()},
     ]));
     tray.on('click',() => { window?.show(); window?.focus(); });
@@ -124,6 +120,7 @@ function registerIpc(): void {
 }
 async function smokeTest(): Promise<void> {
   if (!window || !service || initialError || mode !== 'demo') throw new Error('桌面測試未啟動');
+  if (process.platform === 'win32' && !tray) throw new Error('Windows 系統匣未啟動');
   if (!window.webContents.isLoading()) await verifyRenderer();
   else await new Promise<void>((resolve,reject) => {
     window!.webContents.once('did-finish-load',() => { void verifyRenderer().then(resolve,reject); });

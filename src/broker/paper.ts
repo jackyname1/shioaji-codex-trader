@@ -12,19 +12,20 @@ export class SyntheticMarket implements Broker {
   readonly production = false; dirty = false; generation = 0;
   private symbols = Array.from({ length:30 },(_,i) => String(9001 + i));
   private watched = new Set<string>();
+  private wholeLots = false;
   async connect(): Promise<void> {}
   async close(): Promise<void> {}
   async account(_now: Date): Promise<Account> { throw new Error('虛構行情源不提供帳戶'); }
   async reconcile(_orders: Order[]): Promise<Order[]> { return []; }
-  async subscribe(symbols: string[], _wholeLots: boolean): Promise<void> { symbols.forEach(s => this.watched.add(s)); }
+  async subscribe(symbols: string[], wholeLots: boolean): Promise<void> { symbols.forEach(s => this.watched.add(s)); this.wholeLots = wholeLots; }
   private price(symbol: string, now: Date): string {
     const base = 30 + (Number(symbol) - 9001) * 2;
     return roundPrice(base + Math.sin(now.getTime() / 60000 + Number(symbol)) * base * .004);
   }
   quotes(now: Date): Quote[] {
-    return [...this.watched].map(symbol => { const last = this.price(symbol,now), tick = tickSize(last);
-      return { symbol,last,bid:d(last).minus(tick).toFixed(),ask:d(last).plus(tick).toFixed(),odd:true,simulated:false,
-        bid_shares:17,ask_shares:17,trade_at:now.toISOString(),book_at:now.toISOString() }; });
+    return [...this.watched].flatMap(symbol => { const last = this.price(symbol,now), tick = tickSize(last);
+      return (this.wholeLots ? [true,false] : [true]).map(odd => ({ symbol,last,bid:d(last).minus(tick).toFixed(),ask:d(last).plus(tick).toFixed(),odd,simulated:false,
+        bid_shares:odd ? 17 : 17000,ask_shares:odd ? 17 : 17000,trade_at:now.toISOString(),book_at:now.toISOString() })); });
   }
   async instruments(symbols: string[], now: Date): Promise<Record<string, Instrument>> {
     return Object.fromEntries(symbols.filter(s => this.symbols.includes(s)).map(symbol => [symbol,{

@@ -1,4 +1,6 @@
 import type { Account, Bar, Candidate, Instrument, Order, Quote } from '../core/models.js';
+// This error is only for a refusal BEFORE a broker mutation request is sent.
+export class NoSubmissionError extends Error {}
 export interface Broker {
   readonly production: boolean;
   dirty: boolean;

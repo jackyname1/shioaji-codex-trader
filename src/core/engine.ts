@@ -6,7 +6,7 @@ import { evaluate, updateProtection } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
 import { active, ageSeconds, d, equity, remaining, twDay, type Account, type Analysis, type Candidate, type Features,
   type Instrument, type Order, type Plan, type Quote, type Settings, type Snapshot } from './models.js';
-import type { Broker } from '../broker/types.js';
+import { NoSubmissionError, type Broker } from '../broker/types.js';
 
 export interface Bundle { pool: Candidate[]; features: Record<string,Features>; metadata: Record<string,Instrument>;
   fundamentals?: Record<string,unknown>; announcements?: unknown[]; limitations?: string[] }
@@ -38,8 +38,8 @@ export class Engine {
   }
   async close(): Promise<void> { this.connected = false; await this.broker.close(); }
   setSettings(s: Settings): void {
-    if (['mode','whole_lots','base_url','stock_account_index'].some(k => s[k as keyof Settings] !== this.settings[k as keyof Settings]))
-      throw new Error('交易模式、服務網址、帳戶及整股設定變更需停止並重啟；不同模式使用不同資料庫');
+    if (['mode','base_url','stock_account_index'].some(k => s[k as keyof Settings] !== this.settings[k as keyof Settings]))
+      throw new Error('交易模式、服務網址及帳戶變更需停止並重啟；不同模式使用不同資料庫');
     this.settings = s; this.risk = new Risk(s,this.calendar); this.store.saveSettings(s);
     if ('settings' in this.broker) (this.broker as Broker & { settings: Settings }).settings = s;
     if ('market' in this.broker) {
@@ -212,7 +212,11 @@ export class Engine {
     try {
       const result = await this.broker.submit(order); this.store.saveOrder(result);
       this.log('ORDER',`${order.symbol} ${order.action} ${order.shares} 股 @ ${order.limit_price} ${result.status}`);
-    } catch {
+    } catch (error) {
+      if (error instanceof NoSubmissionError) {
+        order.status = 'REJECTED'; this.store.saveOrder(order); this.entryBlocked = true;
+        this.log('BLOCK',`${order.symbol} 未送出委託：${error.message}`); return false;
+      }
       order.status = 'UNKNOWN'; this.store.saveOrder(order);
       this.log('UNKNOWN',`${order.symbol} 送單結果不明；先核對，禁止自動重送`); return false;
     }
@@ -225,10 +229,14 @@ export class Engine {
     if (['UNKNOWN','PREPARED','SUBMITTING','CANCEL_PENDING'].includes(order.status)) {
       this.logOnce('BLOCK','未確認委託須先核對，禁止重送撤單或重掛'); return;
     }
+    const priorStatus = order.status;
     order.status = 'CANCEL_PENDING'; this.store.saveOrder(order);
     try { const result = await this.broker.cancel(order); this.store.saveOrder(result);
       this.log('CANCEL',`${order.symbol} 撤單核對：${result.status}，已成交 ${result.filled} 股`); }
-    catch { order.status = 'UNKNOWN'; this.store.saveOrder(order); this.log('UNKNOWN',`${order.symbol} 撤單結果不明，停止重掛`); }
+    catch (error) {
+      if (error instanceof NoSubmissionError) { order.status = priorStatus; this.store.saveOrder(order); this.logOnce('BLOCK',`${order.symbol} ${error.message}`); }
+      else { order.status = 'UNKNOWN'; this.store.saveOrder(order); this.log('UNKNOWN',`${order.symbol} 撤單結果不明，停止重掛`); }
+    }
     await this.refreshAccount(now);
   }
   status(now: Date): string {

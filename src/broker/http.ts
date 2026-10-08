@@ -2,9 +2,11 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Store } from '../core/store.js';
+import { TradingCalendar } from '../core/calendar.js';
+import { Risk } from '../core/risk.js';
 import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addDays, d, money, remaining, twDay,
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
-import type { Broker } from './types.js';
+import { NoSubmissionError, type Broker } from './types.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -112,6 +114,7 @@ export class ShioajiHttpBroker implements Broker {
   private changed = new Set<string>();
   private metadata = new Map<string, Instrument>();
   private eventSequence = 0;
+  private lastAccount?: Account;
   private seenEvents = new Set<string>();
   constructor(readonly store: Store, public settings: Settings, readonly allowLive = false,
     private readonly fetcher: typeof fetch = fetch) {
@@ -326,9 +329,10 @@ export class ShioajiHttpBroker implements Broker {
     if (!this.streamReady || this.formatFault) issue = '行情串流中斷或格式異常，禁止新增委託';
     if (sequence !== this.eventSequence) issue = '快照取得期間有委託變動，等待重新核對';
     this.dirty = false;
-    return AccountSchema.parse({ asof: start.toISOString(), cash: balance.acc_balance, settlement_debits: debits.toFixed(),
+    this.lastAccount = AccountSchema.parse({ asof: start.toISOString(), cash: balance.acc_balance, settlement_debits: debits.toFixed(),
       settlement_credits: credits.toFixed(), positions: cleanPositions, orders, complete: !issue, issue,
       daily_buy_count: buys.length, daily_buy_amount: buys.reduce((sum,o) => sum.plus(d(o.limit_price).times(active(o) ? o.shares : o.filled)),d(0)).toFixed() });
+    return this.lastAccount;
   }
   async discover(countRequested: number, now: Date): Promise<Candidate[]> {
     const collected = new Map<string, Candidate>();
@@ -365,20 +369,36 @@ export class ShioajiHttpBroker implements Broker {
     return [...grouped.values()].sort((a,b) => a.date.localeCompare(b.date));
   }
   private async mutationReady(): Promise<void> {
-    if (!this.production || !this.allowLive || process.env.LIVE_TRADING !== 'true') throw new Error('實盤下單尚未在本機啟用');
+    if (!this.production || !this.allowLive || process.env.LIVE_TRADING !== 'true') throw new NoSubmissionError('實盤下單尚未在本機啟用');
     const consent = this.store.get<{ at: string; fingerprint: string }>('live_consent');
-    if (!consent || consent.fingerprint !== this.store.get('account_fingerprint')) throw new Error('缺少本機實盤授權');
+    if (!consent || consent.fingerprint !== this.store.get('account_fingerprint')) throw new NoSubmissionError('缺少本機實盤授權');
     const info = infoSchema.parse(await this.request('/info'));
-    if (info.simulation) throw new Error('服務切換成模擬模式，禁止實盤');
-    if (info.agent_harness?.enabled || info.agent_harness?.audience) throw new Error('官方服務需要可信任主機能力票證；本版禁止繞過 Agent Harness');
+    if (info.simulation) throw new NoSubmissionError('服務切換成模擬模式，禁止實盤');
+    if (info.agent_harness?.enabled || info.agent_harness?.audience) throw new NoSubmissionError('官方服務需要可信任主機能力票證；本版禁止繞過 Agent Harness');
     const health = healthSchema.parse(await this.request('/health'));
     if (health.token_stale || health.ca_expired !== false || !health.ca_expires_in_days || health.ca_expires_in_days <= 0)
-      throw new Error('登入或 CA 狀態未確認，禁止下單');
-    if (!this.streamReady || this.formatFault) throw new Error('行情連線未完成核對');
+      throw new NoSubmissionError('登入或 CA 狀態未確認，禁止下單');
+    if (!this.streamReady || this.formatFault) throw new NoSubmissionError('行情連線未完成核對');
   }
   async submit(o: Order): Promise<Order> {
-    await this.mutationReady();
-    const m = (await this.instruments([o.symbol],new Date()))[o.symbol]; if (!m) throw new Error('商品資料不完整');
+    let m: Instrument | undefined;
+    try {
+      await this.mutationReady();
+      m = (await this.instruments([o.symbol],new Date()))[o.symbol];
+      const now = new Date();
+      if (!m || !this.lastAccount || this.dirty) throw new NoSubmissionError('帳戶或商品資料尚未重新核對');
+      const q = QuoteSchema.safeParse(this.parts.get(`${o.symbol}:${o.lot === 'ODD'}`));
+      const baseline = this.store.get<{equity:string}>('baseline_' + twDay(now))?.equity;
+      const reasons = new Risk(this.settings,new TradingCalendar(this.store)).check(o,this.lastAccount,q.success ? q.data : undefined,m,now,baseline);
+      if (reasons.length) throw new NoSubmissionError(reasons.join('；'));
+      if (o.purpose === 'ENTRY') {
+        const plan = this.store.plan();
+        if (!plan || plan.id !== o.plan_id || Date.parse(plan.analysis.expires_at) <= now.getTime()) throw new NoSubmissionError('買進計畫已過期');
+      }
+    } catch (error) {
+      if (error instanceof NoSubmissionError) throw error;
+      throw new NoSubmissionError('送單前連線或資料核對失敗，未送出券商委託');
+    }
     const payload = { contract: { security_type:'STK',exchange:m.exchange,code:o.symbol }, stock_order:{
       action: o.action === 'BUY' ? 'Buy' : 'Sell', price: Number(o.limit_price), quantity: o.lot === 'ODD' ? o.shares : o.shares / 1000,
       price_type:'LMT', order_type:'ROD', order_lot:o.lot === 'ODD' ? 'IntradayOdd' : 'Common', order_cond:'Cash',
@@ -388,7 +408,8 @@ export class ShioajiHttpBroker implements Broker {
     return this.normalizeTrade(trade,o);
   }
   async cancel(o: Order): Promise<Order> {
-    await this.mutationReady(); await this.refreshTrades();
+    try { await this.mutationReady(); await this.refreshTrades(); }
+    catch { throw new NoSubmissionError('撤單前連線或授權核對失敗，未送出撤單'); }
     const trade = this.trades.find(t => t.order.id === o.broker_id); if (!trade) throw new Error('撤單前查不到委託');
     const current = this.normalizeTrade(trade,o); if (!active(current)) return current;
     const result = nativeTradeSchema.parse(await this.request('/order/cancel_order',{ trade_id:o.broker_id }));

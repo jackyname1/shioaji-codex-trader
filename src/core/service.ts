@@ -140,7 +140,11 @@ export class TradingService {
     const s = SettingsSchema.parse(raw);
     if (s.mode === 'live' && s.auto_execute && (!this.store.get('live_consent') || process.env.LIVE_TRADING !== 'true'))
       throw new Error('實盤自動執行須先取得本機授權');
-    await this.enqueue(() => this.engine.setSettings(s));
+    await this.enqueue(async () => {
+      const changedLots = s.whole_lots !== this.engine.settings.whole_lots;
+      this.engine.setSettings(s);
+      if (changedLots && this.engine.connected) { this.engine.quotes.clear(); await this.engine.updateSubscriptions(new Date()); }
+    });
   }
   async activateLive(ack: string): Promise<void> {
     if (ack !== LIVE_ACK || this.engine.settings.mode !== 'live' || process.env.LIVE_TRADING !== 'true') throw new Error('實盤授權文字或啟用方式不符');

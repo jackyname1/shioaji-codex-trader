@@ -26,7 +26,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath node_modules/electron/dist/electron.exe -ArgumentList @('.', '--smoke-test') -PassThru -Wait -NoNewWindow
+          node -e "require('electron')"
+          $process = Start-Process -FilePath (Resolve-Path node_modules/electron/dist/electron.exe).Path -ArgumentList @('.', '--smoke-test') -PassThru -NoNewWindow
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Electron smoke test timed out' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
   windows:
     needs: test
@@ -44,7 +46,8 @@ jobs:
         shell: pwsh
         run: |
           $exe = Get-ChildItem release/Shioaji-Codex-Trader-*-Windows-x64.exe | Select-Object -First 1
-          $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -PassThru -Wait
+          $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Packaged app smoke test timed out' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
       - uses: actions/upload-artifact@v4
         with:
