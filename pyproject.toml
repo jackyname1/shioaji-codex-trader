@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shioaji-codex-trader"
+version = "0.1.0"
+description = "Taiwan odd-lot trading desktop with scheduled Codex decisions"
+requires-python = ">=3.11,<3.14"
+dependencies = ["pydantic>=2.8,<3", "tzdata>=2024.1"]
+
+[project.optional-dependencies]
+desktop = ["PySide6>=6.7,<7", "APScheduler>=3.10,<4", "keyring>=25,<27"]
+broker = ["shioaji>=1.7.7,<2"]
+build = ["PyInstaller>=6.10,<7"]
+dev = ["ruff>=0.8", "pytest>=8,<10"]
+
+[project.scripts]
+shioaji-trader = "shioaji_trader.cli:main"
+
+[project.gui-scripts]
+shioaji-trader-desktop = "shioaji_trader.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
