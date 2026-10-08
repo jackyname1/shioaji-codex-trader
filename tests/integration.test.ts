@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Store } from '../src/core/store.js';
 import { TradingService } from '../src/core/service.js';
-import { CodexAnalyst, codexEnvironment, type Runner } from '../src/core/codex.js';
+import { CodexAnalyst, codexEnvironment, unpackedPath, bundledCodexPath, type Runner } from '../src/core/codex.js';
+import { NoSubmissionError } from '../src/broker/types.js';
 import { ShioajiHttpBroker, SseParser, exchangeTimestamp, sellableInventory } from '../src/broker/http.js';
 import { demoAnalysis } from '../src/core/strategy.js';
 import { SettingsSchema, type Order } from '../src/core/models.js';
@@ -52,6 +53,13 @@ test('uncertain network result is persisted UNKNOWN and reconciled without resen
   try { await r.engine.tick(now); assert.equal(r.store.orders()[0]!.status,'UNKNOWN');
     for (let n=1;n<6;n++) await r.engine.tick(new Date(now.getTime()+n*1000));
     assert.equal(sends,1); assert.equal(r.store.orders()[0]!.status,'FILLED');
+  } finally { await r.engine.close(); r.store.close(); }
+});
+test('a preflight refusal is marked rejected, never misreported as an uncertain network send',async () => {
+  const r = await rig();
+  r.broker.submit = async () => { throw new NoSubmissionError('官方服務需要可信任主機能力票證'); };
+  try { await r.engine.tick(now); assert.equal(r.store.orders()[0]!.status,'REJECTED');
+    assert.ok(r.engine.entryBlocked); assert.ok(r.store.logs().some(x => x.includes('未送出委託')));
   } finally { await r.engine.close(); r.store.close(); }
 });
 test('expiry cancels an entry remainder and retains independent protection',async () => {
@@ -123,6 +131,11 @@ test('Codex environment removes broker keys, CA, runtime grants and trading flag
   const env=codexEnvironment({PATH:'path',SJ_API_KEY:'SECRET',SJ_SEC_KEY:'SECRET',SJ_CA_PATH:'SECRET',
     SJ_AGENT_HARNESS_BROKER_TOKEN:'SECRET',LIVE_TRADING:'true',CODEX_HOME:'old'},'/isolated/codex');
   assert.deepEqual(env,{PATH:'path',CODEX_HOME:'/isolated/codex'});
+});
+test('bundled Codex resolves an executable outside Electron ASAR on each platform',() => {
+  assert.equal(unpackedPath('/a/app.asar/node_modules/codex'),'/a/app.asar.unpacked/node_modules/codex');
+  assert.equal(unpackedPath('C:\\a\\app.asar\\node_modules\\codex'),'C:\\a\\app.asar.unpacked\\node_modules\\codex');
+  assert.match(bundledCodexPath(),/codex(?:\.exe)?$/);
 });
 test('Codex SDK stream accepts schema-valid completed output, rejects tools and incomplete responses',async () => {
   const input=snapshot(), a=demoAnalysis(input,settings(),now), s=SettingsSchema.parse({codex_enabled:true});

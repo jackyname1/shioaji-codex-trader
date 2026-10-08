@@ -4,9 +4,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { TradingService, LIVE_ACK } from '../core/service.js';
 import { SettingsSchema, type Settings } from '../core/models.js';
 import type { DesktopState } from './shared.js';
+import { bundledCodexPath } from '../core/codex.js';
 
 let window: BrowserWindow | undefined, tray: Tray | undefined, service: TradingService | undefined;
 let quitting = false, initialError = '', blocker: number | undefined;
@@ -121,6 +124,8 @@ function registerIpc(): void {
 async function smokeTest(): Promise<void> {
   if (!window || !service || initialError || mode !== 'demo') throw new Error('桌面測試未啟動');
   if (process.platform === 'win32' && !tray) throw new Error('Windows 系統匣未啟動');
+  const version = await promisify(execFile)(bundledCodexPath(),['--version'],{timeout:20000,windowsHide:true});
+  if (!version.stdout.includes('codex')) throw new Error('Codex 打包執行檔無法啟動');
   if (!window.webContents.isLoading()) await verifyRenderer();
   else await new Promise<void>((resolve,reject) => {
     window!.webContents.once('did-finish-load',() => { void verifyRenderer().then(resolve,reject); });

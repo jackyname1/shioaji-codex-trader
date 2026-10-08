@@ -2,7 +2,8 @@ import { Codex, type ThreadEvent, type ThreadOptions } from '@openai/codex-sdk';
 import { z } from 'zod';
 import { mkdirSync, copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { AnalysisSchema, type Analysis, type Settings, type Snapshot } from './models.js';
 
 export function codexEnvironment(source: NodeJS.ProcessEnv, analysisHome: string): Record<string,string> {
@@ -30,6 +31,24 @@ expires_at 使用有時區 ISO 時間，短於 hard_limits.plan_max_minutes。�
 以下為唯一決策資料：\n${JSON.stringify(snapshot)}`;
 }
 export type Runner = (prompt: string, options: { signal: AbortSignal; outputSchema: unknown }) => Promise<{events: AsyncIterable<ThreadEvent>}>;
+export const unpackedPath = (path: string): string => path.replace(/([/\\])app\.asar([/\\])/, '$1app.asar.unpacked$2');
+export function bundledCodexPath(): string {
+  const targets: Record<string,string> = {
+    'win32-x64':'x86_64-pc-windows-msvc','win32-arm64':'aarch64-pc-windows-msvc',
+    'linux-x64':'x86_64-unknown-linux-musl','linux-arm64':'aarch64-unknown-linux-musl',
+    'darwin-x64':'x86_64-apple-darwin','darwin-arm64':'aarch64-apple-darwin',
+  };
+  const key = `${process.platform}-${process.arch}`, triple = targets[key];
+  if (!triple) throw new Error('Codex 不支援此作業系統與架構');
+  const require = createRequire(import.meta.url), codexPackage = require.resolve('@openai/codex/package.json');
+  const platformPackage = createRequire(codexPackage).resolve(`@openai/codex-${key}/package.json`);
+  const root = unpackedPath(join(dirname(platformPackage),'vendor',triple));
+  for (const folder of ['bin','codex']) {
+    const path = join(root,folder,process.platform === 'win32' ? 'codex.exe' : 'codex');
+    if (existsSync(path)) return path;
+  }
+  throw new Error('Codex 原生執行檔未安裝，請確認 optional dependencies');
+}
 export class CodexAnalyst {
   private active?: AbortController;
   constructor(readonly settings: Settings, readonly profileDirectory: string, private readonly injectedRunner?: Runner) {}
@@ -52,7 +71,7 @@ export class CodexAnalyst {
         // Authentication may refresh locally. Broker credentials remain in the native service.
         writeFileSync(join(this.profileDirectory,'config.toml'), '[features]\nshell_tool = false\napply_patch_tool = false\n', {mode:0o600});
         const work = join(this.profileDirectory,'analysis'); mkdirSync(work,{recursive:true,mode:0o700});
-        const codex = new Codex({...(this.settings.codex_path ? {codexPathOverride:this.settings.codex_path} : {}),
+        const codex = new Codex({codexPathOverride:this.settings.codex_path || bundledCodexPath(),
           env:codexEnvironment(process.env,this.profileDirectory)});
         const options: ThreadOptions = {workingDirectory:work,skipGitRepoCheck:true,sandboxMode:'read-only',
           networkAccessEnabled:false,webSearchMode:'disabled',approvalPolicy:'never',
