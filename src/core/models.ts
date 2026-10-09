@@ -101,6 +101,7 @@ export const SettingsSchema = z.strictObject({
   sell_tax_rate: fraction.default('0.003'), fee_verified: z.boolean().default(false),
   settlement_debit_sign: z.enum(['unverified', 'positive', 'negative']).default('unverified'),
   allow_attention: z.boolean().default(false), codex_enabled: z.boolean().default(false),
+  experience_enabled: z.boolean().default(true), experience_limit: quantity.min(5).max(100).default(40),
   official_facts_enabled: z.boolean().default(true), codex_path: z.string().default(''),
   codex_model: z.string().default(''),
   codex_reasoning: z.enum(['default', 'low', 'medium', 'high', 'xhigh']).default('default'),
@@ -131,6 +132,7 @@ export interface Snapshot {
   universe: Candidate[]; features: Record<string, Features>; hard_limits: Record<string, unknown>;
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
   news: unknown[]; data_limitations: string[];
+  experience?: import('./experience.js').ExperienceContext;
 }
 export const nowISO = (): string => new Date().toISOString();
 export const ageSeconds = (now: Date, stamp: string): number => (now.getTime() - Date.parse(stamp)) / 1000;

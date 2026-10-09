@@ -5,9 +5,13 @@ import { AccountSchema, OrderSchema, active, addDays, d, remaining, twDay,
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import type { Broker } from './types.js';
 
-interface Lot { symbol: string; shares: number; price: string; acquired: string }
+interface Lot { symbol: string; shares: number; price: string; acquired: string; cost?: string }
+export interface SimulatedFill { id: string; order_id: string; at: string; symbol: string; action: 'BUY'|'SELL';
+  lot: 'ODD'|'COMMON'; purpose: Order['purpose']; shares: number; price: string; amount: string;
+  fee: string; tax: string; realized_pnl: string | null }
 interface Ledger { cash: string; lots: Lot[]; orders: Order[]; lastEvents: Record<string,string>;
-  charges: Record<string,{ amount: string; fee: string; tax: string }> }
+  charges: Record<string,{ amount: string; fee: string; tax: string }>; fills?: SimulatedFill[];
+  credits?: {due:string;amount:string}[] }
 export class SyntheticMarket implements Broker {
   readonly production = false; dirty = false; generation = 0;
   private symbols = Array.from({ length:30 },(_,i) => String(9001 + i));
@@ -59,9 +63,11 @@ export class PaperBroker implements Broker {
   private ledger: Ledger;
   private prices = new Map<string,string>();
   private wholeLots = false;
-  constructor(readonly store: Store, readonly market: Broker, public settings: Settings, readonly calendar: TradingCalendar) {
+  constructor(readonly store: Store, readonly market: Broker, public settings: Settings, readonly calendar: TradingCalendar,
+    private readonly settleSales = false) {
     this.ledger = store.get<Ledger>('paper_ledger') ?? { cash:settings.demo_cash,lots:[],orders:[],lastEvents:{},charges:{} };
     d(this.ledger.cash); this.ledger.orders.forEach(o => OrderSchema.parse(o));
+    this.ledger.fills ??= []; this.ledger.credits ??= [];
     for (const lot of this.ledger.lots) if (!Number.isSafeInteger(lot.shares) || lot.shares < 0
       || !/^\d{4}-\d{2}-\d{2}$/.test(lot.acquired)) throw new Error('模擬庫存資料不完整');
   }
@@ -73,6 +79,7 @@ export class PaperBroker implements Broker {
   discover(count: number, now: Date): Promise<Candidate[]> { return this.market.discover(count,now); }
   history(symbol: string, now: Date): Promise<Bar[]> { return this.market.history(symbol,now); }
   quotes(now: Date): Quote[] {
+    this.settle(now);
     this.generation = this.market.generation;
     const quotes = this.market.quotes(now);
     this.expire(now);
@@ -93,20 +100,36 @@ export class PaperBroker implements Broker {
         const total = d(prior.amount).plus(amount), totalFee = fee(total,this.settings);
         const totalTax = order.action === 'SELL' ? total.times(this.settings.sell_tax_rate).ceil() : d(0);
         const extraFee = totalFee.minus(prior.fee), extraTax = totalTax.minus(prior.tax);
+        let realized: string | null = null;
         if (order.action === 'BUY') {
           if (d(this.ledger.cash).lt(amount.plus(extraFee))) continue;
           this.ledger.cash = d(this.ledger.cash).minus(amount).minus(extraFee).toFixed();
-          this.ledger.lots.push({symbol:order.symbol,shares,price,acquired:twDay(now)}); askDepth -= shares;
+          this.ledger.lots.push({symbol:order.symbol,shares,price,acquired:twDay(now),cost:amount.plus(extraFee).toFixed()}); askDepth -= shares;
         } else {
           if (this.sellable(order.symbol,twDay(now)) < shares) continue;
-          let needed = shares;
+          let needed = shares, cost = d(0);
           for (const lot of this.ledger.lots) if (lot.symbol === order.symbol && lot.acquired < twDay(now)) {
-            const used = Math.min(needed,lot.shares); lot.shares -= used; needed -= used;
+            const used = Math.min(needed,lot.shares); if (!used) continue;
+            const basis = d(lot.cost ?? d(lot.price).times(lot.shares).toFixed()), usedCost = basis.times(used).div(lot.shares);
+            cost = cost.plus(usedCost); lot.cost = basis.minus(usedCost).toFixed(); lot.shares -= used; needed -= used;
           }
-          this.ledger.cash = d(this.ledger.cash).plus(amount).minus(extraFee).minus(extraTax).toFixed(); bidDepth -= shares;
+          const proceeds = amount.minus(extraFee).minus(extraTax); realized = proceeds.minus(cost).toFixed();
+          if (this.settleSales && proceeds.gte(0)) {
+            let due = '9999-12-31'; try { due = this.calendar.next(this.calendar.next(twDay(now))); } catch { /* Do not recycle unverified settlement credits. */ }
+            this.ledger.credits!.push({due,amount:proceeds.toFixed()});
+          } else this.ledger.cash = d(this.ledger.cash).plus(proceeds).toFixed();
+          bidDepth -= shares;
         }
         order.filled += shares; order.status = order.filled === order.shares ? 'FILLED' : 'PARTIAL';
         this.ledger.charges[order.local_id] = { amount:total.toFixed(),fee:totalFee.toFixed(),tax:totalTax.toFixed() };
+        const fill: SimulatedFill = {id:`${order.local_id}:${order.filled}`,order_id:order.local_id,
+          at:now.toISOString(),symbol:order.symbol,action:order.action,lot:order.lot,purpose:order.purpose,
+          shares,price,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized};
+        this.ledger.fills!.push(fill);
+        const plan=this.store.plan(),reason=plan?.id===order.plan_id?plan.analysis.decisions.find(x=>x.symbol===order.symbol)?.reason:undefined;
+        this.store.recordExperience({id:fill.id,at:fill.at,mode:this.store.get<string>('experience_scope') ?? this.settings.mode,
+          kind:'SIMULATED_FILL',symbol:fill.symbol,action:fill.action,shares,price,fee:fill.fee,tax:fill.tax,
+          realized_pnl:realized,note:`模擬 ${order.purpose} 成交與 FIFO 成本（含買進費用），不代表真實券商成交。原計畫理由：${reason??'持久化智慧保護或之前的計畫'}`});
         this.dirty = true;
       }
     }
@@ -116,11 +139,18 @@ export class PaperBroker implements Broker {
   private expire(now: Date): void {
     for (const o of this.ledger.orders) if (active(o) && twDay(new Date(o.created_at)) < twDay(now)) { o.status = 'CANCELLED'; this.dirty = true; }
   }
+  private settle(now: Date): void {
+    const today = twDay(now), due = this.ledger.credits!.filter(x => x.due <= today);
+    this.ledger.cash = due.reduce((sum,x) => sum.plus(x.amount),d(this.ledger.cash)).toFixed();
+    this.ledger.credits = this.ledger.credits!.filter(x => x.due > today);
+  }
+  fills(): SimulatedFill[] { return structuredClone(this.ledger.fills!); }
+  remainingCost(): string { return this.ledger.lots.reduce((sum,l) => sum.plus(l.cost ?? d(l.price).times(l.shares)),d(0)).toFixed(); }
   private sellable(symbol: string, today: string): number {
     return this.ledger.lots.filter(l => l.symbol === symbol && l.acquired < today).reduce((sum,l) => sum + l.shares,0);
   }
   async account(now: Date): Promise<Account> {
-    this.expire(now); this.persist();
+    this.settle(now); this.expire(now); this.persist();
     const positions = [];
     for (const symbol of new Set(this.ledger.lots.map(l => l.symbol))) {
       const lots = this.ledger.lots.filter(l => l.symbol === symbol), shares = lots.reduce((sum,l) => sum + l.shares,0);
@@ -129,8 +159,10 @@ export class PaperBroker implements Broker {
         last_price:this.prices.get(symbol) ?? cost.div(shares).toFixed()});
     }
     const buys = this.ledger.orders.filter(o => o.action === 'BUY' && twDay(new Date(o.created_at)) === twDay(now) && (active(o) || o.filled > 0));
-    const account = AccountSchema.parse({asof:now.toISOString(),cash:this.ledger.cash,settlement_debits:'0',settlement_credits:'0',
-      positions,orders:structuredClone(this.ledger.orders),complete:true,issue:'模擬成交；未模擬實際 T+2 入扣款與券商拒單',
+    const account = AccountSchema.parse({asof:now.toISOString(),cash:this.ledger.cash,settlement_debits:'0',
+      settlement_credits:this.ledger.credits!.reduce((sum,x) => sum.plus(x.amount),d(0)).toFixed(),
+      positions,orders:structuredClone(this.ledger.orders),complete:true,
+      issue:this.settleSales ? '歷史模擬：買款即時預留、賣款 T+2 可用；未模擬券商拒單' : '模擬成交；未模擬實際 T+2 入扣款與券商拒單',
       daily_buy_count:buys.length,daily_buy_amount:buys.reduce((sum,o) => sum.plus(d(o.limit_price).times(active(o) ? o.shares : o.filled)),d(0)).toFixed()});
     this.dirty = false; return account;
   }

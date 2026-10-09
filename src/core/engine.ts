@@ -4,6 +4,7 @@ import { TradingCalendar } from './calendar.js';
 import { Risk, alignedPrice } from './risk.js';
 import { evaluate, updateProtection } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
+import { experienceContext } from './experience.js';
 import { active, ageSeconds, d, equity, remaining, twDay, type Account, type Analysis, type Candidate, type Features,
   type Instrument, type Order, type Plan, type Quote, type Settings, type Snapshot } from './models.js';
 import { NoSubmissionError, type Broker } from '../broker/types.js';
@@ -55,7 +56,13 @@ export class Engine {
   kill(enabled = true): void { this.killed = enabled; this.store.set('kill_switch',enabled);
     this.log('KILL',enabled ? '停止全部新委託；現有掛單仍須撤單' : '解除停止委託'); }
   async reconcile(now: Date): Promise<void> {
-    const orders = await this.broker.reconcile(this.store.orders(true)); orders.forEach(o => this.store.saveOrder(o)); this.lastReconcile = now;
+    const prior = this.store.orders(true), orders = await this.broker.reconcile(prior);
+    for (const o of orders) {
+      const old = prior.find(x => x.local_id === o.local_id);
+      if (old) this.recordReconciledFill(o,old.filled,now);
+      this.store.saveOrder(o);
+    }
+    this.lastReconcile = now;
     if (orders.some(o => ['UNKNOWN','SUBMITTING','PREPARED'].includes(o.status)))
       this.logOnce('BLOCK','有未確認委託，停止新增委託；先核對券商結果，不會盲目重送');
   }
@@ -71,6 +78,12 @@ export class Engine {
       this.log('BASELINE','建立今日首次有效快照基準；不是歷史開盤資產'); }
     if (account.issue) this.logOnce('ACCOUNT',account.issue);
     return account;
+  }
+  private recordReconciledFill(o:Order,previous:number,now:Date):void {
+    if(o.filled<=previous||['paper','demo'].includes(this.settings.mode))return;
+    this.store.recordExperience({id:`${o.local_id}:${o.filled}`,at:now.toISOString(),mode:this.settings.mode,
+      kind:'RECONCILED_FILL',symbol:o.symbol,action:o.action,shares:o.filled-previous,
+      price:null,fee:null,tax:null,realized_pnl:null,note:`已核對 ${o.purpose} 成交股數；委託限價=${o.limit_price}，非實際成交價。實際成交價格與費用未提供，不推算損益`});
   }
   baseline(now: Date): string | undefined { return this.store.get<{equity:string}>('baseline_' + twDay(now))?.equity; }
   async updateSubscriptions(now: Date): Promise<void> {
@@ -114,6 +127,7 @@ export class Engine {
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
       universe:bundle.pool,features:bundle.features,hard_limits:limits,
       existing_protection:Object.fromEntries(this.store.protections().map(p => [p.symbol,p.spec])),
+      experience:experienceContext(this.store,this.settings,now.toISOString()),
       fundamentals:bundle.fundamentals ?? {},news:bundle.announcements ?? [],data_limitations:[...(bundle.limitations ?? []),
         '重大訊息是公司公告；無完整新聞、財報、估值資料時不得編造',
         '日損失基準為今日首次有效帳戶快照；盤中啟動無法回推開盤資產',
@@ -132,6 +146,9 @@ export class Engine {
       if (order.purpose === 'ENTRY' && order.plan_id !== plan.id) await this.cancel(order.local_id,now);
     this.store.activatePlan(plan,protections); this.plan = plan; this.entryBlocked = false;
     await this.updateSubscriptions(now); this.log('PLAN',`啟用 ${plan.id.slice(0,8)}，有效至 ${plan.analysis.expires_at}`);
+    if (snapshot.review_only && this.settings.experience_enabled) this.store.saveReview({id:plan.id,
+      at:now.toISOString(),mode:this.store.get<string>('experience_scope') ?? this.settings.mode,
+      summary:plan.analysis.summary,sample_count:snapshot.experience?.sample_count ?? 0});
   }
   async tick(now: Date): Promise<void> {
     if (!this.connected) return;
@@ -147,18 +164,19 @@ export class Engine {
     if (!this.lastRefresh || now.getTime() - this.lastRefresh.getTime() >= 20000 || this.broker.dirty) {
       await this.reconcile(now); await this.refreshAccount(now);
     }
+    if (this.plan && Date.parse(this.plan.analysis.expires_at) <= now.getTime() && this.canExecute())
+      for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.cancel(o.local_id,now);
     for (const q of this.broker.quotes(now)) this.quotes.set(`${q.symbol}:${q.odd}`,q);
     if (['demo','paper'].includes(this.settings.mode)) { await this.reconcile(now); await this.refreshAccount(now); }
     if (!this.account) return;
-    if (this.plan && Date.parse(this.plan.analysis.expires_at) <= now.getTime() && this.canExecute())
-      for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.cancel(o.local_id,now);
     for (const protection of this.store.protections()) {
       const p = this.account.positions.find(p => p.symbol === protection.symbol);
       const pendingBuy = this.account.orders.some(o => active(o) && o.symbol === protection.symbol && o.action === 'BUY');
       const plannedBuy = this.plan && Date.parse(this.plan.analysis.expires_at) > now.getTime()
         && this.plan.analysis.decisions.some(d => d.symbol === protection.symbol && d.action === 'BUY');
       if (!p?.shares) { if (!pendingBuy && !plannedBuy) this.store.removeProtection(protection.symbol); continue; }
-      const q = this.quotes.get(`${p.symbol}:true`);
+      const protectionLot = this.settings.whole_lots && p.sellable >= 1000 ? 'COMMON' : 'ODD';
+      const q = this.quotes.get(`${p.symbol}:${protectionLot === 'ODD'}`);
       if (!q || !(ageSeconds(now,q.trade_at) >= 0 && ageSeconds(now,q.trade_at) <= this.settings.quote_max_age)) continue;
       const trigger = evaluate(protection,q.last); this.store.saveProtection(protection);
       if (!trigger) continue;
@@ -174,7 +192,8 @@ export class Engine {
       const attempts = this.store.orders().filter(o => o.symbol === p.symbol && o.purpose === 'PROTECTION'
         && twDay(new Date(o.created_at)) === twDay(now)).length;
       if (attempts >= 10) { this.logOnce('BLOCK',`${p.symbol} 保護出場嘗試已達上限，請核對委託`); continue; }
-      await this.submit(this.newOrder(p.symbol,'SELL',Math.min(999,p.sellable),q.bid,'ODD',now,protection.plan_id,'PROTECTION'),now);
+      const protectionShares = protectionLot === 'COMMON' ? Math.floor(p.sellable / 1000) * 1000 : Math.min(999,p.sellable);
+      await this.submit(this.newOrder(p.symbol,'SELL',protectionShares,q.bid,protectionLot,now,protection.plan_id,'PROTECTION'),now);
     }
     if (!this.canExecute() || !this.plan || Date.parse(this.plan.analysis.expires_at) <= now.getTime()) return;
     const plan = this.plan;
@@ -206,11 +225,14 @@ export class Engine {
     const last = this.store.orders().filter(o => o.symbol === order.symbol && (active(o) || o.filled > 0)).at(-1)?.created_at;
     const reasons = this.risk.check(order,account,this.quotes.get(`${order.symbol}:${order.lot === 'ODD'}`),this.metadata[order.symbol],
       now,this.baseline(now),this.killed || (this.pausedEntries && order.action === 'BUY'),last);
-    if (reasons.length) { this.logOnce('RISK',`${order.symbol} ${order.action}：${reasons.join('；')}`); return false; }
+    if (reasons.length) { this.logOnce('RISK',`${order.symbol} ${order.action}：${reasons.join('；')}`);
+      this.store.recordExperience({id:`risk:${order.local_id}`,at:now.toISOString(),mode:this.store.get<string>('experience_scope') ?? this.settings.mode,
+        kind:'RISK_REFUSAL',symbol:order.symbol,action:order.action,shares:order.shares,price:null,fee:null,tax:null,
+        realized_pnl:null,note:reasons.join('；')}); return false; }
     if (!this.store.insertIntent(order)) { this.logOnce('BLOCK','委託識別已存在或短標籤碰撞，禁止重送'); return false; }
     order.status = 'SUBMITTING'; this.store.saveOrder(order);
     try {
-      const result = await this.broker.submit(order); this.store.saveOrder(result);
+      const result = await this.broker.submit(order); this.recordReconciledFill(result,order.filled,now);this.store.saveOrder(result);
       this.log('ORDER',`${order.symbol} ${order.action} ${order.shares} 股 @ ${order.limit_price} ${result.status}`);
     } catch (error) {
       if (error instanceof NoSubmissionError) {

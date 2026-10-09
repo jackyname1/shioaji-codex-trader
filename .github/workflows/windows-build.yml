@@ -22,6 +22,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm test
       - run: npm run demo
+      - run: npm run backtest:demo
       - name: Electron Windows text UI smoke test
         if: runner.os == 'Windows'
         shell: pwsh
@@ -42,6 +43,7 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm run pack:win
+      - run: node scripts/release-assets.ts
       - name: Packaged app smoke test
         shell: pwsh
         run: |
@@ -52,6 +54,41 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Shioaji-Codex-Trader-TypeScript-Windows-x64
-          path: release/Shioaji-Codex-Trader-*-Windows-x64.exe
+          path: |
+            release/Shioaji-Codex-Trader-*-Windows-x64.exe
+            release/README.md
+            release/RELEASE_NOTES.md
+            release/SYNTHETIC-*
           if-no-files-found: error
           retention-days: 30
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [test, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: Shioaji-Codex-Trader-TypeScript-Windows-x64
+          path: release
+      - name: Publish verified Windows testing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; keeping its validated assets unchanged."
+            exit 0
+          fi
+          cd release
+          sha256sum *.exe *.md *.json *.csv > SHA256SUMS.txt
+          gh release create "$tag" --target "$RELEASE_COMMIT" --prerelease --title "Shioaji Codex Trader ${tag} Windows 測試版" --notes-file RELEASE_NOTES.md --draft *.exe *.md *.json *.csv SHA256SUMS.txt
+          gh release edit "$tag" --draft=false
+          gh release view "$tag" --json url,tagName,assets

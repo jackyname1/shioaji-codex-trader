@@ -27,6 +27,22 @@
   <p id="error" role="alert"></p><p id="message" role="status"></p>
   <pre id="status" aria-label="交易狀態">載入中…</pre>
   <form id="command-form"><input id="command" autocomplete="off" aria-label="文字指令" placeholder="輸入 help 查看指令，例如 pause、cancel-all、calendar 2027"><button type="submit">執行</button></form>
+  <details open><summary>日期區間歷史模擬／損益報表</summary>
+    <p>建立獨立模擬帳戶，不會傳送券商委託。免登入示範使用虛構行情；真實歷史回測請選 Codex 並完成本機登入。Codex 呼叫會消耗額度；歷史結果不代表未來績效。</p>
+    <form id="backtest-form">
+      <div class="controls"><label>開始 <input id="bt-start" type="date" value="2026-10-01" required></label><label>結束 <input id="bt-end" type="date" value="2026-10-08" required></label>
+        <label>起始資金 <input id="bt-cash" type="number" value="100000" min="100" max="1000000000" required></label></div>
+      <div class="controls"><select id="bt-source" aria-label="歷史資料來源"><option value="sample">虛構行情（免登入）</option><option value="csv">匯入歷史行情 CSV</option><option value="shioaji">Shioaji 歷史分鐘 K 線</option></select>
+        <select id="bt-strategy" aria-label="回測決策方式"><option value="demo">流程示範（非 Codex）</option><option value="codex">Codex 全自動歷史決策</option></select>
+        <label><input id="bt-whole" type="checkbox">允許整股（1000 股倍數）</label></div>
+      <div class="controls"><label>分析間隔（分鐘） <input id="bt-interval" type="number" min="10" max="240" value="60"></label>
+        <label>Codex 呼叫上限（含檢討） <input id="bt-calls" type="number" min="1" max="2000" value="100"></label></div>
+      <div class="controls"><button type="submit" id="bt-run">開始全自動模擬</button><button type="button" id="bt-cancel">停止模擬</button><button type="button" id="bt-json">匯出完整 JSON</button><button type="button" id="bt-csv">匯出成交 CSV</button></div>
+    </form>
+    <p>CSV 欄位：symbol,at,open,high,low,close,volume_shares。at 為含時區的 K 線結束時間；可用 date 代替 at 匯入日 K。日 K 只估計開盤成交與收盤估值，無法還原盤中停損。至少包含區間前 20 個交易日行情。</p>
+    <pre id="backtest" aria-label="歷史模擬損益">尚未執行</pre>
+  </details>
+  <details><summary>Codex 登入與經驗回饋</summary><div class="controls"><button id="codex-login">使用官方 Codex 登入</button><button id="codex-enable">啟用 Codex 定時分析</button></div><p id="codex-login-status"></p><p>保存交易結果與檢討，供下一輪分析參考；不會自動重新訓練模型或調高硬性風控。每種模式及每次回測各自隔離。</p><pre id="experience"></pre></details>
   <details><summary>連線與模式</summary>
     <p>每種模式各自保存資料。先用 DEMO，再用唯讀核對帳戶與交割資料。PAPER 使用真實行情及模擬資金。</p>
     <div class="controls"><select id="mode" aria-label="交易模式"><option value="demo">DEMO 虛構行情</option><option value="readonly">READONLY 帳戶唯讀</option><option value="paper">PAPER 模擬成交</option><option value="live">LIVE 實盤監控</option></select><button id="switch">切換並重新連線</button></div>

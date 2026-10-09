@@ -1,4 +1,5 @@
 import { join, dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Engine } from './engine.js';
@@ -9,6 +10,7 @@ import { demoAnalysis } from './strategy.js';
 import { ShioajiHttpBroker } from '../broker/http.js';
 import { PaperBroker, SyntheticMarket } from '../broker/paper.js';
 import type { Broker } from '../broker/types.js';
+import { experienceStatus } from './experience.js';
 
 export const LIVE_ACK = '我確認啟用現股自動實盤交易並了解零股不可當沖';
 export class TradingService {
@@ -89,15 +91,18 @@ export class TradingService {
         return this.engine.snapshotFromBundle(bundle,now,review);
       });
       let analysis;
-      if (s.mode === 'demo') analysis = demoAnalysis(snapshot,s,new Date());
+      if (s.mode === 'demo'&&!s.codex_enabled) analysis = demoAnalysis(snapshot,s,new Date());
       else {
         const profile = join(dirname(this.store.path),'codex-analysis-profile');
-        this.analyst = new CodexAnalyst(s,profile); analysis = await this.analyst.analyze(snapshot,this.stop.signal);
+        this.analyst = new CodexAnalyst(s,profile,undefined,join(dirname(this.store.path),'codex-login')); analysis = await this.analyst.analyze(snapshot,this.stop.signal);
       }
       await this.enqueue(() => this.engine.activate(analysis,snapshot,new Date()));
     } catch {
       if (!this.stopping) await this.enqueue(async () => {
         this.engine.entryBlocked = true;
+        this.store.recordExperience({id:'analysis-failure:'+randomUUID(),at:new Date().toISOString(),mode:this.engine.settings.mode,
+          kind:'ANALYSIS_FAILURE',symbol:'',action:'NONE',shares:0,price:null,fee:null,tax:null,realized_pnl:null,
+          note:'分析逾時、資料不足或 schema／快照核對失敗；未採用該輪結果'});
         this.engine.log('ANALYSIS_FAIL','分析逾時、資料不足或結果未通過檢查；停止新買進，既有保護持續');
         // A failed analysis must also cancel owned outstanding entry orders when execution is enabled.
         if (this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,new Date());
@@ -112,6 +117,7 @@ export class TradingService {
       const now = new Date();
       switch (name) {
         case 'status': return this.engine.status(now);
+        case 'experience': return experienceStatus(this.store,this.engine.settings,now.toISOString());
         case 'pause': this.engine.pauseEntries(); return '已暫停新增買進';
         case 'resume': this.engine.pauseEntries(false); return '已恢復新增買進';
         case 'stop': this.engine.kill(); return '停止全部新委託；現有掛單需另行撤單';
@@ -131,7 +137,7 @@ export class TradingService {
         case 'cancel-all': for (const o of this.store.orders(true)) await this.engine.cancel(o.local_id,now); return '已核對本程式的未完成委託';
         case 'calendar': return '已更新 ' + await this.calendar.refresh(Number(args[0] ?? twDay(now).slice(0,4)),this.stop.signal) + ' 天行事曆';
         case 'reconcile': await this.engine.reconcile(now); await this.engine.refreshAccount(now); return '已重新核對帳戶及委託';
-        case 'help': return 'status | decide | review | pause | resume | stop | continue | auto on/off | cancel ID | cancel-all | reconcile | calendar 年份 | help | exit\nstop 不會自動撤單；exit 關閉監控，不會自動撤銷券商掛單。';
+        case 'help': return 'status | experience | decide | review | pause | resume | stop | continue | auto on/off | cancel ID | cancel-all | reconcile | calendar 年份 | help | exit\nstop 不會自動撤單；exit 關閉監控，不會自動撤銷券商掛單。';
         default: throw new Error('未知指令，輸入 help 查看');
       }
     });

@@ -7,6 +7,7 @@ import { Risk } from '../core/risk.js';
 import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addDays, d, money, remaining, twDay,
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import { NoSubmissionError, type Broker } from './types.js';
+import { historicalKbars } from './historical-format.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -68,6 +69,13 @@ export function exchangeTimestamp(raw: Record<string, unknown>): string {
   return date.toISOString();
 }
 export interface SseFrame { event: string; data: string; id: string }
+export function loopbackOrigin(value:string):string {
+  const url=new URL(value);
+  if(!['127.0.0.1','[::1]','localhost'].includes(url.hostname)||!['http:','https:'].includes(url.protocol)
+    ||url.username||url.password||url.pathname!=='/'||url.search||url.hash)
+    throw new Error('Shioaji 服務必須綁定本機 loopback，網址不得包含帳密或路徑');
+  return url.origin;
+}
 export class SseParser {
   private buffer = '';
   push(text: string): SseFrame[] {
@@ -119,11 +127,7 @@ export class ShioajiHttpBroker implements Broker {
   constructor(readonly store: Store, public settings: Settings, readonly allowLive = false,
     private readonly fetcher: typeof fetch = fetch) {
     this.production = settings.mode === 'live';
-    const url = new URL(settings.base_url);
-    if (!['127.0.0.1','[::1]','localhost'].includes(url.hostname) || !['http:','https:'].includes(url.protocol)
-      || url.username || url.password || url.pathname !== '/' || url.search || url.hash)
-      throw new Error('Shioaji 服務必須綁定本機 loopback，網址不得包含帳密或路徑');
-    this.api = url.origin + '/api/v1';
+    this.api = loopbackOrigin(settings.base_url) + '/api/v1';
   }
   async request(path: string, body?: unknown): Promise<unknown> {
     const response = await this.fetcher(this.api + path, { method: body === undefined ? 'GET' : 'POST',
@@ -355,15 +359,12 @@ export class ShioajiHttpBroker implements Broker {
   }
   async history(symbol: string, now: Date): Promise<Bar[]> {
     const m = (await this.instruments([symbol],now))[symbol]; if (!m) return [];
-    const raw = z.object({ ts: z.array(z.union([z.number().finite(),z.string().regex(/^\d+$/)])),
-      High: z.array(number), Low: z.array(number), Close: z.array(number), Volume: z.array(count) }).parse(
-      await this.request('/data/kbars', { contract: { security_type:'STK',exchange:m.exchange,code:symbol },
-        start:addDays(twDay(now),-150), end:addDays(twDay(now),-1) }));
-    if ([raw.High,raw.Low,raw.Close,raw.Volume].some(a => a.length !== raw.ts.length)) throw new Error('歷史行情長度不符');
+    const raw = historicalKbars(await this.request('/data/kbars', { contract: { security_type:'STK',exchange:m.exchange,code:symbol },
+      start:addDays(twDay(now),-150), end:addDays(twDay(now),-1) }),symbol);
     const grouped = new Map<string, Bar>();
-    for (let i = 0; i < raw.ts.length; i++) {
-      const day = twDay(new Date(d(raw.ts[i]!).div(1000000).floor().toNumber())); if (day >= twDay(now)) continue;
-      const b = grouped.get(day), high = Number(raw.High[i]), low = Number(raw.Low[i]), close = Number(raw.Close[i]), volume = raw.Volume[i]!;
+    for (const row of raw) {
+      const day = twDay(new Date(row.at)); if (day >= twDay(now)) continue;
+      const b = grouped.get(day), high = Number(row.high), low = Number(row.low), close = Number(row.close), volume = row.volume_shares;
       grouped.set(day, { date: day, high: b ? Math.max(b.high,high) : high, low: b ? Math.min(b.low,low) : low,
         close, volume: (b?.volume ?? 0) + volume });
     }

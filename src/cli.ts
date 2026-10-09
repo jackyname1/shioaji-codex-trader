@@ -1,14 +1,32 @@
 import { join, resolve } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync,readFileSync,writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { TradingService } from './core/service.js';
 import { SettingsSchema } from './core/models.js';
 import { demoAnalysis } from './core/strategy.js';
+import { BacktestController } from './core/backtest-controller.js';
+import { formatBacktestReport } from './core/backtest.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2), demo = args.includes('--demo'), doctor = args.includes('--doctor');
+  if(args.includes('--backtest')) {
+    const value=(key:string):string|undefined=>args.find(a=>a.startsWith('--'+key+'='))?.slice(key.length+3);
+    const profile=join(homedir(),'.shioaji-codex-trader','backtests'),controller=new BacktestController(profile);
+    const settings=SettingsSchema.parse(value('settings')?JSON.parse(readFileSync(resolve(value('settings')!),'utf8')):{});
+    controller.start({start:value('start')??'2026-10-01',end:value('end')??'2026-10-08',initial_cash:value('cash')??'100000',
+      source:value('source')??'sample',strategy:value('strategy')??'demo',whole_lots:args.includes('--whole-lots'),
+      ...(value('max-calls')?{max_codex_calls:Number(value('max-calls'))}:{}),
+      ...(value('interval')?{decision_interval_minutes:Number(value('interval'))}:{})},settings,
+      value('csv')?readFileSync(resolve(value('csv')!),'utf8'):undefined);
+    const abort=():void=>{controller.cancel();};process.once('SIGINT',abort);process.once('SIGTERM',abort);
+    try{await controller.wait();if(!controller.report)throw new Error(controller.progress.message);
+      console.log(formatBacktestReport(controller.report));
+      if(value('output'))writeFileSync(resolve(value('output')!),JSON.stringify(controller.report,null,2),{mode:0o600});
+      if(controller.report.status!=='COMPLETED')process.exitCode=1;
+    }finally{process.removeListener('SIGINT',abort);process.removeListener('SIGTERM',abort);}return;
+  }
   const modeValue = args.find(a => a.startsWith('--mode='))?.slice(7) ?? (doctor ? 'readonly' : 'demo');
   const mode = SettingsSchema.shape.mode.parse(modeValue);
   if (demo && mode !== 'demo') throw new Error('--demo 只能使用虛構行情');

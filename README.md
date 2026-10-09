@@ -20,8 +20,11 @@ Windows 系統匣程式，開啟後是文字介面。Codex 定時分析動態股
 | 智慧條件 | 限價、立即／價格以下／價格以上進場、停損、停利、移動停損；既有停損不得由 AI 放寬 |
 | 零股 | `IntradayOdd`，1–999 股，現股 `Cash`、限價 `LMT`、當日有效 `ROD`；不用盤後零股 |
 | 不當沖 | 核對庫存明細取得日及股數單位；今日新增股數不會用於 SELL，舊庫存可賣 |
+| 歷史回測 | 指定起訖日期、資金及整股設定；虛構示範、歷史 CSV 或 Shioaji 歷史分鐘 K 線，獨立帳戶完整重播 |
+| 回測損益 | 手續費、交易稅、FIFO 已實現／未實現損益、T+2 賣款限制、最大回撤、逐日資產與 JSON／CSV 匯出 |
+| 經驗回饋 | 保存成交、拒絕與盤後檢討供下輪 Codex 參考；按模式及虛擬日期隔離，不自動訓練模型或放寬風控 |
 | 委託 | 送單前持久化、部分成交、重啟核對、外部掛單預留資金、未知委託凍結，不盲目重送 |
-| 保護出場 | 每筆最多 999 股；撤單確認＋更新可賣股數後才重掛，最多每天每檔 10 次嘗試 |
+| 保護出場 | 零股每筆最多 999 股；啟用整股時先按 1000 股倍數賣出舊庫存，再處理零股餘數；撤單確認後才重掛 |
 | 保存 | SQLite WAL、完整同步寫入、單一寫入佇列、程序鎖、計畫／保護／事件紀錄持久化 |
 | 操作 | 暫停買進、緊急停止新委託、逐筆／本程式全部撤單、手動核對、立即分析與盤後檢討 |
 | 行事曆 | 官方 TWSE 每日開休市；附 2026 核對資料，未知年份禁止委託；可更新 |
@@ -30,9 +33,10 @@ Windows 系統匣程式，開啟後是文字介面。Codex 定時分析動態股
 
 ## Windows 啟動
 
-1. 在 GitHub 的 **Actions → TypeScript checks and Windows app** 選最新成功的工作流程。
-2. 下載 **Shioaji-Codex-Trader-TypeScript-Windows-x64** artifact，解壓後開啟 EXE。
-3. 預設開啟 DEMO。按「立即分析」及「自動執行」可測試虛構流程；真實交易需另行設定。
+1. 到 [v0.3.0 Release](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.3.0)。私有儲存庫需登入有權限的 GitHub 帳號。
+2. 下載 **Shioaji-Codex-Trader-0.3.0-Windows-x64.exe**，直接開啟。這是 portable Windows x64 測試版。
+3. 預設開啟 DEMO。在「日期區間歷史模擬」按「開始全自動模擬」，免登入即可測試虛構交易及損益報表。
+4. 即時 DEMO 可按「立即分析」及「自動執行」。真實行情、Codex 及實盤需完成以下本機設定。
 
 Portable EXE 包含 Electron、Node.js 及應用程式。下載檔沒有程式碼簽章，Windows 可能要求確認來源。資料保存於 Electron 的本機使用者資料目錄 `Shioaji Codex Trader/state/`；portable 解壓位置不是資料保存位置。
 
@@ -70,13 +74,15 @@ shioaji server status --streams
 
 連接前會核對 `/info`、`/health`、帳戶簽署狀態及 `/openapi.json` 必要端點。API 欄位、CA 狀態或日期無法核對時停止新增委託；不會猜測未知欄位。
 
-在「連線與模式」先切換 READONLY，核對銀行現金、交割款、庫存與可賣股數；再使用 PAPER 驗證行情與策略。設定 `stock_account_index` 選取官方服務回傳的證券帳戶順序，切換需重新連線；帳戶或服務模式變更須使用新的獨立資料庫，禁止混用。
+在「連線與模式」先切換 READONLY，核對銀行現金、交割款、庫存與可賣股數；再使用 PAPER 驗證行情與策略。設定 `stock_account_index` 選取官方服務回傳的證券帳戶順序。桌面儲存 `base_url`／帳戶序號變更會停止舊連線，切換到該連線的獨立資料庫並關閉自動執行；有未完成委託時禁止變更。帳戶指紋仍須相符，禁止混用。程式記住上次模式；上次為 LIVE 而啟動時沒有 `LIVE_TRADING=true` 則改為唯讀。
 
 PAPER 與 DEMO 成交模型依五檔首檔量模擬部分成交，按委託累計金額計費。PAPER 沒有完整模擬 T+2 入扣款、排隊順位、券商拒單或成交價格；不能作為實際交易能力驗收。PAPER 只用真實行情，不向券商送單。
 
 ## Codex 本機登入與設定
 
-先依 [Codex 官方文件](https://developers.openai.com/codex/cli/) 安裝並登入 Codex CLI。Windows 建議使用官方支援的本機環境。若唯讀 sandbox 不受支援，分析會失敗，程式不會退回 unrestricted 模式。
+EXE 已包含官方 Codex 執行檔。展開「Codex 登入與經驗回饋」，按「使用官方 Codex 登入」，在瀏覽器完成登入，再按「啟用 Codex 定時分析」。登入只在你的電腦執行；本專案開發及 CI 不會登入你的帳戶。
+
+也可依 [Codex 官方文件](https://developers.openai.com/codex/cli/) 安裝並登入 Codex CLI。Windows 建議使用官方支援的本機環境。若唯讀 sandbox 不受支援，分析會失敗，程式不會退回 unrestricted 模式。
 
 ```powershell
 npm install -g @openai/codex
@@ -85,11 +91,52 @@ codex login
 
 程式使用官方 `@openai/codex-sdk`，預設使用 SDK 內附執行檔，可在設定指定 `codex_path`。設定 `codex_enabled: true`；`codex_model` 留空使用你的 Codex 預設模型，`codex_reasoning` 可用 `default/low/medium/high/xhigh`。分析可能消耗你的方案額度或 API 費用。
 
-分析使用獨立 `codex-analysis-profile`，只複製你的 Codex 登入檔，不沿用個人 MCP、技能或外掛設定。登入檔維持本機權限，不能上傳或分享。傳給模型的快照沒有帳號、身分證字號、委託識別碼、券商金鑰、CA 路徑或密碼；子程序不繼承任何 `SJ_*` 環境值。
+分析使用本應用程式獨立的 `codex-login` 設定目錄，不沿用個人 MCP、技能或外掛設定。若沒有此程式的登入，會首次複製既有 Codex auth.json。後續使用同一獨立目錄保存官方登入刷新結果，避免每輪覆寫成舊憑證。登入檔維持本機權限，不能上傳或分享；組織強制使用其他憑證儲存方式時，需遵照組織政策，本版不繞過政策。傳給模型的快照沒有帳號、身分證字號、委託識別碼、券商金鑰、CA 路徑或密碼；子程序不繼承任何 `SJ_*` 環境值。
 
 限制 shell／檔案修改／MCP／網路搜尋工具並檢查 SDK 事件。模型只回傳 JSON 決策，交易引擎獨立驗證後才執行。唯讀 sandbox 與環境過濾不等於抵抗同一 OS 使用者的所有惡意程式；需要更強隔離時，應將分析執行在不同 OS 使用者或受控執行環境中。
 
 分析逾時或結果不符會停止新買進並核對撤銷本程式的買進掛單；既有持倉保護獨立持續。盤後檢討只接受 HOLD 決策。
+
+## 指定日期區間歷史模擬
+
+桌面介面提供開始日、結束日、起始資金、整股開關、Codex 分析間隔與呼叫上限。單次區間最多 367 天；真實歷史資料結束日必須早於今天。可停止並保留已完成結果。
+
+| 資料來源／策略 | 行為 |
+|---|---|
+| 虛構行情＋流程示範 | 免登入，不呼叫 Codex；只驗證程式，不代表任何股票或策略績效 |
+| 虛構行情＋Codex | 真正呼叫官方 SDK，但行情仍為虛構；適合驗證本機認證與輸出格式 |
+| CSV＋Codex | 匯入資料池中的股票自動分析交易，依虛擬時間提供資料 |
+| Shioaji＋Codex | 唯讀查詢歷史排行及 K 線，不讀取交易帳戶或向券商下單；查詢會消耗官方歷史資料流量 |
+
+Shioaji 模式以區間前一個交易日的成交金額排行普通股前 20 檔建立歷史資料池，之後依每個虛擬時間已完成日 K 動態排序。這不是全市場回測。分段唯讀下載並快取；不使用今日排行選過去股票。未取得已確認交易日曆或歷史排行時停止，不回退使用今日資料。
+
+CSV 欄位（普通現股，成交量單位為股；`at` 是已完成 K 線的結束時間）：
+
+```csv
+symbol,at,open,high,low,close,volume_shares
+2330,2026-01-05T09:10:00+08:00,1000,1005,995,1000,500000
+```
+
+這一行只展示格式，不是實際行情。需匯入至少區間前 20 個交易日，建議 60–150 日暖機資料。可附 `bid,ask,bid_shares,ask_shares`；只有確定對應市場的歷史五檔才能用這些欄位。以 `date` 取代 `at` 可匯入日 K；日 K 僅以假設 09:10／09:11 開盤價與 13:30 收盤價重播，不還原當日高低點路徑。
+
+全自動 Codex 模式依虛擬交易時間定時分析，盤後再檢討。每輪快照只包含當時已知價格、此前已完成日 K 與該次回測截至當時的經驗，不讀取今日新聞、營收或既有實盤記錄。呼叫上限含檢討；達上限後停止新增決策、持續保護，報表會標示。分析失敗停止新買進；沒有任何有效盤中決策時報表為 FAILED，不能當成有效策略績效。
+
+回測沿用即時風控與智慧單，委託最早在下一個價格事件成交，禁止今日買進量當日賣出。首檔深度若缺漏，以 K 線成交股數的 1% 估算；價差以收盤價前後一個 tick 估算。普通市場分鐘 K 線不是零股歷史撮合資料；K 線之內的觸發先後、排隊、真實滑價、歷史特殊交易狀態及企業行動未還原。Codex 可能從預訓練知道歷史事件，因此重播不等於嚴格樣本外驗證。
+
+買款及買進費用立即預留；賣出淨額在已知交易日曆 T+2 才可用，期末待收交割款仍計入淨值。損益含費稅，已實現成本採 FIFO 並分攤買進費用；未實現按最後可取得價格估值，不強制平倉。報表包含資料來源、費率、模型設定、限制、逐日淨值、逐筆成交、委託及檢討。JSON 完整報表與成交 CSV 可由桌面匯出，結果也保存於本機 `state/backtests/`。
+
+```powershell
+npm run backtest:demo
+node dist/src/cli.js --backtest --start=2026-01-05 --end=2026-01-09 --cash=100000 --source=csv --strategy=codex --csv=C:\data\history.csv --settings=C:\data\trader-settings.json --output=C:\data\report.json
+```
+
+`trader-settings.json` 為符合本機設定 schema 的普通設定，需 `codex_enabled: true`，不得包含券商金鑰；登入憑證由官方 Codex 管理。
+
+## Codex 能經驗學習嗎
+
+本版提供持久化經驗回饋：模擬成交價格、費稅、FIFO 已實現損益、風控拒絕及盤後檢討會供下一輪分析參考。設定 `experience_enabled` 控制讀取，`experience_limit` 預設最多最近 40 筆。文字指令 `experience` 可查看摘要。
+
+記錄按模式隔離；每次歷史回測使用全新範圍，只取得虛擬時間之前的事件與檢討。實盤沒有實際成交價及費用時，只記錄已核對成交量，損益保持未知。這是記錄、檢討及提示詞回饋，不會自動改模型權重、修改程式或放寬硬性風控，也不能保證越交易越會賺。
 
 ## 設定與預設風控
 
@@ -127,7 +174,7 @@ codex login
 
 ```powershell
 $env:LIVE_TRADING = 'true'
-& '.\Shioaji-Codex-Trader-0.2.0-Windows-x64.exe' --mode=live
+& '.\Shioaji-Codex-Trader-0.3.0-Windows-x64.exe' --mode=live
 ```
 
 4. 在 LIVE 的獨立設定核對 `fee_verified`、交割款符號及風控。帳戶必須完整且符合正式服務模式。
@@ -142,6 +189,7 @@ $env:LIVE_TRADING = 'true'
 | 指令 | 行為 |
 |---|---|
 | `status` | 顯示模式、帳戶、計畫、保護與委託 |
+| `experience` | 顯示近期經驗、可核對損益及盤後檢討 |
 | `decide` / `review` | 立即分析／盤後只讀檢討 |
 | `pause` / `resume` | 暫停／恢復新增買進，持倉保護持續 |
 | `stop` / `continue` | 停止／恢復所有新委託；不自動撤銷券商掛單 |
@@ -174,7 +222,7 @@ npm run demo
 npm run pack:win
 ```
 
-GitHub Actions 在 Linux 與 Windows 執行 TypeScript 編譯、單元／整合測試及 DEMO；Windows 另驗證 Electron 文字介面、IPC 隔離、指令及視窗隱藏／重開，再驗證打包後 EXE。
+GitHub Actions 在 Linux 與 Windows 執行 TypeScript 編譯、46 項單元／整合測試、DEMO 及日期區間示範回測；Windows 另驗證 Electron 文字介面、IPC 隔離、指令、視窗隱藏／重開及歷史模擬，再驗證打包後 EXE。全部成功後才以有限的 Release 寫入權限發布測試版及 SHA-256 校驗檔。
 
 測試涵蓋部分成交、計費、禁止同日賣出、未知委託不重送、過期計畫撤單、保護持續、重啟、價格跳動單位、資金與交割預留、日損失、SDK 輸出驗證、環境隔離及 API/SSE 單位解析。真實登入、CA、零股成交、券商費率與 Codex 認證須在你的電腦另外驗收；CI 沒有使用這些帳戶。
 

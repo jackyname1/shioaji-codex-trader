@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, mkdirSync, openSync, readFileSync, closeSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { ExperienceSchema, ReviewSchema, type Experience, type ExperienceReview } from './experience.js';
 import { AccountSchema, OrderSchema, PlanSchema, ProtectionSchema, SessionSchema, SettingsSchema,
   active, type Account, type Order, type Plan, type Protection, type SessionDay, type Settings } from './models.js';
 
@@ -22,7 +23,10 @@ export class Store {
         CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, tag TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS protections (symbol TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sessions (day TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL);`);
+        CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS experiences (id TEXT PRIMARY KEY, at TEXT NOT NULL, mode TEXT NOT NULL, value TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS experiences_scope_time ON experiences(mode,at);
+        CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, at TEXT NOT NULL, mode TEXT NOT NULL, value TEXT NOT NULL);`);
       if (path !== ':memory:') chmodSync(path, 0o600);
       const version = this.get<number>('schema_version');
       if (version !== undefined && version !== 2) throw new Error('資料庫版本不同，請使用獨立的 TypeScript 資料庫');
@@ -110,4 +114,20 @@ export class Store {
       .reverse().map(r => `${r.at} ${r.kind}: ${r.message}`);
   }
   savePaper(a: Account): void { this.set('paper_account', AccountSchema.parse(a)); }
+  recordExperience(raw: Experience): void {
+    const x = ExperienceSchema.parse(raw);
+    this.db.prepare('INSERT OR IGNORE INTO experiences VALUES (?,?,?,?)').run(x.id,new Date(x.at).toISOString(),x.mode,JSON.stringify(x));
+  }
+  experiences(mode: string, asof: string, limit = 40): Experience[] {
+    return (this.db.prepare('SELECT value FROM experiences WHERE mode=? AND at<=? ORDER BY at DESC,rowid DESC LIMIT ?')
+      .all(mode,new Date(asof).toISOString(),limit) as {value:string}[]).reverse().map(x => ExperienceSchema.parse(JSON.parse(x.value)));
+  }
+  saveReview(raw: ExperienceReview): void {
+    const x = ReviewSchema.parse(raw);
+    this.db.prepare('INSERT OR IGNORE INTO reviews VALUES (?,?,?,?)').run(x.id,new Date(x.at).toISOString(),x.mode,JSON.stringify(x));
+  }
+  reviews(mode: string, asof: string, limit = 5): ExperienceReview[] {
+    return (this.db.prepare('SELECT value FROM reviews WHERE mode=? AND at<=? ORDER BY at DESC,rowid DESC LIMIT ?')
+      .all(mode,new Date(asof).toISOString(),limit) as {value:string}[]).reverse().map(x => ReviewSchema.parse(JSON.parse(x.value)));
+  }
 }
