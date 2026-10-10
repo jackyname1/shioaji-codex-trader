@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { brokerOrigin, bundledShioajiPath } from '../src/desktop/broker-runtime.js';
@@ -102,12 +103,12 @@ test('the bundled runtime rejects corruption, missing files and paths outside it
   const bytes=Buffer.from('isolated runtime fixture');writeFileSync(path,bytes);
   const manifest={version:'1.7.7',platform:process.platform,arch:process.arch,relative_path:name,sha256:createHash('sha256').update(bytes).digest('hex')};
   try{await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);
-    writeFileSync(join(root,'runtime.json'),JSON.stringify(manifest));assert.equal(await bundledShioajiPath(root),realpathSync(path));
+    writeFileSync(join(root,'runtime.json'),JSON.stringify(manifest));assert.equal(await bundledShioajiPath(root),await realpath(path));
     writeFileSync(path,'corrupted');await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);
     writeFileSync(path,bytes);
     writeFileSync(join(root,'runtime.json'),JSON.stringify({...manifest,relative_path:'../'+root.split(/[\\/]/).at(-1)+'/'+name}));
     // A resolved path within the resources is allowed; a genuinely external executable is rejected.
-    assert.equal(await bundledShioajiPath(root),realpathSync(path));
+    assert.equal(await bundledShioajiPath(root),await realpath(path));
     const outside=join(tmpdir(),'outside-'+root.split(/[\\/]/).at(-1));writeFileSync(outside,bytes);
     try{writeFileSync(join(root,'runtime.json'),JSON.stringify({...manifest,relative_path:'../'+outside.split(/[\\/]/).at(-1)}));await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);}
     finally{rmSync(outside,{force:true});}
