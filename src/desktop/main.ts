@@ -320,14 +320,15 @@ async function smokeTest(): Promise<void> {
   async function verifyLayout(expected:string):Promise<void>{
     const result=await window!.webContents.executeJavaScript(`(()=>{
       const visible=selector=>{const node=document.querySelector(selector),box=node.getBoundingClientRect();return box.width>0&&box.height>0&&box.top>=0&&box.bottom<=innerHeight&&box.right<=innerWidth;};
-      return {mode:document.body.dataset.workspace,watchRows:document.querySelectorAll('#overview-watch tbody tr').length,pnl:document.querySelector('#bt-pnl').textContent,
+      return {mode:document.body.dataset.workspace,watchRows:document.querySelectorAll('#overview-watch tbody tr').length,
+        watchPrices:[...document.querySelectorAll('#overview-watch tbody tr td:nth-child(3)')].some(cell=>cell.textContent!=='—'),pnl:document.querySelector('#bt-pnl').textContent,
         panels:['.watch-panel','.positions-panel','.chart-panel','.codex-panel','.execution-panel'].every(visible),
         simulation:visible('.simulation-controls'),equity:visible('.equity-panel'),orders:visible('#orders'),
         pages:document.querySelectorAll('[data-page],[data-tab]').length,width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,
         viewport:innerWidth,viewportHeight:innerHeight,times:document.querySelector('#s-times').value,
         settings:document.querySelector('#settings-dialog').open};})()`);
     if(result.mode!==expected||!result.panels||result.pages||result.width>result.viewport||result.height>result.viewportHeight||result.settings
-      ||expected==='paper'&&(!result.simulation||!result.equity||result.watchRows<5||result.pnl==='—')
+      ||expected==='paper'&&(!result.simulation||!result.equity||result.watchRows<5||!result.watchPrices||result.pnl==='—')
       ||expected==='live'&&(!result.orders||result.simulation||result.equity))throw new Error('單一工作台版面未通過：'+JSON.stringify(result));
   }
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');

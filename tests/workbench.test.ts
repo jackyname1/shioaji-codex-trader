@@ -117,6 +117,8 @@ test('the bundled runtime rejects corruption, missing files and paths outside it
 test('every simulation pane and activity stream stays in the replay scope, including after a report is restored', async()=>{
   const data=syntheticDataset('2026-01-05','2026-01-06');
   const report=await runBacktest({start:'2026-01-05',end:'2026-01-06',source:'sample',strategy:'rules'},data,SettingsSchema.parse({}),undefined,new AbortController().signal);
+  assert.ok(report.final_frame!.quotes.length>0,'The completed replay retains historical closing marks after the engine expires its trading quotes.');
+  assert.ok(report.final_frame!.quotes.every(q=>Date.parse(q.trade_at)<=Date.parse(report.asof)));
   const live=snapshot(),runtime={mode:'paper',account:live.account,quotes:[],features:live.features,metadata:{},plan:null,
     watch:{entries:[{symbol:'9999',name:'PRESENT_DAY_ONLY'}],changes:[],asof:'2026-10-10T00:00:00Z'},orders:live.account.open_orders,protections:[],decisions:[]} as unknown as RuntimeView;
   const state={runtime,backtest_result:report,backtest_progress:{running:false,phase:'COMPLETED'},replay:null,
