@@ -4,7 +4,7 @@ import { Engine } from '../src/core/engine.js';
 import { PaperBroker, SyntheticMarket } from '../src/broker/paper.js';
 import { SettingsSchema, type Account, type Instrument, type Order, type Quote, type Snapshot } from '../src/core/models.js';
 export const now = new Date('2026-10-08T10:00:00+08:00');
-export const settings = () => SettingsSchema.parse({mode:'demo',auto_execute:true});
+export const settings = () => SettingsSchema.parse({mode:'demo',auto_execute:true,watch_min_amount:'0'});
 export const quote = (at = now): Quote => ({symbol:'9001',last:'30',bid:'29.95',ask:'30.05',
   trade_at:at.toISOString(),book_at:at.toISOString(),odd:true,simulated:false,bid_shares:17,ask_shares:17});
 export const instrument = (at = now): Instrument => ({symbol:'9001',name:'虛構股票',exchange:'TSE',category:'DEMO',kind:'STOCK',

@@ -47,6 +47,7 @@ jobs:
       - name: Packaged app smoke test
         shell: pwsh
         run: |
+          $env:TRADER_SMOKE_OUTPUT = (Resolve-Path release).Path
           $exe = Get-ChildItem release/Shioaji-Codex-Trader-*-Windows-x64.exe | Select-Object -First 1
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -PassThru
           if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Packaged app smoke test timed out' }
@@ -88,7 +89,7 @@ jobs:
             exit 0
           fi
           cd release
-          sha256sum *.exe *.md *.json *.csv > SHA256SUMS.txt
-          gh release create "$tag" --target "$RELEASE_COMMIT" --prerelease --title "Shioaji Codex Trader ${tag} Windows 測試版" --notes-file RELEASE_NOTES.md --draft *.exe *.md *.json *.csv SHA256SUMS.txt
+          sha256sum *.exe *.md *.json *.csv *.png > SHA256SUMS.txt
+          gh release create "$tag" --target "$RELEASE_COMMIT" --prerelease --title "Shioaji Codex Trader ${tag} Windows 測試版" --notes-file RELEASE_NOTES.md --draft *.exe *.md *.json *.csv *.png SHA256SUMS.txt
           gh release edit "$tag" --draft=false
           gh release view "$tag" --json url,tagName,assets

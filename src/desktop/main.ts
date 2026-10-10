@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { TradingService, LIVE_ACK } from '../core/service.js';
 import { SettingsSchema,active, type Settings } from '../core/models.js';
+import { demoAnalysis } from '../core/strategy.js';
 import { Store } from '../core/store.js';
 import { loopbackOrigin } from '../broker/http.js';
 import type { DesktopState } from './shared.js';
@@ -16,6 +17,7 @@ import { bundledCodexPath,codexEnvironment } from '../core/codex.js';
 import { BacktestController } from '../core/backtest-controller.js';
 import { BacktestRequestSchema,fillsCsv } from '../core/backtest.js';
 import { experienceStatus } from '../core/experience.js';
+import { z } from 'zod';
 
 let window: BrowserWindow | undefined, tray: Tray | undefined, service: TradingService | undefined;
 let quitting = false, initialError = '', blocker: number | undefined;
@@ -59,11 +61,12 @@ async function connect(nextMode: Settings['mode'],override?:Settings): Promise<v
     if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
     await service.start(!smoke);
   }
-  catch { initialError = mode === 'demo' ? '模擬程式啟動失敗' : '無法連接或核對 Shioaji 服務。請啟動官方本機服務，並檢查 CA、版本與帳戶設定。'; }
+  catch {if(service){service.engine.connected=false;service.engine.entryBlocked=true;}
+    initialError = mode === 'demo' ? '模擬程式啟動失敗' : '無法連接或核對 Shioaji 服務。請啟動官方本機服務，並檢查 CA、版本與帳戶設定。'; }
 }
 function createWindow(): void {
-  window = new BrowserWindow({width:1080,height:800,minWidth:720,minHeight:500,title:'Shioaji Codex Trader — TypeScript',
-    backgroundColor:'#10151c',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
+  window = new BrowserWindow({width:1180,height:830,minWidth:780,minHeight:560,title:'Shioaji Codex Trader',
+    backgroundColor:'#0c1016',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
       contextIsolation:true,sandbox:true,webSecurity:true}});
   window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
@@ -105,14 +108,24 @@ function registerIpc(): void {
     ipcMain.handle(name,async (event,value: unknown) => {
       trusted(event);
       try { return await action(value); }
-      catch (e) { throw new Error(e instanceof Error && /^(?:回測|用法|未知指令|委託 ID|實盤|每種|交易模式|須先|目前模式|請先|尚未|上一輪|程式正在|無法|本輪|自動|設定|停止)/.test(e.message)
+      catch (e) {if(e instanceof z.ZodError)throw new Error('設定驗證未通過：'+e.issues.slice(0,3).map(i=>`${i.path.join('.')||'設定'} ${i.message}`).join('；'));
+        throw new Error(e instanceof Error && /^(?:回測|用法|未知指令|委託 ID|實盤|每種|交易模式|須先|目前模式|請先|尚未|上一輪|程式正在|無法|本輪|自動|設定|停止)/.test(e.message)
         ? e.message : '操作未完成，請核對本機狀態與設定'); }
     });
   };
   handle('trader:state',() => ({status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
     settings:JSON.stringify(service?.engine.settings ?? SettingsSchema.parse({mode}),null,2),
     connected:service?.engine.connected ?? false,error:initialError,backtest:backtest.text(),backtest_running:backtest.progress.running,
-    backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:loginStatus} satisfies DesktopState));
+    backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:loginStatus,
+    runtime:service?{mode,auto:service.engine.settings.auto_execute,paused:service.engine.pausedEntries,killed:service.engine.killed,
+      blocked:service.engine.entryBlocked,connected:service.engine.connected,session:service.calendar.inSession(new Date()),account:service.engine.account??null,
+      plan:service.engine.plan??null,protections:service.store.protections(),orders:service.store.orders(true),quotes:[...service.engine.quotes.values()],
+      watch:service.engine.watch,next_strategy_at:service.nextStrategyAt(),analyzing:service.analyzing,scanning:service.scanning,
+      analysis_status:service.analysisStatus,last_monitor_at:service.lastMonitorAt,
+      decisions:[...service.engine.decisionStates].map(([symbol,state])=>({symbol,...state}))}:null,
+    backtest_progress:backtest.progress,backtest_result:backtest.report?{...backtest.report,fills:backtest.report.fills.slice(-80),
+      orders:backtest.report.orders.slice(-80),strategy_log:backtest.report.strategy_log.slice(-25),logs:backtest.report.logs.slice(-50)}:null,
+    backtest_history:backtest.history,backtest_comparisons:backtest.comparisons} satisfies DesktopState));
   handle('trader:command',async value => {
     if (typeof value !== 'string' || value.length > 2000 || !service) throw new Error('未知指令或程式尚未啟動');
     if (value.trim() === 'exit') { await exit(); return '結束程式'; }
@@ -134,7 +147,7 @@ function registerIpc(): void {
   });
   handle('trader:configure',async value => {
     const next = SettingsSchema.shape.mode.parse(value);
-    if (service?.store.orders(true).length) throw new Error('目前模式仍有未完成委託，請先核對並處理');
+    if (service?.store.orders(true).length||service?.engine.account?.orders.some(active)) throw new Error('目前模式仍有未完成委託，請先核對並處理');
     if (next === 'live') {
       const answer = await dialog.showMessageBox(window!,{type:'warning',buttons:['取消','開啟實盤監控'],defaultId:0,cancelId:0,
         message:'切換到實盤帳戶監控',detail:'自動交易需另外完成本機授權並啟用 auto on。請先使用 readonly 核對券商帳戶、交割與可賣庫存。'});
@@ -161,6 +174,7 @@ function registerIpc(): void {
     return backtest.start(request,service.engine.settings,csv);
   });
   handle('trader:backtest-cancel',()=>backtest.cancel());
+  handle('trader:backtest-select',value=>{if(typeof value!=='string')throw new Error('回測報表識別不合法');return backtest.select(value);});
   handle('trader:codex-login',()=>{
     if(smoke)throw new Error('Codex 登入不在測試流程執行');if(loginTask)return 'Codex 登入仍在進行';
     const profile=join(dataRoot,'codex-login');mkdirSync(profile,{recursive:true,mode:0o700});
@@ -194,18 +208,39 @@ async function smokeTest(): Promise<void> {
   await service.command('auto on'); await service.command('pause');
   if (!service.engine.pausedEntries || !service.engine.settings.auto_execute) throw new Error('指令測試失敗');
   await service.command('resume');
-  backtest.start({start:'2026-10-01',end:'2026-10-08',source:'sample',strategy:'demo',initial_cash:'100000'},service.engine.settings);
+  const virtual=new Date('2026-10-08T10:00:00+08:00'),snapshot=await service.engine.snapshot(virtual);
+  await service.engine.activate(demoAnalysis(snapshot,service.engine.settings,virtual),snapshot,virtual);
+  for(let n=0;n<4;n++)await service.engine.tick(new Date(virtual.getTime()+n*3000));
+  if(!service.engine.watch.entries.length||!service.store.orders().some(o=>o.filled>0))throw new Error('打包後動態觀測與條件執行未通過');
+  backtest.start({start:'2026-10-01',end:'2026-10-08',source:'sample',strategy:'demo',initial_cash:'100000',strategy_schedule:'interval',comparison_intervals:[120,180]},service.engine.settings);
   await backtest.wait();
   if(!backtest.report||backtest.report.status!=='COMPLETED'||!backtest.report.metrics.filled_orders)throw new Error('打包後歷史模擬未通過');
+  if(backtest.comparisons.length!==2)throw new Error('打包後排程比較未通過');
+  await verifyRenderer();
+  const artifacts=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(artifacts,{recursive:true});
+  for(const page of ['overview','strategy','simulation','settings']){
+    const rendered=await window.webContents.executeJavaScript(`(async()=>{
+      document.querySelector('[data-tab="${page}"]').click();
+      await new Promise(resolve=>setTimeout(resolve,1300));
+      return {headline:document.querySelector('#headline').textContent,
+        watchRows:document.querySelectorAll('#overview-watch tbody tr').length,
+        pnl:document.querySelector('#bt-pnl').textContent,
+        times:document.querySelector('#s-times').value,
+        width:document.documentElement.scrollWidth,viewport:window.innerWidth};
+    })()`);
+    if(rendered.watchRows<5||rendered.pnl==='—'||rendered.times!=='09:15,11:45'||rendered.width>rendered.viewport)throw new Error('桌面排程、觀測、損益顯示或版面溢位未通過');
+    writeFileSync(join(artifacts,`SYNTHETIC-ui-${page}.png`),(await window.webContents.capturePage()).toPNG());
+  }
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
-  console.log('Electron text interface, isolated IPC, commands, historical simulation and window hide/show: PASS'); await exit();
+  console.log('Electron four-page text interface, isolated IPC, watchlist/rule execution, automatic simulation comparison and tray: PASS'); await exit();
 }
 async function verifyRenderer(): Promise<void> {
   const result = await window!.webContents.executeJavaScript(`(async () => ({ bridge: typeof window.trader?.state === 'function',
     node: typeof window.require, status: (await window.trader.state()).status,
+    pages:document.querySelectorAll('[data-page]').length,
     csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content }))()`);
-  if (!result.bridge || result.node !== 'undefined' || !result.status.includes('TypeScript') || !result.csp) throw new Error('安全 IPC 或文字介面未載入');
+  if (!result.bridge || result.node !== 'undefined' || !result.status.includes('TypeScript') || !result.csp || result.pages!==4) throw new Error('安全 IPC 或四頁文字介面未載入');
 }
 async function exit(): Promise<void> {
   if (quitting) return;

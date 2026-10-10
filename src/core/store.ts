@@ -77,6 +77,11 @@ export class Store {
     const result = this.db.prepare('INSERT OR IGNORE INTO orders VALUES (?,?,?)').run(value.local_id, value.tag, JSON.stringify(value));
     return result.changes === 1;
   }
+  prepareIntent(o:Order,protection?:Protection):boolean {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {const inserted=this.insertIntent(o);if(inserted&&protection)this.saveProtection(protection);this.db.exec('COMMIT');return inserted;}
+    catch(e){this.db.exec('ROLLBACK');throw e;}
+  }
   saveOrder(o: Order): void {
     const value = OrderSchema.parse(o);
     this.db.prepare('INSERT INTO orders VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(value.local_id, value.tag, JSON.stringify(value));

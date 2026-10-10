@@ -6,59 +6,85 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Shioaji Codex Trader</title>
   <style>
-    :root{color-scheme:dark;font-family:Consolas,"Microsoft JhengHei",monospace;background:#10151c;color:#dce4ef;font-size:14px}
-    body{margin:0;padding:22px;max-width:1400px}h1{font-size:21px;margin:0 0 6px;color:#8bddac}p{line-height:1.6;margin:8px 0;color:#a7b8cc}
-    button,select,input,textarea{font:inherit;border:1px solid #344355;border-radius:5px;background:#1b2532;color:inherit;padding:8px}
-    button{cursor:pointer}button:hover{background:#293b4b}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #8bddac}
-    .controls{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}pre{white-space:pre-wrap;word-break:break-word;line-height:1.6;background:#0c1118;padding:16px;border:1px solid #243242;border-radius:6px;min-height:80px}
-    #status{min-height:260px}#logs{max-height:300px;overflow:auto;font-size:12px}#message{min-height:24px;color:#8bddac}#error{color:#ffb791}#command-form{display:flex;gap:8px}#command{flex:1}details{margin-top:15px}summary{cursor:pointer;padding:8px 0}textarea{box-sizing:border-box;width:100%;min-height:380px;line-height:1.5}label{display:block;margin:10px 0 5px}#ack{width:95%}.danger{color:#ffb791}footer{font-size:12px;color:#8194ab;margin:20px 0}
+    :root{color-scheme:dark;font-family:"Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;color:#e1e7ef;background:#0c1016;font-size:14px;--line:#25303e;--muted:#91a0b4;--accent:#86dfbf}
+    *{box-sizing:border-box}body{margin:0}header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;gap:12px;background:#10161e}
+    .brand{font-size:17px;font-weight:700;letter-spacing:.3px}.version{font-size:11px;color:var(--muted);margin-left:9px;font-weight:400}nav{display:flex;gap:3px;padding:12px 28px 0;border-bottom:1px solid var(--line);background:#10161e}
+    nav button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:12px 20px;color:var(--muted)}nav button.active{color:var(--accent);border-color:var(--accent)}
+    main{padding:20px 28px 32px;max-width:1520px;margin:auto}[hidden]{display:none!important}h1{font-size:22px;margin:0 0 8px;letter-spacing:.5px}h2{font-size:15px;margin:0 0 16px;font-weight:600}p{line-height:1.7;margin:8px 0;color:var(--muted)}
+    button,input,select,textarea{font:inherit;background:#151e2a;color:inherit;border:1px solid #344253;border-radius:6px;padding:9px 12px}button{cursor:pointer;font-size:13px;white-space:nowrap}button:hover{background:#223244;border-color:#63827a}button:disabled{opacity:.4;cursor:default}
+    input,select{width:100%;min-width:0}input[type=checkbox]{width:auto;accent-color:var(--accent)}input:focus-visible,select:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .primary{background:var(--accent);color:#09211b;border-color:var(--accent);font-weight:700}.primary:hover{background:#a9ecd3}.danger{color:#ffaaa6;border-color:#713b42;background:#28171e}.quiet{background:none;color:var(--muted)}
+    .badge{font:12px Consolas,monospace;display:inline-block;padding:5px 9px;border:1px solid #375246;border-radius:5px;color:var(--accent);background:#17251f}.badge.live{color:#ffb0aa;border-color:#8f464b;background:#301c23}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}.gap{margin-top:18px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:20px 0}
+    .metric,.panel{border:1px solid var(--line);border-radius:9px;background:#111923}.metric{padding:15px 18px}.metric small{color:var(--muted);display:block;margin-bottom:8px}.metric strong{font:24px Consolas,monospace;display:block;overflow-wrap:anywhere}.metric span{display:block;color:var(--muted);font-size:11px;margin-top:7px}
+    .panel{padding:20px;margin-bottom:16px}.caption{font-size:12px;color:var(--muted)}.muted{color:var(--muted)}.positive{color:#f3aaa0}.negative{color:#86dfbf}.warn{color:#ffd29b}.section-title{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.section-title h2{margin:0}
+    .scroll{overflow:auto;max-height:340px}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.6}th{text-align:left;font-weight:400;color:var(--muted);background:#111923;position:sticky;top:0;white-space:nowrap}th,td{padding:9px 10px;border-bottom:1px solid #202b38;vertical-align:top}td{overflow-wrap:anywhere}td:first-child,td:nth-child(2){white-space:nowrap}td button{font-size:11px;padding:4px 8px}tbody tr:last-child td{border:0}.empty{color:var(--muted);padding:22px 10px;text-align:center}
+    label{display:flex;flex-direction:column;gap:8px;font-size:12px;color:#b5c2d1}label.check{flex-direction:row;align-items:center;gap:8px;min-height:38px}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:14px 0}.fields.two{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{grid-column:1/-1}
+    .schedule{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:16px 0}.schedule div+div{border-left:1px solid var(--line);padding-left:20px}.schedule small{display:block;color:var(--muted);font-size:11px;margin-bottom:8px}.schedule strong{display:block;font:20px Consolas,monospace}.schedule span{display:block;color:var(--muted);font-size:12px;margin-top:8px}
+    details{border-top:1px solid var(--line);margin-top:16px;padding-top:12px}summary{cursor:pointer;font-size:12px;color:#b5c2d1;padding:5px 0}pre{font:12px/1.8 Consolas,"Microsoft JhengHei",monospace;white-space:pre-wrap;word-break:break-word;max-height:350px;overflow:auto;color:#b7c7d9;margin:14px 0 0}textarea{width:100%;min-height:340px;font:12px/1.7 Consolas,monospace;margin:12px 0}
+    #message{font-size:12px;min-height:20px;color:var(--accent);margin:0 0 12px}#error{font-size:12px;color:#ffb5a2;white-space:pre-wrap;margin:0 0 12px}#error:empty{display:none}.lede{max-width:750px;font-size:12px;margin:0}progress{width:100%;height:8px;accent-color:var(--accent);margin:12px 0}.command-form{display:flex;gap:8px;margin-top:12px}.command-form input{flex:1}footer{font-size:11px;color:#6f8197;margin-top:18px}
+    @media(max-width:1000px){main{padding:20px}header,nav{padding-left:20px;padding-right:20px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}.metric strong{font-size:22px}}
   </style>
 </head>
 <body>
-  <h1>Shioaji Codex Trader · TypeScript</h1>
-  <p>Codex 定時分析，程式持續監控。關閉或最小化視窗會縮到系統匣；點圖示即可重開。</p>
-  <div class="controls">
-    <button data-command="decide">立即分析</button><button data-command="review">盤後檢討</button>
-    <button data-command="pause">暫停買進</button><button data-command="resume">恢復買進</button>
-    <button data-command="auto on">自動執行</button><button data-command="auto off">停止自動</button>
-    <button data-command="reconcile">核對帳戶</button><button data-command="stop" class="danger">停止新委託</button>
-    <button id="hide">縮到系統匣</button><button id="exit">結束程式</button>
-  </div>
-  <p id="error" role="alert"></p><p id="message" role="status"></p>
-  <pre id="status" aria-label="交易狀態">載入中…</pre>
-  <form id="command-form"><input id="command" autocomplete="off" aria-label="文字指令" placeholder="輸入 help 查看指令，例如 pause、cancel-all、calendar 2027"><button type="submit">執行</button></form>
-  <details open><summary>日期區間歷史模擬／損益報表</summary>
-    <p>建立獨立模擬帳戶，不會傳送券商委託。免登入示範使用虛構行情；真實歷史回測請選 Codex 並完成本機登入。Codex 呼叫會消耗額度；歷史結果不代表未來績效。</p>
-    <form id="backtest-form">
-      <div class="controls"><label>開始 <input id="bt-start" type="date" value="2026-10-01" required></label><label>結束 <input id="bt-end" type="date" value="2026-10-08" required></label>
-        <label>起始資金 <input id="bt-cash" type="number" value="100000" min="100" max="1000000000" required></label></div>
-      <div class="controls"><select id="bt-source" aria-label="歷史資料來源"><option value="sample">虛構行情（免登入）</option><option value="csv">匯入歷史行情 CSV</option><option value="shioaji">Shioaji 歷史分鐘 K 線</option></select>
-        <select id="bt-strategy" aria-label="回測決策方式"><option value="demo">流程示範（非 Codex）</option><option value="codex">Codex 全自動歷史決策</option></select>
-        <label><input id="bt-whole" type="checkbox">允許整股（1000 股倍數）</label></div>
-      <div class="controls"><label>分析間隔（分鐘） <input id="bt-interval" type="number" min="10" max="240" value="60"></label>
-        <label>Codex 呼叫上限（含檢討） <input id="bt-calls" type="number" min="1" max="2000" value="100"></label></div>
-      <div class="controls"><button type="submit" id="bt-run">開始全自動模擬</button><button type="button" id="bt-cancel">停止模擬</button><button type="button" id="bt-json">匯出完整 JSON</button><button type="button" id="bt-csv">匯出成交 CSV</button></div>
-    </form>
-    <p>CSV 欄位：symbol,at,open,high,low,close,volume_shares。at 為含時區的 K 線結束時間；可用 date 代替 at 匯入日 K。日 K 只估計開盤成交與收盤估值，無法還原盤中停損。至少包含區間前 20 個交易日行情。</p>
-    <pre id="backtest" aria-label="歷史模擬損益">尚未執行</pre>
-  </details>
-  <details><summary>Codex 登入與經驗回饋</summary><div class="controls"><button id="codex-login">使用官方 Codex 登入</button><button id="codex-enable">啟用 Codex 定時分析</button></div><p id="codex-login-status"></p><p>保存交易結果與檢討，供下一輪分析參考；不會自動重新訓練模型或調高硬性風控。每種模式及每次回測各自隔離。</p><pre id="experience"></pre></details>
-  <details><summary>連線與模式</summary>
-    <p>每種模式各自保存資料。先用 DEMO，再用唯讀核對帳戶與交割資料。PAPER 使用真實行情及模擬資金。</p>
-    <div class="controls"><select id="mode" aria-label="交易模式"><option value="demo">DEMO 虛構行情</option><option value="readonly">READONLY 帳戶唯讀</option><option value="paper">PAPER 模擬成交</option><option value="live">LIVE 實盤監控</option></select><button id="switch">切換並重新連線</button></div>
-  </details>
-  <details><summary>本機設定（JSON）</summary>
-    <p>金額與比率使用字串，股數與時間間隔使用整數。設定保存到 SQLite；不要填入 API 金鑰或 CA 密碼。</p>
-    <textarea id="settings" spellcheck="false" aria-label="本機 JSON 設定"></textarea>
-    <div class="controls"><button id="save">儲存設定</button><button id="reset">重新載入設定</button></div>
-  </details>
-  <details><summary class="danger">本機實盤授權</summary>
-    <p>須先確認手續費、交割款正負號、可賣股數及官方服務的正式模式。智慧停損只在本機執行，電腦休眠、斷線或程式關閉時無法監控；觸發價格不保證成交。</p>
-    <label for="ack">輸入：我確認啟用現股自動實盤交易並了解零股不可當沖</label>
-    <input id="ack" autocomplete="off"><div class="controls"><button id="authorize" class="danger">授權這台電腦的實盤交易</button></div>
-  </details>
-  <details><summary>本機事件紀錄</summary><pre id="logs"></pre></details>
-  <footer>限價現股／盤中零股 1–999 股。今日買進量禁止當日賣出。stop 停止新委託；cancel-all 核對本程式掛單的撤單狀態。</footer>
-  <script type="module" src="renderer.js"></script>
+  <header><div class="brand">SHIOAJI <span class="muted">/</span> CODEX <span class="version">TRADER 0.4.0</span></div><div class="row"><span id="mode-badge" class="badge">DEMO</span><button id="hide" class="quiet">縮到系統匣</button></div></header>
+  <nav aria-label="主選單"><button class="active" data-tab="overview">總覽</button><button data-tab="strategy">策略與觀測</button><button data-tab="simulation">模擬測試</button><button data-tab="settings">設定</button></nav>
+  <main><div id="error" role="alert"></div><div id="message" role="status"></div>
+    <section data-page="overview">
+      <div class="row between"><div><h1 id="headline">正在啟動監控</h1><p class="lede" id="runtime-note">低頻策略・持續偵測・依條件執行</p></div><div class="row"><button class="primary" data-command="start-auto">啟動全自動</button><button data-command="pause">暫停買進</button><button class="danger" data-command="stop">停止新委託</button></div></div>
+      <div class="metrics"><div class="metric"><small>淨資產 / TWD</small><strong id="equity">—</strong><span id="cash-detail">等待帳戶核對</span></div><div class="metric"><small>可用現金 / TWD</small><strong id="cash">—</strong><span id="settlement-detail">預留待付交割與買進掛單</span></div><div class="metric"><small>動態觀測 / 檔</small><strong id="watch-count">0</strong><span id="watch-detail">自動篩選與增刪</span></div><div class="metric"><small>下次 Codex / 台北時間</small><strong id="next-strategy">—</strong><span id="next-detail">依交易日排程</span></div></div>
+      <div class="panel"><div class="section-title"><h2>執行狀態</h2><span id="data-status" class="caption"></span></div><div class="schedule"><div><small>策略更新</small><strong id="schedule-strategy">—</strong><span id="analysis-status"></span></div><div><small>條件偵測</small><strong id="schedule-monitor">—</strong><span id="monitor-status"></span></div><div><small>觀測更新</small><strong id="schedule-watch">—</strong><span id="scan-status"></span></div></div></div>
+      <div class="panel"><div class="section-title"><h2>目前觀測與條件</h2><button class="quiet" data-command="watch">更新觀測</button></div><div class="scroll" id="overview-watch"></div></div>
+      <div class="grid"><div class="panel"><div class="section-title"><h2>持倉與保護</h2><span class="caption">今日新增股數不賣出</span></div><div class="scroll" id="positions"></div></div><div class="panel"><div class="section-title"><h2>未完成委託</h2><button class="quiet" data-command="reconcile">重新核對</button></div><div class="scroll" id="orders"></div><p class="caption">停止新委託不會自動撤銷券商掛單。</p></div></div>
+      <details><summary>事件紀錄與文字指令</summary><pre id="logs"></pre><form class="command-form" id="command-form"><input id="command" autocomplete="off" aria-label="文字指令" placeholder="help / resume / continue / cancel-all"><button>執行</button></form><details><summary>完整文字狀態</summary><pre id="status"></pre></details></details>
+    </section>
+    <section data-page="strategy" hidden>
+      <div class="row between"><div><h1>策略與觀測</h1><p class="lede">Codex 決定方向與條件。程式持續挑股、檢查訊號與風控。</p></div><div class="row"><button data-command="decide">立即更新策略</button><button class="quiet" data-command="review">執行檢討</button></div></div>
+      <div class="panel gap"><div class="section-title"><h2 id="strategy-stance">等待第一輪策略</h2><span id="strategy-expiry" class="caption"></span></div><p id="strategy-summary">啟動全自動後，取得有效策略才會進場。</p><div id="rule-summary" class="caption"></div><div class="scroll gap" id="decisions"></div></div>
+      <div class="panel"><div class="section-title"><h2>自動觀測清單</h2><span id="watch-policy" class="caption"></span></div><div class="scroll" id="watchlist"></div><p class="caption">不符條件立即停止新買進；連續多次不符才移除。持倉與掛單另行保留監控。</p></div>
+      <div class="panel"><h2>觀測增刪紀錄</h2><div class="scroll" id="watch-changes"></div></div>
+      <details><summary>交易經驗與檢討</summary><p class="caption">供下一輪分析參考；不會自動重新訓練模型或放寬風控。</p><pre id="experience"></pre></details>
+    </section>
+    <section data-page="simulation" hidden>
+      <h1>全自動模擬測試</h1><p class="lede">設定日期與節奏，重播選股、條件下單與智慧保護。每次測試使用獨立模擬資金。</p>
+      <form id="backtest-form" class="panel gap">
+        <div class="fields"><label>開始日期<input id="bt-start" type="date" value="2026-10-01" required></label><label>結束日期<input id="bt-end" type="date" value="2026-10-08" required></label><label>起始資金 / TWD<input id="bt-cash" type="number" value="100000" min="100" max="1000000000" required></label>
+          <label>行情來源<select id="bt-source"><option value="sample">虛構行情・免登入流程測試</option><option value="csv">匯入歷史行情 CSV</option><option value="shioaji">Shioaji 歷史分鐘 K 線</option></select></label><label>策略來源<select id="bt-strategy"><option value="demo">流程示範・未呼叫 Codex</option><option value="codex">Codex 全自動歷史決策</option></select></label><label class="check"><input id="bt-whole" type="checkbox">允許整股；預設僅零股</label>
+          <label>策略排程<select id="bt-schedule"><option value="fixed">固定時間</option><option value="interval">固定間隔</option></select></label><label>固定時間 / 台北<input id="bt-times" value="09:15,11:45" placeholder="09:15,11:45" required></label><label>策略間隔 / 分鐘<input id="bt-interval" type="number" min="10" max="360" value="180" required></label>
+          <label>偵測間隔 / 秒<input id="bt-monitor" type="number" min="1" max="30" value="3" required></label><label>觀測更新 / 分鐘<input id="bt-watch" type="number" min="1" max="60" value="5" required></label><label>Codex 呼叫總上限（含檢討）<input id="bt-calls" type="number" min="1" max="2000" value="100" required></label>
+        </div><div class="row"><button class="primary" id="bt-run">開始全自動測試</button><button type="button" id="bt-compare">自動比較時間間隔</button><button type="button" id="bt-cancel" class="quiet">停止測試</button></div>
+        <details><summary>比較組別與成交模型</summary><div class="fields two"><label>比較策略間隔 / 分鐘<input id="bt-compare-times" value="60,120,180" placeholder="60,120,180"></label><label>估計深度比例（0.01 = 1%）<input id="bt-participation" type="number" step="0.001" min="0.001" max="0.1" value="0.01"></label></div><p class="caption">自動比較使用間隔排程，依序執行各組；每組重新建立帳戶。Codex 呼叫上限由整批共用。</p></details>
+        <p class="caption">真實歷史決策需完成本機 Codex 登入，會消耗額度。虛構行情只驗證流程；歷史 K 線無法還原真實零股五檔與撮合。</p>
+      </form>
+      <div class="panel"><div class="section-title"><h2 id="bt-progress-title">尚未執行</h2><span id="bt-progress-detail" class="caption"></span></div><progress id="bt-progress" value="0" max="100"></progress><p id="bt-progress-message" class="caption"></p></div>
+      <div id="bt-result" hidden><div class="row between"><h2 id="bt-result-title">測試結果</h2><div class="row"><button id="bt-json" class="quiet">完整 JSON</button><button id="bt-csv" class="quiet">成交 CSV</button></div></div>
+        <div class="metrics"><div class="metric"><small>淨損益 / TWD</small><strong id="bt-pnl">—</strong><span id="bt-return"></span></div><div class="metric"><small>最大回撤</small><strong id="bt-drawdown">—</strong><span id="bt-cost"></span></div><div class="metric"><small>成交委託</small><strong id="bt-filled">—</strong><span id="bt-activity"></span></div><div class="metric"><small>期末淨值 / TWD</small><strong id="bt-equity">—</strong><span id="bt-quality"></span></div></div>
+        <div class="panel"><h2>時間間隔比較與歷史結果</h2><div class="scroll" id="bt-history"></div></div>
+        <div class="panel"><h2>最近成交明細</h2><div class="scroll" id="bt-fills"></div><p class="caption">最近 80 筆；完整明細請匯出。今日買進量禁止當日賣出。</p></div>
+        <details><summary>每日淨值、策略紀錄與資料限制</summary><div class="scroll gap" id="bt-daily"></div><pre id="bt-strategy-log"></pre><pre id="bt-limitations"></pre><pre id="backtest"></pre></details>
+      </div>
+      <details><summary>CSV 匯入格式</summary><p class="caption">欄位：symbol,at,open,high,low,close,volume_shares。at 是含時區的 K 線結束時間；用 date 取代 at 可匯入日 K。至少含開始日前 20 個交易日，建議 60 日。日 K 僅估計開盤與收盤，無法測試盤中觸發順序。</p></details>
+    </section>
+    <section data-page="settings" hidden>
+      <h1>設定</h1><p class="lede">先用虛構行情測試，再核對帳戶。所有時間均為台北時間。</p>
+      <div class="panel gap"><h2>連線與模式</h2><div class="row"><select id="mode" aria-label="交易模式" style="width:260px"><option value="demo">DEMO・虛構行情</option><option value="readonly">READONLY・帳戶核對</option><option value="paper">PAPER・真實行情模擬成交</option><option value="live">LIVE・實盤監控</option></select><button id="switch">切換並重新連線</button></div><p id="connection-status" class="caption"></p></div>
+      <form id="settings-form">
+        <div class="panel"><div class="section-title"><h2>三種執行節奏</h2><span id="settings-state" class="caption">已儲存</span></div><div class="fields">
+          <label>Codex 排程<select id="s-schedule"><option value="fixed">固定時間（建議）</option><option value="interval">固定間隔</option></select></label><label>固定策略時間<input id="s-times" value="09:15,11:45" required></label><label>策略間隔 / 分鐘<input id="s-interval" type="number" min="10" max="360" required></label>
+          <label>偵測間隔 / 秒<input id="s-monitor" type="number" min="1" max="30" required></label><label>觀測更新 / 分鐘<input id="s-watch" type="number" min="1" max="60" required></label><label>盤後檢討<input id="s-review" type="time" min="13:40" max="17:00" required></label>
+          <label>最多觀測 / 檔<input id="s-count" type="number" min="5" max="20" required></label><label>連續不符幾次才移除<input id="s-misses" type="number" min="1" max="12" required></label><label>最低已知日成交額 / TWD<input id="s-amount" type="number" min="0" required></label>
+        </div><div class="row"><label class="check"><input id="s-watch-auto" type="checkbox">自動增刪觀測股</label><label class="check"><input id="s-whole" type="checkbox">允許整股（1000 股倍數）</label></div><p class="caption">觀測股不足時等待。策略到期不新增進場，既有智慧保護持續。</p></div>
+        <div class="panel"><div class="section-title"><h2>Codex</h2><button id="codex-login" type="button">官方 Codex 登入</button></div><p id="codex-login-status" class="caption"></p><label class="check"><input id="s-codex" type="checkbox">啟用 Codex 定時策略</label><div class="fields two"><label>模型（留空使用本機預設）<input id="s-model" autocomplete="off"></label><label>推理程度<select id="s-reasoning"><option value="default">預設</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">最高</option></select></label></div></div>
+        <div class="panel"><h2>帳務與桌面</h2><div class="fields"><label>Shioaji 本機服務<input id="s-url" type="url" required></label><label>股票帳戶序號<input id="s-account" type="number" min="0" max="50" required></label><label>模擬初始資金 / TWD<input id="s-cash" type="number" min="100" required></label>
+          <label>手續費率<input id="s-fee" type="number" min="0" max="1" step="0.000001" required></label><label>每筆最低手續費 / TWD<input id="s-min-fee" type="number" min="0" step="0.01" required></label><label>交割待付款正負號<select id="s-settlement"><option value="unverified">尚未核對</option><option value="positive">正值代表待付款</option><option value="negative">負值代表待付款</option></select></label>
+        </div><div class="row"><label class="check"><input id="s-fee-verified" type="checkbox">已核對實際手續費</label><label class="check"><input id="s-awake" type="checkbox">監控時保持電腦喚醒</label><label class="check"><input id="s-minimized" type="checkbox">開啟時縮到系統匣</label><label class="check"><input id="s-quotes" type="checkbox">管理行情訂閱（專用服務）</label></div><p id="risk-summary" class="caption"></p><p class="caption">API 金鑰與 CA 憑證設定在官方本機服務。自動增刪訂閱請使用專用 Shioaji 服務；與 Pro 共用時取消訂閱管理。模擬初始資金僅用於建立新模擬帳戶。</p></div>
+        <div class="row"><button class="primary" id="save-guided">儲存設定</button><button type="button" id="reset" class="quiet">重新載入</button></div>
+      </form>
+      <details><summary>進階 JSON 設定</summary><textarea id="settings" spellcheck="false" aria-label="本機 JSON 設定"></textarea><button id="save">儲存 JSON</button></details>
+      <details><summary class="warn">本機實盤授權</summary><p class="caption">先核對 CA、帳戶、費用及可賣庫存。智慧條件需電腦與程式持續執行，觸發價格不保證成交。</p><label>輸入：我確認啟用現股自動實盤交易並了解零股不可當沖<input id="ack" autocomplete="off"></label><button id="authorize" class="danger gap">授權本機實盤交易</button></details>
+      <div class="row gap"><button class="quiet" id="exit">結束程式</button><span class="caption">關閉視窗會縮到系統匣；點圖示即可重開。</span></div>
+    </section>
+    <footer>限價現股・盤中零股 1–999 股・可選整股・硬性風控獨立執行</footer>
+  </main><script type="module" src="renderer.js"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@ import { ShioajiHttpBroker, SseParser, exchangeTimestamp, sellableInventory } fr
 import { demoAnalysis } from '../src/core/strategy.js';
 import { SettingsSchema, type Order } from '../src/core/models.js';
 import { type ThreadEvent } from '@openai/codex-sdk';
-import { rig, now, quote, settings, order, snapshot } from './helpers.js';
+import { rig, now, quote, settings, order, snapshot, instrument } from './helpers.js';
 
 test('end-to-end odd-lot partial fill: 17 + 13 shares, fee once, no same-event double fill',async () => {
   const r = await rig();
@@ -127,6 +127,54 @@ test('native order normalization checks identity, units, cumulative fills and pe
   assert.throws(() => broker.normalizeTrade({...trade,order:{...trade.order,price:'30.1'}},local));
   assert.equal(broker.normalizeTrade({...trade,order:{...trade.order,order_lot:'Common',quantity:1},
     status:{...trade.status,order_quantity:1,deal_quantity:0}}).shares,1000); store.close();
+});
+test('native subscriptions rotate only app-requested keys, retain requested inventory and enforce a bounded shared mode',async () => {
+  const store=new Store(':memory:'),calls:{path:string;body:Record<string,unknown>}[]=[];
+  const fake:typeof fetch=async(input,init)=>{calls.push({path:new URL(String(input)).pathname,body:JSON.parse(String(init?.body))});return Response.json({success:true});};
+  class Quotes extends ShioajiHttpBroker {
+    override async instruments(symbols:string[],at:Date){return Object.fromEntries(symbols.map(symbol=>[symbol,{...instrument(at),symbol}]));}
+  }
+  const broker=new Quotes(store,SettingsSchema.parse({mode:'readonly'}),false,fake);
+  try {
+    await broker.subscribe(['9001','9002'],false);assert.equal(calls.length,4);
+    await broker.subscribe(['9001','9003'],false);
+    const removed=calls.filter(c=>c.path.endsWith('/unsubscribe'));assert.equal(removed.length,2);
+    assert.ok(removed.every(c=>c.body.code==='9002'));
+    broker.handleFrame({event:'derived_gap',id:'',data:'{}'});
+    const before=calls.length;await broker.subscribe(['9001','9003'],false);assert.equal(calls.length-before,4);
+    broker.settings=SettingsSchema.parse({mode:'readonly',manage_quote_subscriptions:false});
+    const removedBefore=calls.filter(c=>c.path.endsWith('/unsubscribe')).length;
+    await broker.subscribe(['9004'],false);assert.equal(calls.filter(c=>c.path.endsWith('/unsubscribe')).length,removedBefore);
+    const beforeLimit=calls.length;
+    await assert.rejects(broker.subscribe(Array.from({length:80},(_,i)=>String(9100+i)),false),/160/);
+    assert.equal(calls.length,beforeLimit);
+  } finally {await broker.close();store.close();}
+});
+test('native trade reconciliation reads callbacks from cache and forces authoritative sync before mutations or after a gap',async () => {
+  const store=new Store(':memory:'),modes:boolean[]=[];
+  const fake:typeof fetch=async(input,init)=>{
+    const path=new URL(String(input)).pathname;
+    if(path.endsWith('/stream/data'))return new Response(new ReadableStream<Uint8Array>({start(controller){
+      controller.enqueue(new TextEncoder().encode('event: heartbeat\ndata: {}\n\n'));
+      init?.signal?.addEventListener('abort',()=>controller.close(),{once:true});
+    }}),{headers:{'Content-Type':'text/event-stream'}});
+    if(path.endsWith('/info'))return Response.json({simulation:true,version:'1.7.6'});
+    if(path.endsWith('/health'))return Response.json({status:'healthy'});
+    if(path.endsWith('/auth/accounts'))return Response.json([{account_type:'S',broker_id:'TEST',account_id:'SYNTHETIC',signed:true}]);
+    if(path.endsWith('/auth/subscribe_trade'))return Response.json({subscribe_trade:true});
+    if(path.endsWith('/openapi.json'))return Response.json({paths:Object.fromEntries([
+      '/api/v1/order/trades','/api/v1/order/trade_cache_health','/api/v1/portfolio/position_unit','/api/v1/portfolio/position_detail',
+      '/api/v1/stream/data','/api/v1/data/contracts/{code}/info'].map(p=>[p,{}]))});
+    if(path.endsWith('/order/trades')){modes.push(JSON.parse(String(init?.body)).refresh);return Response.json([]);}
+    throw new Error('Unexpected mock endpoint');
+  };
+  const broker=new ShioajiHttpBroker(store,SettingsSchema.parse({mode:'readonly'}),false,fake);
+  try {
+    await broker.connect();await broker.reconcile([]);await broker.reconcile([]);assert.equal(modes.at(-1),false);
+    await broker.reconcile([],true);assert.equal(modes.at(-1),true);
+    broker.handleFrame({event:'derived_gap',id:'',data:'{}'});await broker.reconcile([]);assert.equal(modes.at(-1),true);
+    await broker.reconcile([order({status:'UNKNOWN'})]);assert.equal(modes.at(-1),true);
+  } finally {await broker.close();store.close();}
 });
 test('Codex environment removes broker keys, CA, runtime grants and trading flags',() => {
   const env=codexEnvironment({PATH:'path',SJ_API_KEY:'SECRET',SJ_SEC_KEY:'SECRET',SJ_CA_PATH:'SECRET',

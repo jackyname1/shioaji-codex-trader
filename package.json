@@ -1,6 +1,6 @@
 {
   "name": "shioaji-codex-trader",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "TypeScript Taiwan odd-lot trading desktop with scheduled Codex analysis",
   "main": "dist/src/desktop/main.js",

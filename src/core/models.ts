@@ -72,10 +72,26 @@ export const DecisionSchema = z.strictObject({
     && (x.smart.take_profit === null || d(x.smart.take_profit).gt(x.limit_price))), '買進保護價不合法')
   .refine(x => x.entry_when === 'IMMEDIATE' || d(x.trigger_price).gt(0), '條件單需要觸發價');
 export type Decision = z.infer<typeof DecisionSchema>;
+// A bounded rule authorizes the deterministic engine, never model-generated executable code.
+export const ScreeningSchema = z.strictObject({
+  min_amount: nonnegative, min_volume_ratio: nonnegative.refine(v => d(v).lte(10)),
+  rsi_min: z.number().min(0).max(100), rsi_max: z.number().min(0).max(100),
+  return20_min: decimal.refine(v => d(v).gte(-1) && d(v).lte(2)),
+  entry: z.strictObject({
+    signal: z.enum(['TREND', 'BREAKOUT20', 'PULLBACK20']),
+    allocation_fraction: positiveFraction.refine(v => d(v).lte('.10')),
+    max_ma20_distance: positiveFraction.refine(v => d(v).lte('.10')),
+    stop_fraction: positiveFraction.refine(v => d(v).gte('.02') && d(v).lte('.15')),
+    take_profit_fraction: positiveFraction.refine(v => d(v).gte('.03') && d(v).lte('.50')),
+    trailing_fraction: positiveFraction.refine(v => d(v).gte('.01') && d(v).lte('.10')).nullable(),
+  }).nullable(),
+}).refine(x => x.rsi_min <= x.rsi_max, 'RSI 範圍不合法');
+export type Screening = z.infer<typeof ScreeningSchema>;
 export const AnalysisSchema = z.strictObject({
   snapshot_id: z.string().min(1), expires_at: timestamp,
   stance: z.enum(['BUY_ALLOWED', 'HOLD_ONLY', 'REDUCE']), candidates: z.array(symbol).max(20),
   decisions: z.array(DecisionSchema).max(40), summary: z.string().min(1).max(3000),
+  screening: ScreeningSchema.nullable().optional(),
 }).refine(a => new Set(a.candidates).size === a.candidates.length, '候選不可重複')
   .refine(a => new Set(a.decisions.map(x => x.symbol)).size === a.decisions.length, '每檔限一個決策')
   .refine(a => a.stance === 'BUY_ALLOWED' || a.decisions.every(x => x.action !== 'BUY'), '方向禁止買進');
@@ -90,6 +106,7 @@ export const SettingsSchema = z.strictObject({
   mode: z.enum(['demo', 'paper', 'readonly', 'live']).default('demo'),
   auto_execute: z.boolean().default(false), whole_lots: z.boolean().default(false),
   base_url: z.string().url().default('http://127.0.0.1:8080'),
+  manage_quote_subscriptions: z.boolean().default(true),
   stock_account_index: quantity.max(50).default(0),
   min_cash_fraction: fraction.default('0.25'), max_order_fraction: positiveFraction.default('0.10'),
   max_symbol_fraction: positiveFraction.default('0.20'), max_exposure_fraction: positiveFraction.default('0.75'),
@@ -107,11 +124,20 @@ export const SettingsSchema = z.strictObject({
   codex_reasoning: z.enum(['default', 'low', 'medium', 'high', 'xhigh']).default('default'),
   codex_timeout_seconds: quantity.min(30).max(1800).default(300),
   premarket_time: clock.default('08:40'), postmarket_time: clock.default('14:00'),
-  decision_interval_minutes: quantity.min(10).max(240).default(60),
-  plan_max_minutes: quantity.min(10).max(1440).default(120),
+  strategy_schedule: z.enum(['fixed','interval']).default('fixed'),
+  strategy_times: z.array(clock.refine(v => v >= '08:00' && v < '13:30')).min(1).max(6)
+    .refine(v => new Set(v).size === v.length, '策略時間不可重複').default(['09:15','11:45']),
+  schedule_catch_up_minutes: quantity.min(1).max(60).default(20),
+  decision_interval_minutes: quantity.min(10).max(360).default(180),
+  monitor_interval_seconds: quantity.min(1).max(30).default(3),
+  watch_refresh_minutes: quantity.min(1).max(60).default(5),
+  auto_watchlist: z.boolean().default(true), watch_max_symbols: quantity.min(5).max(20).default(12),
+  watch_remove_after_scans: quantity.min(1).max(12).default(3), watch_min_amount: nonnegative.default('20000000'),
+  plan_max_minutes: quantity.min(10).max(1440).default(360),
   candidate_pool_size: quantity.min(20).max(100).default(40), demo_cash: positive.default('100000'),
   start_minimized: z.boolean().default(false), keep_awake: z.boolean().default(true),
-}).refine(s => d(s.max_exposure_fraction).plus(s.min_cash_fraction).lte(1), '現金保留加持倉上限不得超過 100%');
+}).refine(s => d(s.max_exposure_fraction).plus(s.min_cash_fraction).lte(1), '現金保留加持倉上限不得超過 100%')
+  .refine(s => s.postmarket_time >= '13:40' && s.postmarket_time <= '17:00', '盤後檢討時間須為 13:40–17:00');
 export type Settings = z.infer<typeof SettingsSchema>;
 export const SessionSchema = z.strictObject({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), open: z.boolean(), source: z.string().min(1), verified_at: timestamp,
@@ -123,6 +149,7 @@ export interface Features {
   sufficient: boolean; sessions: number; asof?: string; issue?: string;
   ma5?: number; ma20?: number; ma60?: number; rsi14?: number; atr14?: number;
   support20?: number; resistance20?: number; volume_ratio20?: number; return20?: number;
+  daily_amount?: string;
 }
 export interface Snapshot {
   snapshot_id: string; asof: string; synthetic: boolean; review_only: boolean;
@@ -133,6 +160,7 @@ export interface Snapshot {
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
   news: unknown[]; data_limitations: string[];
   experience?: import('./experience.js').ExperienceContext;
+  observation?: { symbols: string[]; refresh_minutes: number; max_symbols: number; next_strategy_at: string | null };
 }
 export const nowISO = (): string => new Date().toISOString();
 export const ageSeconds = (now: Date, stamp: string): number => (now.getTime() - Date.parse(stamp)) / 1000;

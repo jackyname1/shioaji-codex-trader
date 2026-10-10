@@ -9,6 +9,7 @@ const bridge: TraderBridge = {
   backtest: request => ipcRenderer.invoke('trader:backtest',request),
   cancelBacktest: () => ipcRenderer.invoke('trader:backtest-cancel'),
   exportBacktest: format => ipcRenderer.invoke('trader:backtest-export',format),
+  selectBacktest: id => ipcRenderer.invoke('trader:backtest-select',id),
   loginCodex: () => ipcRenderer.invoke('trader:codex-login'),
   minimize: () => ipcRenderer.invoke('trader:hide'),
   exit: () => ipcRenderer.invoke('trader:exit'),

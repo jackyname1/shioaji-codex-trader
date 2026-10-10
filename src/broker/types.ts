@@ -8,7 +8,7 @@ export interface Broker {
   connect(): Promise<void>;
   close(): Promise<void>;
   account(now: Date): Promise<Account>;
-  reconcile(orders: Order[]): Promise<Order[]>;
+  reconcile(orders: Order[], force?: boolean): Promise<Order[]>;
   subscribe(symbols: string[], wholeLots: boolean): Promise<void>;
   quotes(now: Date): Quote[];
   instruments(symbols: string[], now: Date): Promise<Record<string, Instrument>>;

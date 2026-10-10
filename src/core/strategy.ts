@@ -6,7 +6,8 @@ export function indicators(bars: Bar[]): Features {
   if (bars.length < 20 || bars.some(b => ![b.close,b.high,b.low,b.volume].every(Number.isFinite)
     || b.close <= 0 || b.high < b.low || b.volume < 0)) return { sufficient: false, sessions: bars.length };
   const closes = bars.map(b => b.close), last = bars.at(-1)!;
-  const result: Features = { sufficient: true, sessions: bars.length, asof: last.date };
+  const result: Features = { sufficient: true, sessions: bars.length, asof: last.date,
+    daily_amount:d(last.close).times(last.volume).toFixed() };
   for (const n of [5,20,60] as const) if (closes.length >= n) result[`ma${n}`] = mean(closes.slice(-n));
   const changes = closes.slice(-14).map((c, i) => c - closes[closes.length - 15 + i]!);
   const up = mean(changes.map(c => Math.max(0, c))), down = mean(changes.map(c => Math.max(0, -c)));
@@ -30,7 +31,11 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
   const universe = new Set(snapshot.universe.map(x => x.symbol));
   const candidates = new Set(a.candidates), held = new Set(snapshot.account.positions.map(x => x.symbol));
   if (a.candidates.some(x => !universe.has(x))) throw new Error('候選包含資料範圍以外的股票');
+  if(a.candidates.length>settings.watch_max_symbols)throw new Error('候選超過本機觀測股上限');
   if (universe.size >= 5 && candidates.size < 5) throw new Error('候選須列出至少 5 檔；可以全部觀望');
+  if(a.screening?.entry&&d(a.screening.entry.allocation_fraction).gt(settings.max_order_fraction))throw new Error('策略配置超過硬性單筆上限');
+  if(a.screening&&d(a.screening.min_amount).lt(settings.watch_min_amount))throw new Error('策略流動性低於本機觀測門檻');
+  if(snapshot.review_only&&a.screening?.entry)throw new Error('盤後檢討不能啟用進場規則');
   for (const decision of a.decisions) {
     if (!candidates.has(decision.symbol) && !held.has(decision.symbol)) throw new Error('決策標的不在候選或持倉內');
     if (decision.action === 'BUY' && (!candidates.has(decision.symbol) || !snapshot.features[decision.symbol]?.sufficient))
@@ -50,5 +55,7 @@ export function demoAnalysis(snapshot: Snapshot, settings: Settings, now: Date):
       entry_when: 'IMMEDIATE', trigger_price: '0', smart: { stop_price: roundPrice(price.times('.95')),
         take_profit: roundPrice(price.times('1.10')), trailing_activate: roundPrice(price.times('1.08')), trailing_fraction: '.03'.replace(/^\./, '0.') },
       reason: '虛構行情流程展示，不是投資策略或真實股票建議' }] : [],
-    summary: 'DEMO：虛構股票，用來驗證部分成交、定時決策與跨日庫存流程' });
+    screening:snapshot.review_only?null:{min_amount:settings.watch_min_amount,min_volume_ratio:'0',rsi_min:0,rsi_max:100,return20_min:'-0.50',
+      entry:{signal:'TREND',allocation_fraction:'0.02',max_ma20_distance:'0.10',stop_fraction:'0.05',take_profit_fraction:'0.10',trailing_fraction:'0.03'}},
+    summary: 'DEMO：虛構股票，驗證動態觀測、規則進場、部分成交與跨日保護；不是有效獲利策略' });
 }

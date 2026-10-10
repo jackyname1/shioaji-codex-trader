@@ -18,6 +18,10 @@ async function main(): Promise<void> {
     controller.start({start:value('start')??'2026-10-01',end:value('end')??'2026-10-08',initial_cash:value('cash')??'100000',
       source:value('source')??'sample',strategy:value('strategy')??'demo',whole_lots:args.includes('--whole-lots'),
       ...(value('max-calls')?{max_codex_calls:Number(value('max-calls'))}:{}),
+      ...(value('times')?{strategy_schedule:'fixed',strategy_times:value('times')!.split(',')}:{}),
+      ...(value('monitor')?{monitor_interval_seconds:Number(value('monitor'))}:{}),
+      ...(value('watch')?{watch_refresh_minutes:Number(value('watch'))}:{}),
+      ...(value('compare')?{strategy_schedule:'interval',comparison_intervals:value('compare')!.split(',').map(Number)}:{}),
       ...(value('interval')?{decision_interval_minutes:Number(value('interval'))}:{})},settings,
       value('csv')?readFileSync(resolve(value('csv')!),'utf8'):undefined);
     const abort=():void=>{controller.cancel();};process.once('SIGINT',abort);process.once('SIGTERM',abort);

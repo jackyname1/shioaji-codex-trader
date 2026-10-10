@@ -117,7 +117,10 @@ export class ShioajiHttpBroker implements Broker {
   private info?: z.infer<typeof infoSchema>;
   private selected?: z.infer<typeof selectorSchema>;
   private trades: NativeTrade[] = [];
+  private tradesSyncedAt = 0;
+  private authoritativeRequired = true;
   private subscribed = new Map<string, Record<string, unknown>>();
+  private subscriptionGeneration = -1;
   private parts = new Map<string, Partial<Quote>>();
   private changed = new Set<string>();
   private metadata = new Map<string, Instrument>();
@@ -156,6 +159,8 @@ export class ShioajiHttpBroker implements Broker {
     const prior = this.store.get<string>('account_fingerprint');
     if (prior && prior !== fingerprint) throw new Error('帳戶或服務模式已變更，請使用新的獨立資料庫');
     this.store.set('account_fingerprint', fingerprint);
+    const saved = this.store.get<Array<[string, Record<string, unknown>]>>('quote_subscriptions') ?? [];
+    this.subscribed = new Map(saved);
     const schema = await this.fetcher(new URL('/openapi.json', this.settings.base_url), {
       redirect: 'error', signal: AbortSignal.any([this.stop.signal, AbortSignal.timeout(10000)]) });
     if (!schema.ok) throw new Error('無法核對已安裝 Shioaji HTTP API');
@@ -165,11 +170,11 @@ export class ShioajiHttpBroker implements Broker {
       if (!specification.paths?.[path]) throw new Error('Shioaji 版本缺少必要端點，請更新官方服務');
     const subscription = await this.request('/auth/subscribe_trade', this.selectors()) as { subscribe_trade?: boolean };
     if (subscription.subscribe_trade !== true) throw new Error('委託回報訂閱失敗');
-    await this.refreshTrades();
+    await this.refreshTrades(true);
     this.streamTask = this.streamLoop();
   }
   async close(): Promise<void> { this.stop.abort(); await this.streamTask; this.parts.clear(); }
-  private invalidate(): void { this.parts.clear(); this.changed.clear(); this.generation++; this.dirty = true; }
+  private invalidate(): void { this.parts.clear(); this.changed.clear(); this.generation++; this.dirty = true; this.authoritativeRequired = true; }
   private async streamLoop(): Promise<void> {
     let attempt = 0;
     while (!this.stop.signal.aborted) {
@@ -226,6 +231,7 @@ export class ShioajiHttpBroker implements Broker {
     this.changed.clear(); return result;
   }
   async subscribe(symbols: string[], wholeLots: boolean): Promise<void> {
+    const generation = this.generation;
     const metadata = await this.instruments(symbols, new Date()), wanted = new Map<string, Record<string, unknown>>();
     for (const symbol of symbols) {
       const instrument = metadata[symbol]; if (!instrument) continue;
@@ -234,12 +240,24 @@ export class ShioajiHttpBroker implements Broker {
         wanted.set(`${symbol}:${odd}:${quoteType}`, body);
       }
     }
-    for (const [key, body] of wanted) if (!this.subscribed.has(key)) {
+    if (wanted.size > 160) throw new Error('行情需求超過本程式 160 個訂閱上限，請減少觀測或持倉範圍');
+    if (this.settings.manage_quote_subscriptions) for (const [key, body] of this.subscribed) if (!wanted.has(key)) {
+      const result = await this.request('/stream/unsubscribe', body) as { success?: boolean };
+      if (result.success !== true) throw new Error('舊行情訂閱釋放失敗，保留原狀並停止新增訂閱');
+      this.subscribed.delete(key); this.store.set('quote_subscriptions', [...this.subscribed]);
+      const quoteKey = key.slice(0, key.lastIndexOf(':')); this.parts.delete(quoteKey); this.changed.delete(quoteKey);
+    }
+    const additions = [...wanted.keys()].filter(key => !this.subscribed.has(key));
+    if (this.subscribed.size + additions.length > 160) throw new Error('共享行情模式已達 160 個訂閱，請使用專用 Shioaji 服務或啟用訂閱管理');
+    for (const [key, body] of wanted) if (!this.subscribed.has(key) || this.subscriptionGeneration !== this.generation) {
       const result = await this.request('/stream/subscribe', body) as { success?: boolean };
       if (result.success !== true) throw new Error('行情訂閱失敗'); this.subscribed.set(key, body);
+      this.store.set('quote_subscriptions', [...this.subscribed]);
     }
-    // Keep old subscriptions for this process: they may protect an outstanding order after a plan change.
-    // The native service is shared; closing this UI must not unsubscribe another client's reports.
+    this.subscriptionGeneration = generation;
+    // Engine includes held inventory, pending orders and protection in wanted. Release only keys this app requested.
+    // The native API has no per-client ownership: managed rotation requires a dedicated native service.
+    // In shared mode keep old subscriptions, bounded to 160; never unsubscribe another client's trade reports.
   }
   async instruments(symbols: string[], now: Date): Promise<Record<string, Instrument>> {
     const result: Record<string, Instrument> = {};
@@ -260,11 +278,14 @@ export class ShioajiHttpBroker implements Broker {
     }
     return result;
   }
-  private async refreshTrades(): Promise<void> {
-    const values = z.array(nativeTradeSchema).parse(await this.request('/order/trades', { ...this.selectors(), refresh: true }));
+  private async refreshTrades(force = false): Promise<void> {
+    const generation = this.generation;
+    const refresh = force || this.authoritativeRequired || Date.now() - this.tradesSyncedAt >= 60000;
+    const values = z.array(nativeTradeSchema).parse(await this.request('/order/trades', { ...this.selectors(), refresh }));
     if (values.some(t => t.order.account.broker_id !== this.selected?.broker_id || t.order.account.account_id !== this.selected?.account_id))
       throw new Error('委託回傳帳戶不符');
     this.trades = values;
+    if (refresh) { this.tradesSyncedAt = Date.now(); if (generation === this.generation) this.authoritativeRequired = false; }
   }
   normalizeTrade(trade: NativeTrade, local?: Order): Order {
     const native = trade.order, status = trade.status;
@@ -295,8 +316,8 @@ export class ShioajiHttpBroker implements Broker {
       status: supported ? mapped : 'UNKNOWN', filled, created_at: new Date(status.order_ts * 1000).toISOString(),
       plan_id: 'external', purpose: 'EXTERNAL' });
   }
-  async reconcile(orders: Order[]): Promise<Order[]> {
-    await this.refreshTrades();
+  async reconcile(orders: Order[], force = false): Promise<Order[]> {
+    await this.refreshTrades(force || orders.some(o => ['UNKNOWN','SUBMITTING','PREPARED','CANCEL_PENDING'].includes(o.status)));
     return orders.map(local => {
       const matches = this.trades.filter(t => local.broker_id ? t.order.id === local.broker_id : t.order.custom_field === local.tag);
       if (matches.length !== 1) return { ...local, status: 'UNKNOWN' as const };
@@ -304,7 +325,7 @@ export class ShioajiHttpBroker implements Broker {
     });
   }
   async account(now: Date): Promise<Account> {
-    const start = new Date(), sequence = this.eventSequence;
+    const start = new Date(), sequence = this.eventSequence, generation = this.generation;
     await this.refreshTrades();
     const balance = z.object({ acc_balance: number, date: z.string(), errmsg: z.string() }).parse(
       await this.request('/portfolio/account_balance', this.selectors()));
@@ -332,7 +353,7 @@ export class ShioajiHttpBroker implements Broker {
       await this.request('/order/trade_cache_health', this.selectors()));
     if (health.state === 'Degraded' || health.reasons.some(r => r.reason !== 'NoBaseline')) issue = '委託回報尚未完成核對';
     if (!this.streamReady || this.formatFault) issue = '行情串流中斷或格式異常，禁止新增委託';
-    if (sequence !== this.eventSequence) issue = '快照取得期間有委託變動，等待重新核對';
+    if (sequence !== this.eventSequence || generation !== this.generation) issue = '快照取得期間有委託或連線變動，等待重新核對';
     this.dirty = false;
     this.lastAccount = AccountSchema.parse({ asof: start.toISOString(), cash: balance.acc_balance, settlement_debits: debits.toFixed(),
       settlement_credits: credits.toFixed(), positions: cleanPositions, orders, complete: !issue, issue,
@@ -410,7 +431,7 @@ export class ShioajiHttpBroker implements Broker {
     return this.normalizeTrade(trade,o);
   }
   async cancel(o: Order): Promise<Order> {
-    try { await this.mutationReady(); await this.refreshTrades(); }
+    try { await this.mutationReady(); await this.refreshTrades(true); }
     catch { throw new NoSubmissionError('撤單前連線或授權核對失敗，未送出撤單'); }
     const trade = this.trades.find(t => t.order.id === o.broker_id); if (!trade) throw new Error('撤單前查不到委託');
     const current = this.normalizeTrade(trade,o); if (!active(current)) return current;
