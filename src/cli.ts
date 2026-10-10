@@ -16,7 +16,7 @@ async function main(): Promise<void> {
     const profile=join(homedir(),'.shioaji-codex-trader','backtests'),controller=new BacktestController(profile);
     const settings=SettingsSchema.parse(value('settings')?JSON.parse(readFileSync(resolve(value('settings')!),'utf8')):{});
     controller.start({start:value('start')??'2026-10-01',end:value('end')??'2026-10-08',initial_cash:value('cash')??'100000',
-      source:value('source')??'sample',strategy:value('strategy')??'demo',whole_lots:args.includes('--whole-lots'),
+      source:value('source')??'shioaji',strategy:value('strategy')??'rules',whole_lots:args.includes('--whole-lots'),
       ...(value('max-calls')?{max_codex_calls:Number(value('max-calls'))}:{}),
       ...(value('times')?{strategy_schedule:'fixed',strategy_times:value('times')!.split(',')}:{}),
       ...(value('monitor')?{monitor_interval_seconds:Number(value('monitor'))}:{}),
@@ -31,9 +31,10 @@ async function main(): Promise<void> {
       if(controller.report.status!=='COMPLETED')process.exitCode=1;
     }finally{process.removeListener('SIGINT',abort);process.removeListener('SIGTERM',abort);}return;
   }
-  const modeValue = args.find(a => a.startsWith('--mode='))?.slice(7) ?? (doctor ? 'readonly' : 'demo');
+  const modeValue = args.find(a => a.startsWith('--mode='))?.slice(7) ?? (demo?'demo':doctor?'readonly':'paper');
   const mode = SettingsSchema.shape.mode.parse(modeValue);
   if (demo && mode !== 'demo') throw new Error('--demo 只能使用虛構行情');
+  if(!demo&&!doctor&&!['paper','live'].includes(mode))throw new Error('交易模式僅提供 paper 與 live');
   const temporary = demo ? mkdtempSync(join(tmpdir(),'shioaji-ts-demo-')) : undefined;
   const database = resolve(args.find(a => a.startsWith('--db='))?.slice(5) ?? join(temporary ?? join(homedir(),'.shioaji-codex-trader'),`${mode}.db`));
   const service = new TradingService(database,mode);

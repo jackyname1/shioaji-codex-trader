@@ -23,7 +23,7 @@ jobs:
       - run: npm test
       - run: npm run demo
       - run: npm run backtest:demo
-      - name: Electron Windows text UI smoke test
+      - name: Electron Windows workbench smoke test
         if: runner.os == 'Windows'
         shell: pwsh
         run: |

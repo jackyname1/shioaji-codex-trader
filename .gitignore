@@ -12,5 +12,12 @@ release/
 *.pem
 *.key
 *.log
-credentials*
+/credentials*
 state/
+
+*.vault
+*.vault.tmp
+private/
+/core
+
+/node_modules

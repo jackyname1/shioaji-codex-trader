@@ -13,7 +13,7 @@ export function historicalKbars(raw:unknown,symbol:string):HistoryPoint[] {
     if(r.datetime) {const value=String(stamp).replace(' ','T');date=new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(value)?value:value+'+08:00');}
     else date=new Date(d(stamp).div(1000000).floor().toNumber());
     if(Number.isNaN(date.getTime()))throw new Error('歷史 K 線時間不合法');
-    if(!d(r.Close[i]!).gt(0)||!r.Volume[i])return [];
+    if(!d(r.Close[i]!).gt(0))return [];
     return [HistoryPointSchema.parse({symbol,at:date.toISOString(),open:r.Open?.[i]??r.Close[i],high:r.High[i],low:r.Low[i],close:r.Close[i],
       volume_shares:r.Volume[i]!*1000})]; // Stock minute KBar volume is lots; internal quantity is shares.
   });

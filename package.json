@@ -1,8 +1,8 @@
 {
   "name": "shioaji-codex-trader",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "TypeScript Taiwan odd-lot trading desktop with scheduled Codex analysis",
+  "description": "Shioaji market workbench with Codex strategies and historical simulation",
   "main": "dist/src/desktop/main.js",
   "type": "module",
   "engines": {
@@ -15,7 +15,7 @@
     "start": "npm run build && electron .",
     "doctor": "npm run build && node dist/src/cli.js --doctor",
     "pack:win": "npm run build && electron-builder --win portable --x64",
-    "backtest:demo": "npm run build && node dist/src/cli.js --backtest --start=2026-10-01 --end=2026-10-08"
+    "backtest:demo": "npm run build && node dist/src/cli.js --backtest --start=2026-10-01 --end=2026-10-08 --source=sample --strategy=demo"
   },
   "dependencies": {
     "@openai/codex-sdk": "0.161.0",
@@ -42,7 +42,8 @@
     ],
     "win": {
       "target": "portable",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true,
+      "icon": "src/desktop/assets/app.ico"
     },
     "portable": {
       "artifactName": "Shioaji-Codex-Trader-${version}-Windows-x64.exe"

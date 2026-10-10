@@ -143,7 +143,8 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
   const fetcher:typeof fetch=async(input,init)=>{
     const path=new URL(String(input)).pathname,body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:{};
     calls.push({path,body});let result:unknown;
-    if(path.endsWith('/health'))result={status:'healthy',token_stale:false};
+    if(path==='/api/v1/info')result={simulation:false};
+    else if(path.endsWith('/health'))result={status:'healthy',token_stale:false};
     else if(path.endsWith('/data/scanner'))result=Array.from({length:5},(_,n)=>({code:String(9001+n),name:'test'}));
     else if(path.includes('/data/contracts/'))result={security_type:'STK',code:path.split('/')[5],exchange:'TSE'};
     else if(path.endsWith('/data/kbars'))result={datetime:[String(body.start)+'T09:10:00'],Open:['30'],High:['31'],Low:['29'],Close:['30'],Volume:[1000]};
