@@ -23,7 +23,7 @@
 
 ## 開始使用
 
-1. 從 [Releases](https://github.com/jackyname1/shioaji-codex-trader/releases) 下載 Windows 程式並開啟。
+1. 下載 [v0.1.0 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.0) 的 Windows 程式並開啟。
 2. 安裝 [Shioaji 官方本機服務](https://sinotrade.github.io/env_setup/other/)，在「連線與設定」填入 API Key、Secret Key，選取 CA 憑證及官方執行檔。
 3. 設定專用的本機服務網址，按「連線並核對」。如果服務已登入，使用「連接既有服務」。
 4. 在「歷史模擬」輸入日期與本金，使用快速程式策略開始測試；需要 AI 逐輪判斷時，在 Codex 控制台登入並儲存設定。

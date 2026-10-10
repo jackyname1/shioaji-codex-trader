@@ -28,7 +28,7 @@ export class BacktestController {
   constructor(readonly root:string){}
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
-      if(['0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request){this.report=r;this.progress.message='已載入上次測試結果';}
+      if(['0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request){this.report=r;this.progress.message='已載入上次測試結果';}
       else this.progress.message='上一版報表仍保留在本機；新版請重新執行測試';
     }catch{/* New profile. */}
     await this.loadHistory();
@@ -39,7 +39,7 @@ export class BacktestController {
       const result:BacktestSummary[]=[];
       for(const f of files.sort((a,b)=>b.time-a.time).slice(0,30))try {
         const r=JSON.parse(await readFile(join(this.root,f.name),'utf8')) as BacktestReport;
-        if(['0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
+        if(['0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
       }catch{/* A damaged report cannot affect trading. */}
       this.history=result;
     }catch{this.history=[];}
@@ -48,7 +48,7 @@ export class BacktestController {
     if(this.task)throw new Error('回測執行中不能切換報表');
     if(!/^[a-f0-9-]{36}$/.test(id)||!this.history.some(r=>r.id===id))throw new Error('回測報表識別不合法');
     const r=JSON.parse(await readFile(join(this.root,`report-${id}.json`),'utf8')) as BacktestReport;
-    if(r.id!==id||!['0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
+    if(r.id!==id||!['0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
     this.report=r;this.dataset=undefined;this.frame=undefined;return '已載入測試結果';
   }
   private async save(report:BacktestReport):Promise<void>{

@@ -1,4 +1,4 @@
-# v0.5.0
+# v0.1.0 — Pre-release
 
 - 全新行情工作台、歷史模擬、Codex 控制台、委託與持倉、連線與設定五個頁面。
 - API Key／Secret Key 輸入、CA 憑證與官方 CLI 選檔、系統加密記住連線。

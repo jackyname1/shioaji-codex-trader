@@ -62,7 +62,7 @@ jobs:
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
       - uses: actions/upload-artifact@v4
         with:
-          name: Shioaji-Codex-Trader-TypeScript-Windows-x64
+          name: Shioaji-Codex-Trader-Windows-x64
           path: |
             release/Shioaji-Codex-Trader-*-Windows-x64.exe
             release/README.md
@@ -77,13 +77,14 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
-          name: Shioaji-Codex-Trader-TypeScript-Windows-x64
+          name: Shioaji-Codex-Trader-Windows-x64
           path: release
-      - name: Publish verified Windows testing release
+      - name: Publish verified Windows pre-release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -98,6 +99,11 @@ jobs:
           fi
           cd release
           sha256sum *.exe *.md *.json *.csv *.png > SHA256SUMS.txt
-          gh release create "$tag" --target "$RELEASE_COMMIT" --prerelease --title "Shioaji Codex Trader ${tag} Windows 測試版" --notes-file RELEASE_NOTES.md --draft *.exe *.md *.json *.csv *.png SHA256SUMS.txt
+          gh release create "$tag" --target "$RELEASE_COMMIT" --prerelease --title "Shioaji Codex Trader ${tag} · Pre-release" --notes-file RELEASE_NOTES.md --draft *.exe *.md *.json *.csv *.png SHA256SUMS.txt
           gh release edit "$tag" --draft=false
           gh release view "$tag" --json url,tagName,assets
+      - name: Retire previous releases after v0.1.0 is available
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/retire-legacy-releases.mjs
