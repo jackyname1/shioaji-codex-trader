@@ -17,7 +17,7 @@ export interface DesktopState { status: string; logs: string[]; settings: string
   backtest:string; backtest_running:boolean; backtest_report:boolean; experience:string; codex_login:string;
   runtime:RuntimeView|null;backtest_progress:BacktestProgress;backtest_result:BacktestReport|null;
   backtest_history:BacktestSummary[];backtest_comparisons:BacktestSummary[];
-  connection:{status:string;remembered:boolean;encrypted:boolean};analyst_events:AnalystEvent[];
+  connection:{status:string;remembered:boolean;encrypted:boolean;busy:boolean;has_ca:boolean};analyst_events:(AnalystEvent&{context:'live'|'replay'})[];
   replay:ReplayFrame|null;replay_paused:boolean;replay_speed:number;replay_symbols:{symbol:string;name:string}[];
   codex_models:string[] }
 export interface TraderBridge {
@@ -31,7 +31,7 @@ export interface TraderBridge {
   exportBacktest(format:'json'|'csv'):Promise<string>;
   selectBacktest(id:string):Promise<string>;
   loginCodex():Promise<string>;
-  selectFile(kind:'ca'|'cli'):Promise<string>;
+  selectFile(kind:'ca'):Promise<string>;
   connectApi(input:ConnectionInput):Promise<string>;
   connectSaved():Promise<string>;
   forgetCredentials():Promise<string>;

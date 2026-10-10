@@ -18,6 +18,7 @@ state/
 *.vault
 *.vault.tmp
 private/
+/resources/shioaji/
 /core
 
 /node_modules

@@ -12,9 +12,10 @@
     "build": "tsc && node scripts/assets.ts",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "demo": "npm run build && node dist/src/cli.js --demo",
-    "start": "npm run build && electron .",
+    "start": "npm run prepare:broker && npm run build && electron .",
     "doctor": "npm run build && node dist/src/cli.js --doctor",
-    "pack:win": "npm run build && electron-builder --win portable --x64",
+    "prepare:broker": "node scripts/prepare-broker.ts",
+    "pack:win": "npm run prepare:broker -- --platform=win32 --arch=x64 && npm run build && electron-builder --win portable --x64",
     "backtest:demo": "npm run build && node dist/src/cli.js --backtest --start=2026-10-01 --end=2026-10-08 --source=sample --strategy=demo"
   },
   "dependencies": {
@@ -39,6 +40,9 @@
     ],
     "asarUnpack": [
       "node_modules/@openai/codex*/**/*"
+    ],
+    "extraResources": [
+      { "from": "resources/shioaji", "to": "shioaji" }
     ],
     "win": {
       "target": "portable",

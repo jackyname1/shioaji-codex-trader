@@ -21,6 +21,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - run: npm run prepare:broker
       - run: npm test
       - run: npm run demo
       - run: npm run backtest:demo
@@ -78,6 +79,9 @@ jobs:
     permissions:
       contents: write
       actions: read
+    concurrency:
+      group: release-publish-v0.1.0
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
@@ -89,21 +93,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
-        shell: bash
-        run: |
-          version=$(node -p "require('./package.json').version")
-          tag="v${version}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release ${tag} already exists; keeping its validated assets unchanged."
-            exit 0
-          fi
-          cd release
-          sha256sum *.exe *.md *.json *.csv *.png > SHA256SUMS.txt
-          gh release create "$tag" --target "$RELEASE_COMMIT" --prerelease --title "Shioaji Codex Trader ${tag} · Pre-release" --notes-file RELEASE_NOTES.md --draft *.exe *.md *.json *.csv *.png SHA256SUMS.txt
-          gh release edit "$tag" --draft=false
-          gh release view "$tag" --json url,tagName,assets
-      - name: Retire previous releases after v0.1.0 is available
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: node scripts/retire-legacy-releases.mjs
+        run: node scripts/publish-release.mjs

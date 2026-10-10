@@ -10,8 +10,10 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
   const all = data.bars, end = Math.min(all.length, options.offset + options.count), bars = all.slice(options.offset, end);
   if (!bars.length) { host.textContent = data.issue || '此段時間沒有已知行情'; host.classList.add('chart-empty'); return; }
   host.classList.remove('chart-empty');
-  const width = 1000, height = options.rsi ? 450 : 390, left = 14, right = 80, top = 28, bottom = 268;
-  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': `${data.name} K 線、均線與成交量圖` });
+  const width=Math.max(300,host.clientWidth||1000),height=Math.max(140,host.clientHeight||(options.rsi?450:390)),left=10,right=60,top=18;
+  const bottom=Math.max(top+35,height-(options.rsi?92:58)),volumeHeight=Math.max(16,Math.min(40,height*.14)),volumeBase=bottom+16+volumeHeight;
+  const axisY=options.rsi?volumeBase+14:height-6,rsiTop=axisY+6,rsiBottom=height-6,rsiScale=Math.max(18,rsiBottom-rsiTop)/100;
+  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio:'none', role: 'img', 'aria-label': `${data.name} K 線、均線與成交量圖` });
   const prices = bars.flatMap(b => [b.high, b.low, ...(options.bands ? [b.upper ?? b.high, b.lower ?? b.low] : [])]);
   // Out-of-range protection lines are labeled, without collapsing candle visibility.
   let min = Math.min(...prices), max = Math.max(...prices); const pad = Math.max((max - min) * .08, max * .002); min -= pad; max += pad;
@@ -31,7 +33,7 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
     const group = node('g'); group.append(node('title', {}, `${new Date(b.at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false })}\n開 ${b.open} 高 ${b.high} 低 ${b.low} 收 ${b.close}\n成交量 ${b.volume.toLocaleString()} 股`),
       node('line', { x1: xx, x2: xx, y1: y(b.high), y2: y(b.low), stroke: color, 'stroke-width': 1 }),
       node('rect', { x: xx - cw / 2, y: Math.min(y(b.open), y(b.close)), width: cw, height: Math.max(1, Math.abs(y(b.open) - y(b.close))), fill: color }),
-      node('rect', { x: xx - cw / 2, y: 344 - b.volume / volumeMax * 48, width: cw, height: Math.max(1, b.volume / volumeMax * 48), fill: color, opacity: .45 })); svg.append(group);
+      node('rect', { x: xx - cw / 2, y: volumeBase - b.volume / volumeMax * volumeHeight, width: cw, height: Math.max(1, b.volume / volumeMax * volumeHeight), fill: color, opacity: .45 })); svg.append(group);
   }
   if (options.ma) { path('ma5', '#f9c878'); path('ma20', '#78b6fa'); path('ma60', '#b998ed'); }
   for (const level of options.levels) if (level.price > 0) {
@@ -47,15 +49,15 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
       node('text', { x: x(i), y: yy + 3, 'text-anchor': 'middle', fill: '#101a27', 'font-size': 8, 'font-weight': 800 }, buy ? 'B' : 'S'));
   }
   if (options.rsi) {
-    for (const v of [30, 70]) svg.append(node('line', { x1: left, x2: width - right, y1: 430 - v * .55, y2: 430 - v * .55, stroke: '#354355', 'stroke-dasharray': '4 4' }));
-    svg.append(node('text', { x: width - right + 10, y: 403, fill: '#7d93a7', 'font-size': 10 }, 'RSI 14'));
-    const d = bars.map((b, i) => b.rsi === undefined ? '' : `${i === 0 || bars[i - 1]!.rsi === undefined ? 'M' : 'L'}${x(i)},${430 - b.rsi * .55}`).join(' ');
+    for (const v of [30, 70]) svg.append(node('line', { x1: left, x2: width - right, y1: rsiBottom - v * rsiScale, y2: rsiBottom - v * rsiScale, stroke: '#354355', 'stroke-dasharray': '4 4' }));
+    svg.append(node('text', { x: width - right + 10, y: rsiTop+12, fill: '#7d93a7', 'font-size': 10 }, 'RSI 14'));
+    const d = bars.map((b, i) => b.rsi === undefined ? '' : `${i === 0 || bars[i - 1]!.rsi === undefined ? 'M' : 'L'}${x(i)},${rsiBottom - b.rsi * rsiScale}`).join(' ');
     svg.append(node('path', { d, fill: 'none', stroke: '#b998ed', 'stroke-width': 1.5 }));
   }
-  svg.append(node('text', { x: left, y: 290, fill: '#7d93a7', 'font-size': 10 }, '成交量（股）'));
-  for (const i of [0, Math.floor(bars.length / 2), bars.length - 1]) svg.append(node('text', { x: x(i), y: 368, fill: '#7d93a7', 'font-size': 10, 'text-anchor': i === 0 ? 'start' : i === bars.length - 1 ? 'end' : 'middle' },
+  svg.append(node('text', { x: left, y: bottom+12, fill: '#7d93a7', 'font-size': 10 }, '成交量（股）'));
+  for (const i of [0, Math.floor(bars.length / 2), bars.length - 1]) svg.append(node('text', { x: x(i), y: axisY, fill: '#7d93a7', 'font-size': 10, 'text-anchor': i === 0 ? 'start' : i === bars.length - 1 ? 'end' : 'middle' },
     new Date(bars[i]!.at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', ...(data.interval === '1d' ? {} : { hour: '2-digit', minute: '2-digit' }), hour12: false })));
-  const cursor = node('line', { x1: 0, x2: 0, y1: top, y2: 344, stroke: '#91aabd', 'stroke-dasharray': '3 3', visibility: 'hidden' }); svg.append(cursor);
+  const cursor = node('line', { x1: 0, x2: 0, y1: top, y2: volumeBase, stroke: '#91aabd', 'stroke-dasharray': '3 3', visibility: 'hidden' }); svg.append(cursor);
   svg.addEventListener('pointermove', event => { const rect = svg.getBoundingClientRect(), xx = (event.clientX - rect.left) / rect.width * width;
     const i = Math.max(0, Math.min(bars.length - 1, Math.floor((xx - left) / step))); cursor.setAttribute('x1', String(x(i))); cursor.setAttribute('x2', String(x(i))); cursor.setAttribute('visibility', 'visible');
     host.dataset.hover = `${bars[i]!.at} · O ${bars[i]!.open} H ${bars[i]!.high} L ${bars[i]!.low} C ${bars[i]!.close}`;
@@ -64,16 +66,19 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
 }
 export function equityChart(host: HTMLElement, rows: { at: string; equity: string }[], initial: number): void {
   if (!rows.length) { host.textContent = '模擬執行後會顯示資產曲線'; return; }
-  const width = 1000, height = 190, values = [initial, ...rows.map(r => Number(r.equity))], min = Math.min(...values), max = Math.max(...values);
-  const pad = Math.max((max - min) * .15, initial * .002), lo = min - pad, hi = max + pad;
-  const y = (v: number): number => 155 - (v - lo) / (hi - lo) * 135, x = (i: number): number => 20 + i / Math.max(1, values.length - 1) * 890;
-  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': '模擬資產與初始本金比較' });
-  for (let i = 0; i <= 3; i++) { const v = lo + (hi - lo) * i / 3; svg.append(node('line', { x1: 20, x2: 910, y1: y(v), y2: y(v), stroke: '#263548' }),
-    node('text', { x: 920, y: y(v) + 3, fill: '#7d93a7', 'font-size': 10 }, Math.round(v).toLocaleString())); }
-  svg.append(node('line', { x1: 20, x2: 910, y1: y(initial), y2: y(initial), stroke: '#7d93a7', 'stroke-dasharray': '5 5' }));
+  const width=Math.max(300,host.clientWidth||1000),height=Math.max(48,host.clientHeight||190),right=width-65,bottom=height-15;
+  const stride=Math.max(1,Math.ceil(rows.length/1000)),display=rows.filter((_,i)=>i%stride===0||i===rows.length-1);
+  const values=[initial,...display.map(r=>Number(r.equity))];let min=initial,max=initial;
+  for(const value of values){min=Math.min(min,value);max=Math.max(max,value);}
+  const pad=Math.max((max-min)*.15,initial*.002),lo=min-pad,hi=max+pad;
+  const y=(v:number):number=>bottom-(v-lo)/(hi-lo)*(bottom-7),x=(i:number):number=>8+i/Math.max(1,values.length-1)*(right-8);
+  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio:'none', role: 'img', 'aria-label': '模擬資產與初始本金比較' });
+  for (let i = 0; i <= 3; i++) { const v = lo + (hi - lo) * i / 3; svg.append(node('line', { x1: 8, x2: right, y1: y(v), y2: y(v), stroke: '#263548' }),
+    node('text', { x: right+7, y: y(v) + 3, fill: '#7d93a7', 'font-size': 10 }, Math.round(v).toLocaleString())); }
+  svg.append(node('line', { x1: 8, x2: right, y1: y(initial), y2: y(initial), stroke: '#7d93a7', 'stroke-dasharray': '5 5' }));
   const line = values.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' '), color = values.at(-1)! >= initial ? '#44d6aa' : '#ff7d86';
-  svg.append(node('path', { d: line + ` L910,155 L20,155 Z`, fill: color, opacity: .07 }), node('path', { d: line, fill: 'none', stroke: color, 'stroke-width': 2.5 }));
-  for (const [i, row] of rows.entries()) if (i === 0 || i === rows.length - 1) svg.append(node('text', { x: x(i + 1), y: 182, fill: '#7d93a7', 'font-size': 10, 'text-anchor': i ? 'end' : 'start' },
+  svg.append(node('path', { d: line + ` L${right},${bottom} L8,${bottom} Z`, fill: color, opacity: .07 }), node('path', { d: line, fill: 'none', stroke: color, 'stroke-width': 2.5 }));
+  for (const [i, row] of display.entries()) if (i === 0 || i === display.length - 1) svg.append(node('text', { x: x(i + 1), y: height-3, fill: '#7d93a7', 'font-size': 10, 'text-anchor': i ? 'end' : 'start' },
     new Date(row.at).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' })));
   host.replaceChildren(svg);
 }
