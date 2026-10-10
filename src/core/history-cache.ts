@@ -9,9 +9,9 @@ import { historyWindows, validateCachedPoints } from './chart.js';
 import type { HistoryPoint } from './backtest-data.js';
 
 let nextHistoryRequest=0;
-export async function cachedHistory(broker: ShioajiHttpBroker, root: string, symbol: string, exchange: 'TSE' | 'OTC',
+export async function cachedHistory(broker: ShioajiHttpBroker, root: string | undefined, symbol: string, exchange: 'TSE' | 'OTC',
   start: string, end: string, cutoff: string, signal: AbortSignal, progress: (message: string) => void = () => undefined): Promise<HistoryPoint[]> {
-  await mkdir(root, { recursive: true, mode: 0o700 });
+  if (root) await mkdir(root, { recursive: true, mode: 0o700 });
   const today = twDay(new Date()), pastEnd = end < today ? end : addDays(today, -1);
   const windows = start <= pastEnd ? historyWindows(start, pastEnd) : [];
   if (end >= today && start <= today) windows.push({ start: today, end: today });
@@ -19,9 +19,9 @@ export async function cachedHistory(broker: ShioajiHttpBroker, root: string, sym
   for (const range of windows) {
     signal.throwIfAborted();
     const key = createHash('sha256').update(JSON.stringify([broker.settings.base_url, symbol, exchange, range, 'minutes-v3'])).digest('hex');
-    const path = join(root, key + '.json');
+    const path = root ? join(root, key + '.json') : undefined;
     let batch: HistoryPoint[] | undefined;
-    if (range.end < today) try {
+    if (path && range.end < today) try {
       const cached = validateCachedPoints(JSON.parse(await readFile(path, 'utf8')));
       if (cached.every(p => p.symbol === symbol && twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end)) batch = cached;
     } catch { /* Invalid or absent cache is fetched once. */ }
@@ -30,9 +30,10 @@ export async function cachedHistory(broker: ShioajiHttpBroker, root: string, sym
       const slot=Math.max(Date.now(),nextHistoryRequest);nextHistoryRequest=slot+250;
       if(slot>Date.now())await delay(slot-Date.now(),undefined,{signal});
       batch = historicalKbars(await broker.request('/data/kbars', { contract: { security_type: 'STK', exchange, code: symbol }, ...range }), symbol)
-        .filter(p => twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end && Date.parse(p.at) <= Date.parse(cutoff));
+        .filter(p => twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end);
       // Never make today's partial data look like a complete immutable cache.
-      if (range.end < today) {
+      // The immutable cache retains the full API window. A simulation's cutoff only filters its returned view.
+      if (path && range.end < today) {
         const temp = path + '.' + randomUUID() + '.tmp'; await writeFile(temp, JSON.stringify(batch), { mode: 0o600 }); await rename(temp, path);
       }
     }

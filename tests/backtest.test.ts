@@ -155,6 +155,9 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
     const first=await load(),historyCount=calls.filter(x=>x.path.endsWith('/data/kbars')).length;assert.ok(first.points.length>0);
     assert.equal(calls.find(x=>x.path.endsWith('/data/scanner'))!.body.date,'2026-06-30');
     await load();assert.equal(calls.filter(x=>x.path.endsWith('/data/kbars')).length,historyCount);
+    const scannerCount=calls.filter(x=>x.path.endsWith('/data/scanner')).length;
+    const selected=await shioajiDataset(BacktestRequestSchema.parse({...request,symbols:['9001']}),SettingsSchema.parse({}),dir,new AbortController().signal,()=>undefined,fetcher);
+    assert.equal(calls.filter(x=>x.path.endsWith('/data/scanner')).length,scannerCount);assert.match(selected.source,/指定 1 檔股票/);
     assert.ok(calls.every(x=>!x.path.includes('/order/')&&!x.path.includes('/portfolio/')&&!x.path.includes('/auth/')));
     assert.ok(first.calendar!.some(s=>s.day==='2026-07-06'&&s.open));
   }finally{rmSync(dir,{recursive:true,force:true});}

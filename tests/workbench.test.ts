@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import type { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { historyWindows, buildChart, ChartRequestSchema } from '../src/core/chart.js';
 import { BacktestRequestSchema, replayBounds, runBacktest } from '../src/core/backtest.js';
 import { ReplayClock } from '../src/core/replay-clock.js';
 import { BacktestController } from '../src/core/backtest-controller.js';
+import { cachedHistory } from '../src/core/history-cache.js';
 import { syntheticDataset } from '../src/core/backtest-data.js';
 import { CredentialVault, brokerEnvironment, NativeConnection, ConnectionInputSchema } from '../src/desktop/credentials.js';
 import { CodexAnalyst, type AnalystEvent, type Runner } from '../src/core/codex.js';
@@ -14,7 +17,7 @@ import { ShioajiHttpBroker } from '../src/broker/http.js';
 import { Store } from '../src/core/store.js';
 import { SettingsSchema, d } from '../src/core/models.js';
 import { demoAnalysis } from '../src/core/strategy.js';
-import { snapshot, settings, now } from './helpers.js';
+import { snapshot, settings, now, instrument } from './helpers.js';
 
 test('history windows cover every requested date once, with at most 30 calendar dates per API call', () => {
   const windows = historyWindows('2026-01-01', '2026-03-04');
@@ -57,13 +60,42 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
     const env = brokerEnvironment({ OPENAI_API_KEY: 'UNRELATED', LIVE_TRADING: 'true', PATH: '/bin' }, input);
     assert.equal(env.SJ_PRODUCTION, 'true'); assert.equal(env.OPENAI_API_KEY, undefined); assert.equal(env.LIVE_TRADING, undefined);
     const commands: string[][] = []; let probes = 0;
-    const native = new NativeConnection(root, async (_binary, args, opts) => { commands.push(args); if (args.includes('--help')) return { stdout: '--port --no-open' };
-      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; }, async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false }); });
+    const native = new NativeConnection(root, async (_binary, args, opts) => { commands.push(args); if (args.includes('--help')) return { stdout: '--no-open' };
+      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; }, async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false }); },((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
+      assert.deepEqual(args,['server','start','--no-open']);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_API_KEY,'TEST_KEY');
+      const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as typeof spawn);
     await native.start(input, 'http://127.0.0.1:9081', false);
     assert.ok(commands.every(args => !args.join(' ').includes('TEST_'))); await native.close();
     const failure = new NativeConnection(root, async () => { throw new Error('TEST_SECRET'); }, async () => { throw new Error('offline'); });
     await assert.rejects(failure.start(input, 'http://127.0.0.1:9081', false), e => e instanceof Error && !e.message.includes('TEST_SECRET'));
+    let failedProbes=0,killed=false;
+    const rejected = new NativeConnection(root, async()=>({stdout:'--no-open'}), async()=>{if(++failedProbes===1)throw new Error('offline');return Response.json({simulation:true});},(()=>{
+      const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{killed=true;child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;
+    }) as unknown as typeof spawn);
+    await assert.rejects(rejected.start(input,'http://127.0.0.1:9081',false),/連線未完成/);assert.equal(killed,true);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test('a historical cache retains the complete API window when an earlier replay ends intraday', async()=>{
+  const root=mkdtempSync(join(tmpdir(),'cutoff-cache-')),store=new Store(':memory:');let calls=0;
+  const broker=new ShioajiHttpBroker(store,SettingsSchema.parse({}),false,async()=>{calls++;return Response.json({datetime:['2026-01-05T09:10:00','2026-01-05T09:11:00'],Open:[30,31],High:[31,32],Low:[29,30],Close:[30,31],Volume:[1,2]});});
+  try {
+    const load=(time:string)=>cachedHistory(broker,root,'9001','TSE','2026-01-05','2026-01-05',`2026-01-05T${time}+08:00`,new AbortController().signal);
+    assert.equal((await load('09:10:00')).length,1);assert.equal((await load('09:11:00')).length,2);assert.equal(calls,1);
+  }finally{await broker.close();store.close();rmSync(root,{recursive:true,force:true});}
+});
+test('live strategy history divides its warmup into non-overlapping API windows of at most 30 dates',async()=>{
+  const store=new Store(':memory:'),ranges:{start:string;end:string}[]=[];
+  const broker=new ShioajiHttpBroker(store,SettingsSchema.parse({}),false,async(_input,init)=>{
+    const body=JSON.parse(String(init?.body)) as {start:string;end:string};ranges.push(body);
+    return Response.json({datetime:[body.start+'T09:10:00'],Open:[30],High:[31],Low:[29],Close:[30],Volume:[1]});
+  });
+  broker.instruments=async()=>({'9001':instrument()});
+  try {
+    const bars=await broker.history('9001',now);assert.equal(ranges.length,5);assert.equal(bars.length,5);
+    assert.ok(ranges.every(r=>(Date.parse(r.end)-Date.parse(r.start))/86400000+1<=30));
+    for(let i=1;i<ranges.length;i++)assert.equal(Date.parse(ranges[i]!.start)-Date.parse(ranges[i-1]!.end),86400000);
+    assert.ok(bars.every(b=>b.date<'2026-10-08'));
+  }finally{await broker.close();store.close();}
 });
 test('paper rejects a simulated service before account reads, subscriptions or orders', async () => {
   const store = new Store(':memory:'), calls: string[] = [];
