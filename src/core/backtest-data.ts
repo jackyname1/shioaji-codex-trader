@@ -22,7 +22,7 @@ export interface HistoryDataset {
   calendar?:SessionDay[];
 }
 export function validateDataset(input: HistoryDataset): HistoryDataset {
-  if (!input.points.length || input.points.length > 1000000) throw new Error('回測資料必須有 1–1,000,000 筆行情');
+  if (!input.points.length || input.points.length > 3000000) throw new Error('回測資料必須有 1–3,000,000 筆行情');
   if (new Set(input.points.map(p => p.symbol)).size > 100) throw new Error('回測最多 100 個普通股票');
   const points = input.points.map(p => HistoryPointSchema.parse(p)).map(p => ({...p,at:new Date(p.at).toISOString()}))
     .sort((a,b) => a.at.localeCompare(b.at) || a.symbol.localeCompare(b.symbol));
@@ -58,7 +58,7 @@ export function syntheticDataset(start: string, end: string): HistoryDataset {
       const at=`${day}T${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}:00+08:00`;
       const base=30+n*2, wave=Math.sin(dayIndex*.14+n)*.04+Math.sin((m-550)/65+n)*.01;
       const close=roundPrice(base*(1+wave)), high=d(close).plus(tickSize(close)).toFixed(),low=d(close).minus(tickSize(close)).toFixed();
-      points.push({symbol:String(9001+n),at,open:close,high,low,close,volume_shares:1000000+n*25000});
+      points.push({symbol:String(9001+n),at,open:close,high,low,close,volume_shares:3000000+n*25000});
     }
   }} finally {store.close();}
   return validateDataset({source:'SYNTHETIC：虛構股票、行情及成交，不是歷史市場績效',synthetic:true,frequency:'MINUTE',points,names:{},limitations:['虛構行情只驗證程式流程，不能用於判斷策略獲利能力']});

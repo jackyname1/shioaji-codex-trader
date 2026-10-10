@@ -158,7 +158,7 @@ test('native trade reconciliation reads callbacks from cache and forces authorit
       controller.enqueue(new TextEncoder().encode('event: heartbeat\ndata: {}\n\n'));
       init?.signal?.addEventListener('abort',()=>controller.close(),{once:true});
     }}),{headers:{'Content-Type':'text/event-stream'}});
-    if(path.endsWith('/info'))return Response.json({simulation:true,version:'1.7.6'});
+    if(path.endsWith('/info'))return Response.json({simulation:false,version:'1.7.6'});
     if(path.endsWith('/health'))return Response.json({status:'healthy'});
     if(path.endsWith('/auth/accounts'))return Response.json([{account_type:'S',broker_id:'TEST',account_id:'SYNTHETIC',signed:true}]);
     if(path.endsWith('/auth/subscribe_trade'))return Response.json({subscribe_trade:true});

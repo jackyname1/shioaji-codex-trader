@@ -143,7 +143,8 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
   const fetcher:typeof fetch=async(input,init)=>{
     const path=new URL(String(input)).pathname,body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:{};
     calls.push({path,body});let result:unknown;
-    if(path.endsWith('/health'))result={status:'healthy',token_stale:false};
+    if(path==='/api/v1/info')result={simulation:false};
+    else if(path.endsWith('/health'))result={status:'healthy',token_stale:false};
     else if(path.endsWith('/data/scanner'))result=Array.from({length:5},(_,n)=>({code:String(9001+n),name:'test'}));
     else if(path.includes('/data/contracts/'))result={security_type:'STK',code:path.split('/')[5],exchange:'TSE'};
     else if(path.endsWith('/data/kbars'))result={datetime:[String(body.start)+'T09:10:00'],Open:['30'],High:['31'],Low:['29'],Close:['30'],Volume:[1000]};
@@ -154,6 +155,9 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
     const first=await load(),historyCount=calls.filter(x=>x.path.endsWith('/data/kbars')).length;assert.ok(first.points.length>0);
     assert.equal(calls.find(x=>x.path.endsWith('/data/scanner'))!.body.date,'2026-06-30');
     await load();assert.equal(calls.filter(x=>x.path.endsWith('/data/kbars')).length,historyCount);
+    const scannerCount=calls.filter(x=>x.path.endsWith('/data/scanner')).length;
+    const selected=await shioajiDataset(BacktestRequestSchema.parse({...request,symbols:['9001']}),SettingsSchema.parse({}),dir,new AbortController().signal,()=>undefined,fetcher);
+    assert.equal(calls.filter(x=>x.path.endsWith('/data/scanner')).length,scannerCount);assert.match(selected.source,/指定 1 檔股票/);
     assert.ok(calls.every(x=>!x.path.includes('/order/')&&!x.path.includes('/portfolio/')&&!x.path.includes('/auth/')));
     assert.ok(first.calendar!.some(s=>s.day==='2026-07-06'&&s.open));
   }finally{rmSync(dir,{recursive:true,force:true});}

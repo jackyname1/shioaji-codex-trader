@@ -28,6 +28,8 @@ export const QuoteSchema = z.strictObject({
   symbol, last: positive, bid: nonnegative, ask: nonnegative,
   trade_at: timestamp, book_at: timestamp, odd: z.boolean(), simulated: z.boolean(),
   bid_shares: quantity, ask_shares: quantity,
+  bid_levels:z.array(z.strictObject({price:nonnegative,shares:quantity})).max(5).optional(),
+  ask_levels:z.array(z.strictObject({price:nonnegative,shares:quantity})).max(5).optional(),
 });
 export type Quote = z.infer<typeof QuoteSchema>;
 export const PositionSchema = z.strictObject({
@@ -103,7 +105,7 @@ export const ProtectionSchema = z.strictObject({
 });
 export type Protection = z.infer<typeof ProtectionSchema>;
 export const SettingsSchema = z.strictObject({
-  mode: z.enum(['demo', 'paper', 'readonly', 'live']).default('demo'),
+  mode: z.enum(['demo', 'paper', 'readonly', 'live']).default('paper'),
   auto_execute: z.boolean().default(false), whole_lots: z.boolean().default(false),
   base_url: z.string().url().default('http://127.0.0.1:8080'),
   manage_quote_subscriptions: z.boolean().default(true),
@@ -120,7 +122,8 @@ export const SettingsSchema = z.strictObject({
   allow_attention: z.boolean().default(false), codex_enabled: z.boolean().default(false),
   experience_enabled: z.boolean().default(true), experience_limit: quantity.min(5).max(100).default(40),
   official_facts_enabled: z.boolean().default(true), codex_path: z.string().default(''),
-  codex_model: z.string().default(''),
+  codex_model: z.string().max(200).default(''),
+  codex_instruction: z.string().max(4000).default('動態挑選台灣普通現股，保留現金，依趨勢、量能與風控設定進場、停損、停利；資料不足時觀望。'),
   codex_reasoning: z.enum(['default', 'low', 'medium', 'high', 'xhigh']).default('default'),
   codex_timeout_seconds: quantity.min(30).max(1800).default(300),
   premarket_time: clock.default('08:40'), postmarket_time: clock.default('14:00'),

@@ -175,7 +175,7 @@ test('simulation rejects insufficient warmup before calling a model or fabricati
 });
 test('automatic interval comparison saves independent accounts and restores selectable reports',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'comparison-'));try{const c=new BacktestController(dir);
-    c.start({start:'2026-01-05',end:'2026-01-06',comparison_intervals:[60,180]},SettingsSchema.parse({}));await c.wait();
+    c.start({start:'2026-01-05',end:'2026-01-06',source:'sample',strategy:'demo',comparison_intervals:[60,180]},SettingsSchema.parse({}));await c.wait();
     assert.equal(c.comparisons.length,2);assert.notEqual(c.comparisons[0]!.id,c.comparisons[1]!.id);
     assert.equal(c.report!.metrics.initial_cash,'100000');const next=new BacktestController(dir);await next.restore();assert.equal(next.history.length,2);
     await next.select(c.comparisons[0]!.id);assert.equal(next.report!.request.decision_interval_minutes,60);

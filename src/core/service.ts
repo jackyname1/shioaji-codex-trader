@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Engine, type Bundle } from './engine.js';
-import { CodexAnalyst } from './codex.js';
+import { CodexAnalyst, type AnalystEvent } from './codex.js';
 import { collectFacts } from './facts.js';
 import { SettingsSchema, twClock, twDay, type Settings } from './models.js';
 import { demoAnalysis } from './strategy.js';
@@ -32,6 +32,8 @@ export class TradingService {
   private lastWatchAttempt=0;
   lastMonitorAt='';
   analysisStatus='等待策略排程';
+  analystEvents:AnalystEvent[]=[];
+  private decisionAbort?:AbortController;
   get analyzing():boolean{return !!this.decisionTask;}
   get scanning():boolean{return !!this.watchTask;}
   private closeTask?: Promise<void>;
@@ -114,6 +116,7 @@ export class TradingService {
   decide(review = false): Promise<void> {
     if (this.stopping) return Promise.reject(new Error('程式正在停止'));
     if (this.decisionTask) return Promise.reject(new Error('上一輪分析仍在執行'));
+    this.decisionAbort=new AbortController();
     const task = this.performDecision(review);
     this.decisionTask = task.finally(() => { this.decisionTask = undefined; this.analyst = undefined; });
     return this.decisionTask;
@@ -135,7 +138,9 @@ export class TradingService {
       if (s.mode === 'demo'&&!s.codex_enabled) analysis = demoAnalysis(snapshot,s,new Date());
       else {
         const profile = join(dirname(this.store.path),'codex-analysis-profile');
-        this.analyst = new CodexAnalyst(s,profile,undefined,join(dirname(this.store.path),'codex-login')); analysis = await this.analyst.analyze(snapshot,this.stop.signal);
+        this.analyst = new CodexAnalyst(s,profile,undefined,join(dirname(this.store.path),'codex-login'),event=>{this.analystEvents.push(event);this.analystEvents=this.analystEvents.slice(-80);});
+        this.decisionAbort?.signal.throwIfAborted();
+        analysis = await this.analyst.analyze(snapshot,AbortSignal.any([this.stop.signal,this.decisionAbort!.signal]));
       }
       await this.enqueue(() => this.engine.activate(analysis,snapshot,new Date()));
       this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
@@ -160,8 +165,10 @@ export class TradingService {
       if(!this.engine.settings.codex_enabled&&this.engine.settings.mode!=='demo')throw new Error('請先啟用 Codex 並在本機登入');
       void this.decide(name === 'review').catch(() => undefined); return '分析已排程，可繼續監控';
     }
+    if(name==='cancel-analysis'){this.decisionAbort?.abort();this.analyst?.cancel();return '已要求停止本輪分析';}
     if(name==='watch'){void this.refreshObservations().catch(()=>undefined);return '已排程觀測更新，無需呼叫 Codex';}
     if(name==='start-auto') {
+      if(!this.engine.connected)throw new Error('請先連接 Shioaji 真實行情');
       if(!this.engine.settings.codex_enabled&&this.engine.settings.mode!=='demo')throw new Error('請先啟用 Codex 並在本機登入');
       await this.command('auto on');await this.command('continue');await this.command('resume');
       if(!this.engine.plan||Date.parse(this.engine.plan.analysis.expires_at)<=Date.now()) {

@@ -28,7 +28,7 @@ export class TradingCalendar {
     throw new Error('尚未載入相鄰交易日的行事曆');
   }
   async refresh(year: number, signal?: AbortSignal): Promise<number> {
-    if (!Number.isInteger(year) || year < 2024 || year > 2100) throw new Error('年份不合法');
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new Error('年份不合法');
     const source = `https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&queryYear=${year - 1911}`;
     const response = await fetch(source, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), redirect: 'error' });
     if (!response.ok) throw new Error('證交所行事曆無法取得');

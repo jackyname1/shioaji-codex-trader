@@ -1,3 +1,4 @@
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, cpSync } from 'node:fs';
 mkdirSync('dist/src/desktop', { recursive: true });
-copyFileSync('src/desktop/index.html', 'dist/src/desktop/index.html');
+for (const file of ['index.html','styles.css']) copyFileSync('src/desktop/'+file, 'dist/src/desktop/'+file);
+cpSync('src/desktop/assets','dist/src/desktop/assets',{recursive:true});

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
+import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Store } from '../core/store.js';
 import { TradingCalendar } from '../core/calendar.js';
@@ -7,7 +8,7 @@ import { Risk } from '../core/risk.js';
 import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addDays, d, money, remaining, twDay,
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import { NoSubmissionError, type Broker } from './types.js';
-import { historicalKbars } from './historical-format.js';
+import { cachedHistory } from '../core/history-cache.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -146,7 +147,7 @@ export class ShioajiHttpBroker implements Broker {
   }
   async connect(): Promise<void> {
     this.info = infoSchema.parse(await this.request('/info'));
-    if (this.production && this.info.simulation) throw new Error('實盤模式不能連到模擬服務');
+    if (this.settings.mode !== 'demo' && this.info.simulation) throw new Error('模擬與實盤都需要正式服務的真實行情');
     const health = healthSchema.parse(await this.request('/health'));
     if (health.token_stale || (health.token_expires_in_seconds !== undefined && health.token_expires_in_seconds <= 0))
       throw new Error('Shioaji 登入已過期');
@@ -222,6 +223,9 @@ export class ShioajiHttpBroker implements Broker {
       const bidVolume = z.array(count).min(1).parse(raw.bid_volume), askVolume = z.array(count).min(1).parse(raw.ask_volume);
       part.bid = bids[0]!; part.ask = asks[0]!; part.bid_shares = bidVolume[0]! * (odd ? 1 : 1000);
       part.ask_shares = askVolume[0]! * (odd ? 1 : 1000); part.book_at = timestamp;
+      if(bids.length!==bidVolume.length||asks.length!==askVolume.length)throw new Error('五檔價格與數量長度不符');
+      part.bid_levels=bids.slice(0,5).map((price,i)=>({price,shares:bidVolume[i]!*(odd?1:1000)}));
+      part.ask_levels=asks.slice(0,5).map((price,i)=>({price,shares:askVolume[i]!*(odd?1:1000)}));
     }
     this.parts.set(key, part); this.changed.add(key);
   }
@@ -380,8 +384,8 @@ export class ShioajiHttpBroker implements Broker {
   }
   async history(symbol: string, now: Date): Promise<Bar[]> {
     const m = (await this.instruments([symbol],now))[symbol]; if (!m) return [];
-    const raw = historicalKbars(await this.request('/data/kbars', { contract: { security_type:'STK',exchange:m.exchange,code:symbol },
-      start:addDays(twDay(now),-150), end:addDays(twDay(now),-1) }),symbol);
+    const raw = await cachedHistory(this, this.store.path === ':memory:' ? undefined : join(dirname(this.store.path), 'history-cache'),
+      symbol, m.exchange, addDays(twDay(now),-150), addDays(twDay(now),-1), now.toISOString(), this.stop.signal);
     const grouped = new Map<string, Bar>();
     for (const row of raw) {
       const day = twDay(new Date(row.at)); if (day >= twDay(now)) continue;
