@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths-ignore: ['README.md', 'docs/**']
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,6 +32,13 @@ jobs:
           $process = Start-Process -FilePath (Resolve-Path node_modules/electron/dist/electron.exe).Path -ArgumentList @('.', '--smoke-test') -PassThru -NoNewWindow
           if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Electron smoke test timed out' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Workbench-screenshots
+          path: release/SYNTHETIC-ui-*.png
+          if-no-files-found: error
+          retention-days: 30
   windows:
     needs: test
     runs-on: windows-latest

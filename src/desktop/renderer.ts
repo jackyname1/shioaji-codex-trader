@@ -55,7 +55,7 @@ function loadSettings(s:Settings):void {
     if(typeof v==='boolean')node.checked=v;else node.value=String(v);}
   if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;el<HTMLTextAreaElement>('codex-instruction-control').value=s.codex_instruction;}
   if(!connectionDirty)el<HTMLInputElement>('connection-url').value=s.base_url;
-  el<HTMLInputElement>('s-times').value=s.strategy_times.join(',');el<HTMLSelectElement>('mode').value=s.mode;
+  el<HTMLInputElement>('s-times').value=s.strategy_times.join(',');el<HTMLSelectElement>('mode').value=s.mode==='live'?'live':'paper';
   el<HTMLTextAreaElement>('settings').value=JSON.stringify(s,null,2);text('settings-state','已儲存');schedulingFields('s');
 }
 function renderRuntime(state:DesktopState):void {
@@ -172,10 +172,10 @@ function renderChart():void {
   const protections=value('chart-source')==='replay'?latestState?.replay?.protections:latestState?.runtime?.protections;
   const spec=protections?.find(p=>p.symbol===chartData!.symbol)?.spec;
   const levels=spec?[{price:Number(spec.stop_price),label:'停損',color:'#ff7d86'},...(spec.take_profit?[{price:Number(spec.take_profit),label:'停利',color:'#44d6aa'}]:[])]:[];
-  const fills=latestState?.backtest_result?.fills.filter(f=>f.symbol===chartData!.symbol)??latestState?.replay?.fills.filter(f=>f.symbol===chartData!.symbol)??[];
+  const fills=(latestState?.replay?.fills??latestState?.backtest_result?.fills??[]).filter(f=>f.symbol===chartData!.symbol&&Date.parse(f.at)<=Date.parse(chartData!.asof));
   candles(el('market-chart'),chartData,{ma:checked('chart-ma'),bands:checked('chart-bands'),rsi:checked('chart-rsi'),
     offset:Number(value('chart-pan')),count:Number(value('chart-window')),levels,fills:value('chart-source')==='replay'?fills:[]});
-  text('chart-name',chartData.name+' '+chartData.symbol);text('chart-price',fmt(chartData.bars.at(-1)?.close));
+  text('chart-name',chartData.name===chartData.symbol?chartData.symbol:chartData.name+' '+chartData.symbol);text('chart-price',fmt(chartData.bars.at(-1)?.close));
   text('chart-cutoff','資料截至 '+stamp(chartData.asof));text('chart-data-note',`${chartData.interval} · ${fmt(chartData.total_points)} 筆原始行情 / ${fmt(chartData.bars.length)} 根 K 線`);
 }
 function chartRequest(source:ChartRequest['source']=value('chart-source') as ChartRequest['source'],symbol=value('chart-symbol')):ChartRequest {
@@ -191,9 +191,9 @@ async function loadChart(source?:ChartRequest['source']):Promise<string>{
 }
 async function showStock(symbol:string):Promise<string>{selectedSymbol=symbol;el<HTMLInputElement>('chart-symbol').value=symbol;selectTab('overview');return loadChart();}
 function renderStockDetails():void {
-  const r=latestState?.runtime,frame=value('chart-source')==='replay'?latestState?.replay:undefined;
-  const quote=(frame?.quotes??r?.quotes)?.find(q=>q.symbol===selectedSymbol&&q.odd),f=r?.features[selectedSymbol];
   const replay=value('chart-source')==='replay';
+  const r=latestState?.runtime,frame=replay?latestState?.replay:undefined;
+  const quote=(replay?frame?.quotes:r?.quotes)?.find(q=>q.symbol===selectedSymbol&&q.odd),f=r?.features[selectedSymbol];
   const bar=chartData?.symbol===selectedSymbol?chartData.bars.at(-1):undefined;
   const book=el('order-book');book.replaceChildren();
   if(!replay&&quote?.bid_levels&&quote.ask_levels){for(let i=0;i<5;i++){const bid=quote.bid_levels[i],ask=quote.ask_levels[i],row=document.createElement('div');row.className='book-row';for(const v of [fmt(bid?.shares),fmt(bid?.price),fmt(ask?.price),fmt(ask?.shares)]){const span=document.createElement('span');span.textContent=v;row.append(span);}book.append(row);}}else book.textContent=replay?'歷史 K 線沒有完整零股五檔':'等待即時五檔';
@@ -244,7 +244,7 @@ async function loadSimChart():Promise<void>{
   if(simLoading||!value('sim-symbol'))return;simLoading=true;
   try {const r=latestState?.backtest_result;simData=await window.trader.chart({source:'replay',symbol:value('sim-symbol'),start:r?.request.start??value('bt-start'),end:r?.request.end??value('bt-end'),interval:'15m'});
     candles(el('sim-chart'),simData,{ma:true,bands:true,rsi:false,offset:Math.max(0,simData.bars.length-200),count:200,
-      levels:[],fills:(latestState?.replay?.fills??r?.fills??[]).filter(f=>f.symbol===simData!.symbol)});
+      levels:[],fills:(latestState?.replay?.fills??r?.fills??[]).filter(f=>f.symbol===simData!.symbol&&Date.parse(f.at)<=Date.parse(simData!.asof))});
   }finally{simLoading=false;}
 }
 function refreshLivePrice(state:DesktopState):void {

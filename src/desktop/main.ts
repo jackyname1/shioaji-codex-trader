@@ -274,11 +274,16 @@ async function smokeTest(): Promise<void> {
   if(!backtest.report||backtest.report.status!=='COMPLETED'||!backtest.report.metrics.filled_orders)throw new Error('打包後歷史模擬未通過');
   if(backtest.comparisons.length!==2)throw new Error('打包後排程比較未通過');
   await verifyRenderer();
-  await window.webContents.executeJavaScript(`(()=>{document.querySelector('#chart-source').value='replay';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-interval').value='15m';document.querySelector('#chart-form').requestSubmit();})()`);
+  // A repeatable desktop viewport keeps CI's small remote screen from cropping documentation screenshots.
+  window.webContents.debugger.attach('1.3');
+  await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+  await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-source').value='replay';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-interval').value='15m';document.querySelector('#chart-form').requestSubmit();})()`);
+  await new Promise(resolve=>setTimeout(resolve,6500));
   const artifacts=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(artifacts,{recursive:true});
   for(const page of ['overview','strategy','simulation','orders','settings']){
     const rendered=await window.webContents.executeJavaScript(`(async()=>{
       document.querySelector('[data-tab="${page}"]').click();
+      window.scrollTo(0,0);
       await new Promise(resolve=>setTimeout(resolve,1300));
       return {headline:document.querySelector('#headline').textContent,
         watchRows:document.querySelectorAll('#overview-watch tbody tr').length,
@@ -287,8 +292,17 @@ async function smokeTest(): Promise<void> {
         width:document.documentElement.scrollWidth,viewport:window.innerWidth};
     })()`);
     if(rendered.watchRows<5||rendered.pnl==='—'||rendered.times!=='09:15,11:45'||rendered.width>rendered.viewport)throw new Error('桌面排程、觀測、損益顯示或版面溢位未通過');
-    writeFileSync(join(artifacts,`SYNTHETIC-ui-${page}.png`),(await window.webContents.capturePage()).toPNG());
+    const shot=await window.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:1440,height:1100,scale:1}}) as {data:string};
+    writeFileSync(join(artifacts,`SYNTHETIC-ui-${page}.png`),Buffer.from(shot.data,'base64'));
+    if(page==='simulation'){
+      const y=await window.webContents.executeJavaScript(`document.querySelector('#bt-result').getBoundingClientRect().top+window.scrollY-140`);
+      await window.webContents.executeJavaScript(`window.scrollTo(0,${Math.max(0,Number(y))})`);
+      await new Promise(resolve=>setTimeout(resolve,150));
+      const resultShot=await window.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:true}) as {data:string};
+      writeFileSync(join(artifacts,'SYNTHETIC-ui-results.png'),Buffer.from(resultShot.data,'base64'));
+    }
   }
+  await window.webContents.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');window.webContents.debugger.detach();
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
   console.log('Electron five-page graphical workbench, isolated IPC, watchlist/rule execution, automatic simulation comparison and tray: PASS'); await exit();
@@ -298,7 +312,7 @@ async function verifyRenderer(): Promise<void> {
     node: typeof window.require, status: (await window.trader.state()).status,
     pages:document.querySelectorAll('[data-page]').length,
     csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content }))()`);
-  if (!result.bridge || result.node !== 'undefined' || !result.status || !result.csp || result.pages!==5) throw new Error('安全 IPC 或四頁文字介面未載入');
+  if (!result.bridge || result.node !== 'undefined' || !result.status || !result.csp || result.pages!==5) throw new Error('安全 IPC 或五頁圖形介面未載入');
 }
 async function exit(): Promise<void> {
   if (quitting) return;
