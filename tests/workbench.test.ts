@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:net';
+import { brokerOrigin, bundledShioajiPath } from '../src/desktop/broker-runtime.js';
+import { workspaceRuntime, workspaceEvents, workspaceCutoff } from '../src/desktop/workspace.js';
+import type { DesktopState, RuntimeView } from '../src/desktop/shared.js';
 import { EventEmitter } from 'node:events';
 import type { spawn } from 'node:child_process';
 import { join } from 'node:path';
@@ -59,20 +65,20 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
     await assert.rejects(new CredentialVault(root, { ...encryption, isEncryptionAvailable: () => false }).save(input), /系統加密/);
     const env = brokerEnvironment({ OPENAI_API_KEY: 'UNRELATED', LIVE_TRADING: 'true', PATH: '/bin' }, input);
     assert.equal(env.SJ_PRODUCTION, 'true'); assert.equal(env.OPENAI_API_KEY, undefined); assert.equal(env.LIVE_TRADING, undefined);
-    const commands: string[][] = []; let probes = 0;
-    const native = new NativeConnection(root, async (_binary, args, opts) => { commands.push(args); if (args.includes('--help')) return { stdout: '--no-open' };
-      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; }, async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false }); },((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
+    const commands: string[][] = []; let probes = 0;const binary=async()=>join(root,'shioaji');const origin=async()=>'http://127.0.0.1:9081';
+    const native = new NativeConnection(root,binary,{origin,run: async (_binary, args, opts) => { commands.push(args); if (args.includes('--help')) return { stdout: '--no-open' };
+      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; },fetcher: async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false }); },launch:((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
       assert.deepEqual(args,['server','start','--no-open']);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_API_KEY,'TEST_KEY');
-      const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as typeof spawn);
-    await native.start(input, 'http://127.0.0.1:9081', false);
+      const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as typeof spawn});
+    await native.start(input,false);assert.equal(native.connected,true);assert.equal(native.baseUrl,'http://127.0.0.1:9081');
     assert.ok(commands.every(args => !args.join(' ').includes('TEST_'))); await native.close();
-    const failure = new NativeConnection(root, async () => { throw new Error('TEST_SECRET'); }, async () => { throw new Error('offline'); });
-    await assert.rejects(failure.start(input, 'http://127.0.0.1:9081', false), e => e instanceof Error && !e.message.includes('TEST_SECRET'));
+    const failure = new NativeConnection(root,binary,{origin,run:async()=>{throw new Error('TEST_SECRET');},fetcher:async()=>{throw new Error('offline');}});
+    await assert.rejects(failure.start(input,false), e => e instanceof Error && !e.message.includes('TEST_SECRET'));
     let failedProbes=0,killed=false;
-    const rejected = new NativeConnection(root, async()=>({stdout:'--no-open'}), async()=>{if(++failedProbes===1)throw new Error('offline');return Response.json({simulation:true});},(()=>{
+    const rejected = new NativeConnection(root,binary,{origin,run:async()=>({stdout:'--no-open'}),fetcher:async()=>{if(++failedProbes===1)throw new Error('offline');return Response.json({simulation:true});},launch:(()=>{
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{killed=true;child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;
-    }) as unknown as typeof spawn);
-    await assert.rejects(rejected.start(input,'http://127.0.0.1:9081',false),/連線未完成/);assert.equal(killed,true);
+    }) as unknown as typeof spawn});
+    await assert.rejects(rejected.start(input,false),/連線未完成/);assert.equal(killed,true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test('a historical cache retains the complete API window when an earlier replay ends intraday', async()=>{
@@ -82,6 +88,46 @@ test('a historical cache retains the complete API window when an earlier replay 
     const load=(time:string)=>cachedHistory(broker,root,'9001','TSE','2026-01-05','2026-01-05',`2026-01-05T${time}+08:00`,new AbortController().signal);
     assert.equal((await load('09:10:00')).length,1);assert.equal((await load('09:11:00')).length,2);assert.equal(calls,1);
   }finally{await broker.close();store.close();rmSync(root,{recursive:true,force:true});}
+});
+test('the internal broker automatically avoids an occupied port without changing another service', async(t)=>{
+  const other=createServer();
+  try{await new Promise<void>((resolve,reject)=>{other.once('error',reject);other.listen(0,'127.0.0.1',resolve);});}
+  catch(error){if(error instanceof Error&&'code' in error&&['EPERM','EACCES'].includes(String(error.code))){t.skip('This environment disables local sockets; Windows/Linux CI exercises this check.');return;}throw error;}
+  try{const address=other.address();assert.ok(address&&typeof address!=='string');
+    const origin=new URL(await brokerOrigin(address.port));assert.equal(origin.hostname,'127.0.0.1');assert.notEqual(Number(origin.port),address.port);
+    assert.equal(other.listening,true);
+  }finally{await new Promise<void>(resolve=>other.close(()=>resolve()));}
+});
+test('the bundled runtime rejects corruption, missing files and paths outside its own resources', async()=>{
+  const root=mkdtempSync(join(tmpdir(),'broker-bundle-')),name=process.platform==='win32'?'shioaji.exe':'shioaji',path=join(root,name);
+  const bytes=Buffer.from('isolated runtime fixture');writeFileSync(path,bytes);
+  const manifest={version:'1.7.7',platform:process.platform,arch:process.arch,relative_path:name,sha256:createHash('sha256').update(bytes).digest('hex')};
+  try{await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);
+    writeFileSync(join(root,'runtime.json'),JSON.stringify(manifest));assert.equal(await bundledShioajiPath(root),await realpath(path));
+    writeFileSync(path,'corrupted');await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);
+    writeFileSync(path,bytes);
+    writeFileSync(join(root,'runtime.json'),JSON.stringify({...manifest,relative_path:'../'+root.split(/[\\/]/).at(-1)+'/'+name}));
+    // A resolved path within the resources is allowed; a genuinely external executable is rejected.
+    assert.equal(await bundledShioajiPath(root),await realpath(path));
+    const outside=join(tmpdir(),'outside-'+root.split(/[\\/]/).at(-1));writeFileSync(outside,bytes);
+    try{writeFileSync(join(root,'runtime.json'),JSON.stringify({...manifest,relative_path:'../'+outside.split(/[\\/]/).at(-1)}));await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);}
+    finally{rmSync(outside,{force:true});}
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+test('every simulation pane and activity stream stays in the replay scope, including after a report is restored', async()=>{
+  const data=syntheticDataset('2026-01-05','2026-01-06');
+  const report=await runBacktest({start:'2026-01-05',end:'2026-01-06',source:'sample',strategy:'rules'},data,SettingsSchema.parse({}),undefined,new AbortController().signal);
+  assert.ok(report.final_frame!.quotes.length>0,'The completed replay retains historical closing marks after the engine expires its trading quotes.');
+  assert.ok(report.final_frame!.quotes.every(q=>Date.parse(q.trade_at)<=Date.parse(report.asof)));
+  const live=snapshot(),runtime={mode:'paper',account:live.account,quotes:[],features:live.features,metadata:{},plan:null,
+    watch:{entries:[{symbol:'9999',name:'PRESENT_DAY_ONLY'}],changes:[],asof:'2026-10-10T00:00:00Z'},orders:live.account.open_orders,protections:[],decisions:[]} as unknown as RuntimeView;
+  const state={runtime,backtest_result:report,backtest_progress:{running:false,phase:'COMPLETED'},replay:null,
+    analyst_events:[{context:'live',asof:report.asof,stage:'RUNNING'},{context:'replay',asof:report.asof,stage:'DECISION'},
+      {context:'replay',asof:'2099-01-01T00:00:00Z',stage:'FUTURE'}]} as unknown as DesktopState;
+  const view=workspaceRuntime(state)!;assert.equal(workspaceCutoff(state),report.asof);assert.equal(view.account!.cash,report.metrics.final_cash);
+  assert.deepEqual(view.account!.positions,report.positions);assert.deepEqual(view.quotes,[]);assert.deepEqual(view.features,{});assert.deepEqual(view.watch.entries,[]);
+  assert.deepEqual(workspaceEvents(state).map(e=>e.stage),['DECISION']);
+  state.runtime!.mode='live';assert.equal(workspaceRuntime(state),runtime);assert.deepEqual(workspaceEvents(state).map(e=>e.stage),['RUNNING']);
 });
 test('live strategy history divides its warmup into non-overlapping API windows of at most 30 dates',async()=>{
   const store=new Store(':memory:'),ranges:{start:string;end:string}[]=[];

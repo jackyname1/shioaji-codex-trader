@@ -6,7 +6,6 @@ import { mkdtempSync, rmSync,readFileSync,writeFileSync,statSync,mkdirSync } fro
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
 import { TradingService, LIVE_ACK } from '../core/service.js';
 import { SettingsSchema,active, type Settings } from '../core/models.js';
 import { demoAnalysis } from '../core/strategy.js';
@@ -21,6 +20,7 @@ import { z } from 'zod';
 import { CredentialVault,NativeConnection,ConnectionInputSchema } from './credentials.js';
 import { liveChart } from '../core/live-chart.js';
 import { ChartRequestSchema } from '../core/chart.js';
+import { bundledShioajiPath } from './broker-runtime.js';
 
 let window: BrowserWindow | undefined, tray: Tray | undefined, service: TradingService | undefined;
 let quitting = false, initialError = '', blocker: number | undefined;
@@ -32,10 +32,11 @@ let dataRoot = '';
 let backtest:BacktestController;
 let vault:CredentialVault,nativeConnection:NativeConnection,remembered=false;
 let connectionBusy=false,chartBusy=false;const chartAbort=new AbortController();
-let loginTask:Promise<void>|undefined,loginAbort:AbortController|undefined,loginStatus='尚未從程式啟動 Codex 登入；也可沿用本機 Codex auth.json';
+const brokerPath=():Promise<string>=>bundledShioajiPath(app.isPackaged?join(process.resourcesPath,'shioaji'):join(directory,'../../../resources/shioaji'));
+let loginTask:Promise<void>|undefined,loginAbort:AbortController|undefined,loginStatus='可沿用本機 Codex 登入，或按登入連接帳戶';
 let preferences:{last_mode:Settings['mode'];connections:Partial<Record<Settings['mode'],{base_url:string;stock_account_index:number}>>}={last_mode:'paper',connections:{}};
 
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!smoke&&!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance',() => { window?.show(); window?.focus(); });
   app.on('window-all-closed',() => { /* tray continues */ });
@@ -48,11 +49,14 @@ else {
     }catch{/* New or malformed preferences start in DEMO. */}
     const secure={isEncryptionAvailable:()=>safeStorage.isEncryptionAvailable()&&(process.platform!=='linux'||safeStorage.getSelectedStorageBackend()!=='basic_text'),
       encryptString:safeStorage.encryptString,decryptString:safeStorage.decryptString};
-    vault=new CredentialVault(join(dataRoot,'private'),secure);nativeConnection=new NativeConnection(join(dataRoot,'native-service'));
-    remembered=!!(await vault.read());
+    vault=new CredentialVault(join(dataRoot,'private'),secure);nativeConnection=new NativeConnection(join(dataRoot,'native-service'),brokerPath);
+    const saved=await vault.read();remembered=!!saved;
     backtest=new BacktestController(join(dataRoot,'backtests'));await backtest.restore();
     await connect(mode);
     createWindow(); createTray(); registerIpc();
+    if(saved&&!smoke){connectionBusy=true;try{await nativeConnection.start(saved,mode==='live');await connect(mode);}
+      catch{/* Show the redacted connection status in the account dialog. */}finally{connectionBusy=false;}}
+    if(quitting)return;
     if (service?.engine.settings.keep_awake) blocker = powerSaveBlocker.start('prevent-app-suspension');
     if (service?.engine.settings.start_minimized && tray && !smoke) window!.hide();
     if (smoke) await smokeTest();
@@ -61,21 +65,22 @@ else {
 async function connect(nextMode: Settings['mode'],override?:Settings): Promise<void> {
   if (service) await service.close(); service = undefined; initialError = ''; mode = nextMode;
   try {
-    const c=override??preferences.connections[mode],base=c?loopbackOrigin(c.base_url):'http://127.0.0.1:8080',index=c?.stock_account_index??0;
-    const suffix=base==='http://127.0.0.1:8080'&&index===0?'':'-'+createHash('sha256').update(JSON.stringify([base,index])).digest('hex').slice(0,12);
+    const c=override??preferences.connections[mode],base=nativeConnection.baseUrl,index=c?.stock_account_index??0;
+    // Database identity belongs to the mode/account, not the automatically chosen port.
+    const suffix=index===0?'':'-account-'+index;
     const path=join(dataRoot,`${mode}${suffix}.db`);
-    if(c){const store=new Store(path);try{store.saveSettings(SettingsSchema.parse({...store.settings(),...(override??{}),mode,base_url:base,stock_account_index:index,...(override?{auto_execute:false}:{})}));}finally{store.close();}}
+    const store=new Store(path);try{store.saveSettings(SettingsSchema.parse({...store.settings(),...(override??{}),mode,base_url:base,stock_account_index:index,auto_execute:false}));}finally{store.close();}
     service = new TradingService(path,mode);
     preferences.last_mode=mode;preferences.connections[mode]={base_url:base,stock_account_index:index};
     if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
     if(!smoke)service.engine.setSettings({...service.engine.settings,auto_execute:false});
-    await service.start(!smoke);
+    if(smoke||nativeConnection.connected)await service.start(!smoke&&mode==='live');
   }
   catch {if(service){service.engine.connected=false;service.engine.entryBlocked=true;}
-    initialError = mode === 'demo' ? '模擬程式啟動失敗' : '無法連接或核對 Shioaji 服務。請啟動官方本機服務，並檢查 CA、版本與帳戶設定。'; }
+    initialError = mode === 'demo' ? '模擬程式啟動失敗' : '無法連接或核對 Shioaji。請開啟帳戶設定，檢查 API 權限與 CA 後重新連線。'; }
 }
 function createWindow(): void {
-  window = new BrowserWindow({width:1440,height:960,minWidth:1000,minHeight:700,icon:join(directory,'assets/app.png'),title:'Shioaji Codex Trader',
+  window = new BrowserWindow({width:1600,height:960,minWidth:1100,minHeight:680,icon:join(directory,'assets/app.png'),title:'Shioaji Codex Trader',
     backgroundColor:'#0c1016',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
       contextIsolation:true,sandbox:true,webSecurity:true}});
   window.setMenuBarVisibility(false);
@@ -129,19 +134,22 @@ function registerIpc(): void {
     backtest_progress:backtest.progress,backtest_result:backtest.report?{...backtest.report,fills:backtest.report.fills.slice(-80),
       orders:backtest.report.orders.slice(-80),strategy_log:backtest.report.strategy_log.slice(-25),logs:backtest.report.logs.slice(-50)}:null,
     backtest_history:backtest.history,backtest_comparisons:backtest.comparisons,
-    connection:{status:nativeConnection.status,remembered,encrypted:secureAvailable()},
-    analyst_events:[...(service?.analystEvents??[]),...backtest.analystEvents].sort((a,b)=>a.at.localeCompare(b.at)).slice(-80),
+    connection:{status:nativeConnection.status,remembered,encrypted:secureAvailable(),busy:connectionBusy,has_ca:nativeConnection.hasCa},
+    analyst_events:[...(service?.analystEvents??[]).map(e=>({...e,context:'live' as const})),...backtest.analystEvents.map(e=>({...e,context:'replay' as const}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-80),
     replay:backtest.frame??null,replay_paused:backtest.clock.paused,replay_speed:backtest.clock.speed,
     replay_symbols:replaySymbols(),codex_models:codexModels()} satisfies DesktopState));
   handle('trader:command',async value => {
     if (typeof value !== 'string' || value.length > 2000 || !service) throw new Error('未知指令或程式尚未啟動');
     if (value.trim() === 'exit') { await exit(); return '結束程式'; }
+    if(!smoke&&mode==='paper'&&/^(?:decide|review|watch|start-auto|auto\s+on)(?:\s|$)/.test(value.trim()))
+      throw new Error('模擬策略請從主視窗開始歷史模擬，AI 只會使用模擬時間以前的資料');
     return service.command(value);
   });
   handle('trader:settings',async value => {
     if (typeof value !== 'string' || value.length > 20000 || !service) throw new Error('設定內容不合法');
     const settings = SettingsSchema.parse(JSON.parse(value));
     if(settings.mode!==mode)throw new Error('設定中的模式需使用「切換並重新連線」變更');
+    if(settings.base_url!==service.engine.settings.base_url)throw new Error('連線由程式自動管理，無需設定服務網址');
     if(settings.base_url!==service.engine.settings.base_url||settings.stock_account_index!==service.engine.settings.stock_account_index){
       loopbackOrigin(settings.base_url);
       if(service.store.orders(true).length||service.engine.account?.orders.some(active))throw new Error('目前仍有未完成委託，不能變更連線設定');
@@ -154,8 +162,10 @@ function registerIpc(): void {
   });
   handle('trader:configure',async value => {
     const next = z.enum(['paper','live']).parse(value);
+    if(backtest.progress.running||connectionBusy)throw new Error('目前仍有模擬或連線在進行，請先停止再切換模式');
     if (service?.store.orders(true).length||service?.engine.account?.orders.some(active)) throw new Error('目前模式仍有未完成委託，請先核對並處理');
     if (next === 'live') {
+      if(nativeConnection.connected&&!nativeConnection.hasCa)throw new Error('實盤需要 CA 憑證，請在帳戶設定選取憑證後重新連線');
       const answer = await dialog.showMessageBox(window!,{type:'warning',buttons:['取消','開啟實盤監控'],defaultId:0,cancelId:0,
         message:'切換到實盤帳戶監控',detail:'自動交易需另外完成本機授權並啟用 auto on。請先核對券商帳戶、交割與可賣庫存，並選取有效 CA。'});
       if (answer.response !== 1) return '已取消切換';
@@ -185,9 +195,8 @@ function registerIpc(): void {
   handle('trader:backtest-cancel',()=>backtest.cancel());
   handle('trader:backtest-select',value=>{if(typeof value!=='string')throw new Error('回測報表識別不合法');return backtest.select(value);});
   handle('trader:file',async value=>{
-    const kind=z.enum(['ca','cli']).parse(value);
-    const result=await dialog.showOpenDialog(window!,{title:kind==='ca'?'選取 CA 憑證':'選取 Shioaji 官方執行檔',properties:['openFile'],
-      filters:kind==='ca'?[{name:'CA 憑證',extensions:['pfx','p12']}]:[{name:'Shioaji',extensions:process.platform==='win32'?['exe']:['*']}]});
+    z.literal('ca').parse(value);
+    const result=await dialog.showOpenDialog(window!,{title:'選取 CA 憑證',properties:['openFile'],filters:[{name:'CA 憑證',extensions:['pfx','p12']}]});
     return result.canceled?'':result.filePaths[0]??'';
   });
   const apiConnect=async(input:unknown):Promise<string>=>{
@@ -196,16 +205,16 @@ function registerIpc(): void {
     connectionBusy=true;
     try{const settings=SettingsSchema.parse({...service.engine.settings,auto_execute:false});
       const validated=ConnectionInputSchema.parse(input);await service.close();service=undefined;
-      await nativeConnection.close();await nativeConnection.start(validated,settings.base_url,mode==='live');
+      await nativeConnection.close();await nativeConnection.start(validated,mode==='live');
       await vault.save(validated);remembered=validated.remember;await connect(mode,settings);
-      return initialError||'API 連線完成，已核對真實行情；可開始模擬或 Codex 分析';
+      return initialError||'Shioaji 已連線，可開始模擬或 Codex 分析';
     }finally{connectionBusy=false;if(!service)await connect(mode);}
   };
   handle('trader:connect-api',apiConnect);
   handle('trader:connect-saved',async()=>{const input=await vault.read();if(!input)throw new Error('尚未記住 API 金鑰');return apiConnect(input);});
   handle('trader:forget-credentials',async()=>{await vault.clear();remembered=false;return '已移除記住的金鑰與憑證設定';});
   handle('trader:chart',async value=>{
-    const request=ChartRequestSchema.parse(value);if(request.source==='replay')return backtest.chart(request);
+    const request=ChartRequestSchema.parse(value);if(request.source==='replay'||smoke)return backtest.chart({...request,source:'replay'});
     if(!service?.engine.connected&&!smoke)throw new Error('圖表需要先連接 Shioaji 真實行情');
     if(chartBusy)throw new Error('图表資料正在載入');chartBusy=true;
     try{return await liveChart(request,service!.engine.settings,join(dataRoot,'backtests','cache'),chartAbort.signal);}
@@ -226,7 +235,7 @@ function registerIpc(): void {
     loginAbort=new AbortController();loginStatus='已啟動官方 Codex 登入，請在瀏覽器完成；有效期限五分鐘';
     loginTask=promisify(execFile)(bundledCodexPath(),['-c','cli_auth_credentials_store="file"','login'],{
       env:codexEnvironment(process.env,profile),timeout:300000,windowsHide:true,signal:loginAbort.signal})
-      .then(()=>{loginStatus='Codex 登入完成。請將 codex_enabled 設為 true，或按「啟用 Codex 定時分析」。';})
+      .then(()=>{loginStatus='Codex 登入完成，可儲存設定並開始分析。';})
       .catch(()=>{loginStatus='Codex 登入未完成。請確認瀏覽器、網路與帳戶權限；也可依 README 使用官方 CLI 登入。';})
       .finally(()=>{loginTask=undefined;});return loginStatus;
   });
@@ -257,6 +266,12 @@ async function smokeTest(): Promise<void> {
   if (process.platform === 'win32' && !tray) throw new Error('Windows 系統匣未啟動');
   const version = await promisify(execFile)(bundledCodexPath(),['--version'],{timeout:20000,windowsHide:true});
   if (!version.stdout.includes('codex')) throw new Error('Codex 打包執行檔無法啟動');
+  if(!process.argv.includes('--ui-only')||app.isPackaged){const binary=await brokerPath();
+    const native=await promisify(execFile)(binary,['--version'],{timeout:20000,windowsHide:true,env:{...process.env,PATH:''}});
+    if(!native.stdout.includes('1.7.7'))throw new Error('內建 Shioaji 版本未通過');
+    const help=await promisify(execFile)(binary,['server','start','--help'],{timeout:20000,windowsHide:true});
+    if(!help.stdout.includes('--no-open'))throw new Error('內建 Shioaji 啟動方式未通過');
+  }
   if (!window.webContents.isLoading()) await verifyRenderer();
   else await new Promise<void>((resolve,reject) => {
     window!.webContents.once('did-finish-load',() => { void verifyRenderer().then(resolve,reject); });
@@ -274,45 +289,58 @@ async function smokeTest(): Promise<void> {
   if(!backtest.report||backtest.report.status!=='COMPLETED'||!backtest.report.metrics.filled_orders)throw new Error('打包後歷史模擬未通過');
   if(backtest.comparisons.length!==2)throw new Error('打包後排程比較未通過');
   await verifyRenderer();
-  // A repeatable desktop viewport keeps CI's small remote screen from cropping documentation screenshots.
   window.webContents.debugger.attach('1.3');
-  await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
-  await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-source').value='replay';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-interval').value='15m';document.querySelector('#chart-form').requestSubmit();})()`);
-  await new Promise(resolve=>setTimeout(resolve,6500));
   const artifacts=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(artifacts,{recursive:true});
-  for(const page of ['overview','strategy','simulation','orders','settings']){
-    const rendered=await window.webContents.executeJavaScript(`(async()=>{
-      document.querySelector('[data-tab="${page}"]').click();
-      window.scrollTo(0,0);
-      await new Promise(resolve=>setTimeout(resolve,1300));
-      return {headline:document.querySelector('#headline').textContent,
-        watchRows:document.querySelectorAll('#overview-watch tbody tr').length,
-        pnl:document.querySelector('#bt-pnl').textContent,
-        times:document.querySelector('#s-times').value,
-        width:document.documentElement.scrollWidth,viewport:window.innerWidth};
-    })()`);
-    if(rendered.watchRows<5||rendered.pnl==='—'||rendered.times!=='09:15,11:45'||rendered.width>rendered.viewport)throw new Error('桌面排程、觀測、損益顯示或版面溢位未通過');
-    const shot=await window.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:1440,height:1100,scale:1}}) as {data:string};
-    writeFileSync(join(artifacts,`SYNTHETIC-ui-${page}.png`),Buffer.from(shot.data,'base64'));
-    if(page==='simulation'){
-      const y=await window.webContents.executeJavaScript(`document.querySelector('#bt-result').getBoundingClientRect().top+window.scrollY-140`);
-      await window.webContents.executeJavaScript(`window.scrollTo(0,${Math.max(0,Number(y))})`);
-      await new Promise(resolve=>setTimeout(resolve,150));
-      const resultShot=await window.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:true}) as {data:string};
-      writeFileSync(join(artifacts,'SYNTHETIC-ui-results.png'),Buffer.from(resultShot.data,'base64'));
-    }
+  for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
+    await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+    await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-form').requestSubmit();})()`);
+    await new Promise(resolve=>setTimeout(resolve,1800));
+    await verifyLayout('paper');
+    await capture(`SYNTHETIC-ui-paper-${width}.png`,width,height);
   }
+  mode='live';
+  await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width:1600,height:960,deviceScaleFactor:1,mobile:false});
+  await new Promise(resolve=>setTimeout(resolve,1600));await verifyLayout('live');
+  await capture('SYNTHETIC-ui-live.png',1600,960);mode='demo';
+  await new Promise(resolve=>setTimeout(resolve,1200));
+  await window.webContents.executeJavaScript(`document.querySelector('#open-settings').click()`);
+  const credentials=await window.webContents.executeJavaScript(`({visible:document.querySelector('#settings-dialog').open,
+    key:document.querySelector('#api-key').type,secret:document.querySelector('#secret-key').type,ca:!!document.querySelector('#choose-ca'),
+    removed:!!document.querySelector('#cli-path,#connection-url,#choose-cli')})`);
+  if(!credentials.visible||credentials.key!=='password'||credentials.secret!=='password'||!credentials.ca||credentials.removed)throw new Error('帳戶設定未通過');
+  await capture('SYNTHETIC-ui-connection.png',1600,960);
+  await window.webContents.executeJavaScript(`document.querySelector('#settings-dialog').close();document.querySelector('[data-dialog="history-dialog"]').click()`);
+  await capture('SYNTHETIC-ui-history.png',1600,960);
+  await window.webContents.executeJavaScript(`document.querySelector('#history-dialog').close()`);
   await window.webContents.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');window.webContents.debugger.detach();
+  async function capture(name:string,width:number,height:number):Promise<void>{
+    const shot=await window!.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:false,clip:{x:0,y:0,width,height,scale:1}}) as {data:string};
+    writeFileSync(join(artifacts,name),Buffer.from(shot.data,'base64'));
+  }
+  async function verifyLayout(expected:string):Promise<void>{
+    const result=await window!.webContents.executeJavaScript(`(()=>{
+      const visible=selector=>{const node=document.querySelector(selector),box=node.getBoundingClientRect();return box.width>0&&box.height>0&&box.top>=0&&box.bottom<=innerHeight&&box.right<=innerWidth;};
+      return {mode:document.body.dataset.workspace,watchRows:document.querySelectorAll('#overview-watch tbody tr').length,
+        watchPrices:[...document.querySelectorAll('#overview-watch tbody tr td:nth-child(3)')].some(cell=>cell.textContent!=='—'),pnl:document.querySelector('#bt-pnl').textContent,
+        panels:['.watch-panel','.positions-panel','.chart-panel','.codex-panel','.execution-panel'].every(visible),
+        simulation:visible('.simulation-controls'),equity:visible('.equity-panel'),orders:visible('#orders'),
+        pages:document.querySelectorAll('[data-page],[data-tab]').length,width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,
+        viewport:innerWidth,viewportHeight:innerHeight,times:document.querySelector('#s-times').value,
+        settings:document.querySelector('#settings-dialog').open};})()`);
+    if(result.mode!==expected||!result.panels||result.pages||result.width>result.viewport||result.height>result.viewportHeight||result.settings
+      ||expected==='paper'&&(!result.simulation||!result.equity||result.watchRows<5||!result.watchPrices||result.pnl==='—')
+      ||expected==='live'&&(!result.orders||result.simulation||result.equity))throw new Error('單一工作台版面未通過：'+JSON.stringify(result));
+  }
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
-  console.log('Electron five-page graphical workbench, isolated IPC, watchlist/rule execution, automatic simulation comparison and tray: PASS'); await exit();
+  console.log('Electron single workspace at 1366/1600/1920, both mode layouts, persistent Codex, built-in Shioaji, encrypted credentials, replay and tray: PASS'); await exit();
 }
 async function verifyRenderer(): Promise<void> {
   const result = await window!.webContents.executeJavaScript(`(async () => ({ bridge: typeof window.trader?.state === 'function',
     node: typeof window.require, status: (await window.trader.state()).status,
-    pages:document.querySelectorAll('[data-page]').length,
+    workspaces:document.querySelectorAll('.terminal-grid').length,codex:!!document.querySelector('.codex-panel'),
     csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content }))()`);
-  if (!result.bridge || result.node !== 'undefined' || !result.status || !result.csp || result.pages!==5) throw new Error('安全 IPC 或五頁圖形介面未載入');
+  if (!result.bridge || result.node !== 'undefined' || !result.status || !result.csp || result.workspaces!==1||!result.codex) throw new Error('安全 IPC 或單一工作台未載入');
 }
 async function exit(): Promise<void> {
   if (quitting) return;
