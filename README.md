@@ -30,7 +30,10 @@
 5. 使用實盤前核對帳戶、費率、交割款與 CA，再完成本機授權並啟動自動交易。
 
 ![歷史模擬](docs/screenshots/simulation.png)
+[查看完整損益與成交畫面](docs/screenshots/simulation-results.png)
+
 ![Codex 控制台](docs/screenshots/codex.png)
+![委託與持倉](docs/screenshots/orders.png)
 ![API 與 CA 設定](docs/screenshots/connection.png)
 
 ## 開發
