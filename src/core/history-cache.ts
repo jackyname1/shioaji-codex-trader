@@ -6,12 +6,13 @@ import { historicalKbars } from '../broker/historical-format.js';
 import { type ShioajiHttpBroker } from '../broker/http.js';
 import { addDays, twDay } from './models.js';
 import { historyWindows, validateCachedPoints } from './chart.js';
-import type { HistoryPoint } from './backtest-data.js';
+import {normalizeHistoryPoints,type HistoryPoint} from './backtest-data.js';
 import { BrokerError, brokerStageIssue } from '../broker/health.js';
 
 let nextHistoryRequest=0;
 export async function cachedHistory(broker: ShioajiHttpBroker, root: string | undefined, symbol: string, exchange: 'TSE' | 'OTC',
-  start: string, end: string, cutoff: string, signal: AbortSignal, progress: (message: string) => void = () => undefined): Promise<HistoryPoint[]> {
+  start: string, end: string, cutoff: string, signal: AbortSignal, progress: (message: string) => void = () => undefined,
+  onNormalization:(counts:{duplicates:number;revisions:number})=>void=()=>undefined): Promise<HistoryPoint[]> {
   if (root) await mkdir(root, { recursive: true, mode: 0o700 });
   const today = twDay(new Date()), pastEnd = end < today ? end : addDays(today, -1);
   const windows = start <= pastEnd ? historyWindows(start, pastEnd) : [];
@@ -24,8 +25,8 @@ export async function cachedHistory(broker: ShioajiHttpBroker, root: string | un
     const path = root ? join(root, key + '.json') : undefined;
     let batch: HistoryPoint[] | undefined;
     if (path && range.end < today) try {
-      const cached = validateCachedPoints(JSON.parse(await readFile(path, 'utf8')));
-      if (cached.length&&cached.every(p => p.symbol === symbol && twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end)) batch = cached;
+      const normalized=normalizeHistoryPoints(validateCachedPoints(JSON.parse(await readFile(path, 'utf8'))),'latest'),cached=normalized.points;
+      if (cached.length&&cached.every(p => p.symbol === symbol && twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end)) {batch = cached;onNormalization(normalized);}
     } catch { /* Invalid or absent cache is fetched once. */ }
     progress(`${symbol} · ${range.start} — ${range.end}${batch ? ' · 已快取' : ' · 下載中'}`);
     if (!batch) {
@@ -40,7 +41,9 @@ export async function cachedHistory(broker: ShioajiHttpBroker, root: string | un
           progress(`${symbol} · 歷史服務暫時忙碌，正在重試 ${attempt+1}/${retries.length}`);
           await delay(retries[attempt]!,undefined,{signal});}
       }
-      try{batch = historicalKbars(raw, symbol).filter(p => twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end);}
+      try{const normalized=normalizeHistoryPoints(historicalKbars(raw,symbol),'latest');onNormalization(normalized);
+        batch=normalized.points.filter(p => twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end);
+        if(normalized.duplicates)progress(`${symbol} · 已整理 ${normalized.duplicates} 筆重複 K 線${normalized.revisions?`，採用 ${normalized.revisions} 筆服務端修訂`:''}`);}
       catch(error){throw brokerStageIssue('歷史 K 線',error);}
       // Never make today's partial data look like a complete immutable cache.
       // The immutable cache retains the full API window. A simulation's cutoff only filters its returned view.
@@ -50,5 +53,5 @@ export async function cachedHistory(broker: ShioajiHttpBroker, root: string | un
     }
     result.push(...batch.filter(p => Date.parse(p.at) <= Date.parse(cutoff)));
   }
-  return result.sort((a,b)=>a.at.localeCompare(b.at));
+  return normalizeHistoryPoints(result,'latest').points;
 }

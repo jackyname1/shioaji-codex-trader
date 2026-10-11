@@ -20,16 +20,28 @@ export interface HistoryDataset {
   source:string; synthetic:boolean; frequency:'MINUTE'|'DAILY'; points:HistoryPoint[];
   names:Record<string,{name:string;exchange:'TSE'|'OTC'}>; limitations:string[];
   calendar?:SessionDay[];
+  normalization?:{duplicates:number;revisions:number};
+}
+/** One closed bar per stock/instant. Provider revisions replace a bar, never add its volume twice. */
+export function normalizeHistoryPoints(input:HistoryPoint[],conflicts:'reject'|'latest'='reject'):{points:HistoryPoint[];duplicates:number;revisions:number} {
+  const unique=new Map<string,HistoryPoint>();let duplicates=0,revisions=0;
+  for(const raw of input){const parsed=HistoryPointSchema.parse(raw),p={...parsed,at:new Date(parsed.at).toISOString()},key=p.symbol+':'+p.at;
+    const previous=unique.get(key);
+    if(previous){duplicates++;
+      const equal=(['open','high','low','close','bid','ask'] as const).every(k=>previous[k]===undefined||p[k]===undefined?previous[k]===p[k]:d(previous[k]!).eq(p[k]!))
+        &&(['volume_shares','bid_shares','ask_shares'] as const).every(k=>previous[k]===p[k]);
+      if(!equal){if(conflicts==='reject')throw new Error(`回測股票 ${p.symbol} 在 ${new Date(p.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})} 的價格或成交量不一致，請核對 CSV 後重新匯入`);revisions++;}
+    }
+    unique.set(key,p);
+  }
+  return {points:[...unique.values()].sort((a,b)=>a.at.localeCompare(b.at)||a.symbol.localeCompare(b.symbol)),duplicates,revisions};
 }
 export function validateDataset(input: HistoryDataset): HistoryDataset {
   if (!input.points.length || input.points.length > 3000000) throw new Error('回測資料必須有 1–3,000,000 筆行情');
   if (new Set(input.points.map(p => p.symbol)).size > 100) throw new Error('回測最多 100 個普通股票');
-  const points = input.points.map(p => HistoryPointSchema.parse(p)).map(p => ({...p,at:new Date(p.at).toISOString()}))
-    .sort((a,b) => a.at.localeCompare(b.at) || a.symbol.localeCompare(b.symbol));
-  const seen = new Set<string>();
-  for (const p of points) { const key=p.symbol+':'+p.at;
-    if (seen.has(key)) throw new Error('回測資料有重複的股票／時間'); seen.add(key); }
-  return {...input,points,...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{})};
+  const normalized=normalizeHistoryPoints(input.points);
+  const normalization={duplicates:(input.normalization?.duplicates??0)+normalized.duplicates,revisions:(input.normalization?.revisions??0)+normalized.revisions};
+  return {...input,points:normalized.points,normalization,...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{})};
 }
 export function csvDataset(text: string): HistoryDataset {
   if (Buffer.byteLength(text) > 80000000) throw new Error('回測 CSV 超過 80 MB');

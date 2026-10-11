@@ -5,6 +5,7 @@ function node(tag: string, attrs: Record<string, string | number> = {}, content?
   if (content !== undefined) n.textContent = content; return n;
 }
 export interface ChartOptions { ma: boolean; bands: boolean; rsi: boolean; offset: number; count: number;
+  priceScale?:number;
   levels: { price: number; label: string; color: string }[]; fills: { at: string; action: string; price: string }[] }
 export function candles(host: HTMLElement, data: ChartData, options: ChartOptions): void {
   const all = data.bars, end = Math.min(all.length, options.offset + options.count), bars = all.slice(options.offset, end);
@@ -17,7 +18,10 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
   const prices = bars.flatMap(b => [b.high, b.low, ...(options.bands ? [b.upper ?? b.high, b.lower ?? b.low] : [])]);
   // Out-of-range protection lines are labeled, without collapsing candle visibility.
   let min = Math.min(...prices), max = Math.max(...prices); const pad = Math.max((max - min) * .08, max * .002); min -= pad; max += pad;
+  const middle=(min+max)/2,half=(max-min)/2/(options.priceScale??1);min=middle-half;max=middle+half;
   const y = (p: number): number => bottom - (p - min) / (max - min) * (bottom - top);
+  const defs=node('defs'),clip=node('clipPath',{id:'chart-price-area'});clip.append(node('rect',{x:left,y:top,width:width-left-right,height:bottom-top}));defs.append(clip);svg.append(defs);
+  const priceLayer=node('g',{'clip-path':'url(#chart-price-area)'});svg.append(priceLayer);
   const step = (width - left - right) / bars.length, x = (i: number): number => left + (i + .5) * step;
   for (let i = 0; i <= 5; i++) { const price = min + (max - min) * i / 5, yy = y(price);
     svg.append(node('line', { x1: left, x2: width - right, y1: yy, y2: yy, stroke: '#233345', 'stroke-dasharray': '3 5' }),
@@ -25,14 +29,14 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
   }
   const path = (key: 'ma5' | 'ma20' | 'ma60' | 'upper' | 'lower', color: string): void => {
     const d = bars.map((b, i) => b[key] === undefined ? '' : `${i === 0 || bars[i - 1]![key] === undefined ? 'M' : 'L'}${x(i)},${y(b[key]!)}`).join(' ');
-    svg.append(node('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.5, ...(key === 'upper' || key === 'lower' ? { 'stroke-dasharray': '4 3', opacity: .55 } : {}) }));
+    priceLayer.append(node('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.5, ...(key === 'upper' || key === 'lower' ? { 'stroke-dasharray': '4 3', opacity: .55 } : {}) }));
   };
   if (options.bands) { path('upper', '#8499f1'); path('lower', '#8499f1'); }
   const volumeMax = Math.max(1, ...bars.map(b => b.volume));
   for (let i = 0; i < bars.length; i++) { const b = bars[i]!, color = b.close >= b.open ? '#ff7d86' : '#44d6aa', xx = x(i), cw = Math.max(1, Math.min(9, step * .62));
     const group = node('g'); group.append(node('title', {}, `${new Date(b.at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false })}\n開 ${b.open} 高 ${b.high} 低 ${b.low} 收 ${b.close}\n成交量 ${b.volume.toLocaleString()} 股`),
-      node('line', { x1: xx, x2: xx, y1: y(b.high), y2: y(b.low), stroke: color, 'stroke-width': 1 }),
-      node('rect', { x: xx - cw / 2, y: Math.min(y(b.open), y(b.close)), width: cw, height: Math.max(1, Math.abs(y(b.open) - y(b.close))), fill: color }),
+      node('line', { x1: xx, x2: xx, y1: y(b.high), y2: y(b.low), stroke: color, 'stroke-width': 1,'clip-path':'url(#chart-price-area)' }),
+      node('rect', { x: xx - cw / 2, y: Math.min(y(b.open), y(b.close)), width: cw, height: Math.max(1, Math.abs(y(b.open) - y(b.close))), fill: color,'clip-path':'url(#chart-price-area)' }),
       node('rect', { x: xx - cw / 2, y: volumeBase - b.volume / volumeMax * volumeHeight, width: cw, height: Math.max(1, b.volume / volumeMax * volumeHeight), fill: color, opacity: .45 })); svg.append(group);
   }
   if (options.ma) { path('ma5', '#f9c878'); path('ma20', '#78b6fa'); path('ma60', '#b998ed'); }
@@ -58,11 +62,16 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
   for (const i of [0, Math.floor(bars.length / 2), bars.length - 1]) svg.append(node('text', { x: x(i), y: axisY, fill: '#7d93a7', 'font-size': 10, 'text-anchor': i === 0 ? 'start' : i === bars.length - 1 ? 'end' : 'middle' },
     new Date(bars[i]!.at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', ...(data.interval === '1d' ? {} : { hour: '2-digit', minute: '2-digit' }), hour12: false })));
   const cursor = node('line', { x1: 0, x2: 0, y1: top, y2: volumeBase, stroke: '#91aabd', 'stroke-dasharray': '3 3', visibility: 'hidden' }); svg.append(cursor);
-  svg.addEventListener('pointermove', event => { const rect = svg.getBoundingClientRect(), xx = (event.clientX - rect.left) / rect.width * width;
+  const horizontal=node('line',{x1:left,x2:width-right,y1:0,y2:0,stroke:'#91aabd','stroke-dasharray':'3 3',visibility:'hidden'}),priceLabel=node('text',{x:width-right+7,y:0,fill:'#c8def5','font-size':11,visibility:'hidden'});svg.append(horizontal,priceLabel);
+  host.dataset.offset=String(options.offset);host.dataset.count=String(bars.length);host.dataset.priceScale=String(options.priceScale??1);
+  host.dataset.asof=data.asof;host.dataset.endAt=bars.at(-1)!.at;
+  svg.addEventListener('pointermove', event => { const rect = svg.getBoundingClientRect(), xx = (event.clientX - rect.left) / rect.width * width,yy=(event.clientY-rect.top)/rect.height*height;
     const i = Math.max(0, Math.min(bars.length - 1, Math.floor((xx - left) / step))); cursor.setAttribute('x1', String(x(i))); cursor.setAttribute('x2', String(x(i))); cursor.setAttribute('visibility', 'visible');
-    host.dataset.hover = `${bars[i]!.at} · O ${bars[i]!.open} H ${bars[i]!.high} L ${bars[i]!.low} C ${bars[i]!.close}`;
+    const inPrice=yy>=top&&yy<=bottom;horizontal.setAttribute('visibility',inPrice?'visible':'hidden');priceLabel.setAttribute('visibility',inPrice?'visible':'hidden');
+    if(inPrice){horizontal.setAttribute('y1',String(yy));horizontal.setAttribute('y2',String(yy));priceLabel.setAttribute('y',String(yy-4));priceLabel.textContent=(min+(bottom-yy)/(bottom-top)*(max-min)).toFixed(2);}
+    const b=bars[i]!;host.dataset.hover=`${new Date(b.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})} · 開 ${b.open} 高 ${b.high} 低 ${b.low} 收 ${b.close} · 量 ${b.volume.toLocaleString()} 股`;
   });
-  svg.addEventListener('pointerleave', () => cursor.setAttribute('visibility', 'hidden')); host.replaceChildren(svg);
+  svg.addEventListener('pointerleave', () => {for(const line of [cursor,horizontal,priceLabel])line.setAttribute('visibility','hidden');}); host.replaceChildren(svg);
 }
 export function equityChart(host: HTMLElement, rows: { at: string; equity: string }[], initial: number): void {
   if (!rows.length) { host.textContent = '模擬執行後會顯示資產曲線'; return; }

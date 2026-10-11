@@ -17,9 +17,9 @@ export function workspaceRuntime(state: DesktopState): RuntimeView | null {
     plan: frame?.plan ?? null, protections: frame?.protections ?? [], orders: account?.orders.filter(o=>!['FILLED','CANCELLED','REJECTED'].includes(o.status)) ?? [],
     watch: frame?.watch ?? { ...runtime.watch, entries: [], changes: report?.watch_changes ?? [],
       asof: report?.asof ?? '', healthy: false, issue: report ? '已載入保存的模擬結果' : '等待開始模擬' },
-    decisions: (frame?.plan?.analysis.decisions ?? []).map(d => ({ symbol: d.symbol, state: 'WAIT', reason: d.reason, source: 'REPLAY' })),
-    next_strategy_at: null, analyzing: state.backtest_progress.running && state.backtest_progress.phase === 'ANALYSIS',
-    analysis_status: state.backtest_progress.message, scanning: false, last_monitor_at: frame?.at ?? '',
+    decisions: frame?.decisions??(frame?.plan?.analysis.decisions ?? []).map(d => ({ symbol: d.symbol, state: 'WAIT', reason: d.reason, source: 'REPLAY' })),
+    next_strategy_at: null, analyzing: state.backtest_progress.running && ['ANALYSIS','REVIEW'].includes(state.backtest_progress.phase),
+    analysis_status: state.backtest_progress.message, scanning: false, last_monitor_at: frame?.last_monitor_at??frame?.at??'',
     auto: state.backtest_progress.running, paused: state.replay_paused, session: !!frame,
     blocked: false, killed: state.backtest_progress.phase === 'CANCELLED' };
 }

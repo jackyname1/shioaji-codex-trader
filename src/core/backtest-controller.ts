@@ -29,7 +29,9 @@ export class BacktestController {
   private useReport(r:BacktestReport):void {
     this.report=r;this.frame=r.final_frame;
     this.progress={running:false,phase:r.status,day:r.request.end,points:0,total_points:0,
-      codex_calls:r.metrics.codex_calls,message:'已載入測試結果，可查看與匯出'};
+      codex_calls:r.metrics.codex_calls,at:r.asof,last_error:r.failures?.at(-1)?.issue,
+      message:r.status==='FAILED'?'本次沒有有效盤中策略：'+(r.failures?.at(-1)?.issue??'請查看策略與資料紀錄'):'已載入測試結果，可查看與匯出'};
+    this.analystEvents=(r.workflow??[]).slice(-80).map(e=>({at:e.at,asof:e.at,stage:e.stage,message:e.message,model:'模擬執行引擎',reasoning:'程序步驟'}));
   }
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
@@ -85,21 +87,26 @@ export class BacktestController {
           if(request.strategy==='codex'&&consumed>=request.max_codex_calls){this.progress.message='整批 Codex 呼叫額度已用完，其餘比較未執行';break;}
           const runRequest={...request,comparison_intervals:[],decision_interval_minutes:intervals[index]!,max_codex_calls:Math.max(1,request.max_codex_calls-consumed)};
           const r=await runBacktest(runRequest,dataset,snapshotSettings,analyst?(input,sig)=>analyst.analyze(input,sig):undefined,signal,
-            p=>{this.progress={...p,codex_calls:consumed+p.codex_calls,run:index+1,total_runs:intervals.length};},this.clock,frame=>{this.frame=frame;});
+            p=>{this.progress={...p,codex_calls:consumed+p.codex_calls,run:index+1,total_runs:intervals.length};},this.clock,frame=>{this.frame=frame;},event=>{
+              this.analystEvents.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,model:'模擬執行引擎',reasoning:'程序步驟'});this.analystEvents=this.analystEvents.slice(-80);
+            });
           r.dataset_id=datasetId;
           this.report=r;consumed+=r.metrics.codex_calls;this.comparisons.push(reportSummary(r));await this.save(r);
           if(r.status==='CANCELLED')break;
         }
         const exhausted=this.comparisons.length<intervals.length&&!signal.aborted;
         this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':exhausted?'PARTIAL':this.report?.status??'FAILED',codex_calls:consumed,
-          message:exhausted?'呼叫上限為整批共用；尚未執行所有比較。已完成結果可查看與匯出':'結果已保存，可比較排程、查看成交與匯出'};
+          last_error:this.report?.failures?.at(-1)?.issue??this.progress.last_error,next_event_at:'',
+          message:signal.aborted?'已停止，保存已完成的步驟與成交':exhausted?'呼叫上限為整批共用；尚未執行所有比較。已完成結果可查看與匯出':
+            this.report?.status==='FAILED'?'本次沒有有效盤中策略：'+(this.report.failures?.at(-1)?.issue??'請查看資料與策略紀錄'):
+            this.report?.status==='PARTIAL'?'部分步驟未完成：'+(this.report.failures?.at(-1)?.issue??(this.report.quality.skipped_strategies?'已達 Codex 呼叫上限':'部分交易日缺少行情')):'完整流程已執行並保存，可查看每日選股、條件、委託與成交'};
       }catch(e){this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':'FAILED',
         message:signal.aborted?'已停止測試；已完成結果保留':e instanceof Error&&/^(回測|歷史|Shioaji|Codex|證交所|日期|股票)/.test(e.message)?e.message:'回測資料或分析未通過驗證，請核對歷史日期、暖機資料、官方服務與 Codex 登入'};}
     })().finally(()=>{this.task=undefined;});
     return intervals.length>1?`已啟動 ${intervals.length} 組自動比較；Codex 呼叫上限為整批共用`:'已啟動全自動歷史測試，交易監控持續';
   }
-  control(command:ReplayCommand):string{if(!this.task)throw new Error('回測尚未執行');this.clock.command(command);return command==='pause'?'回放已暫停':command==='step'?'前進一個事件':'回放已繼續';}
-  speed(value:number):string{this.clock.setSpeed(value);return value?'回放速度 '+value+'×':'使用最快速度估算';}
+  control(command:ReplayCommand):string{if(!this.task)throw new Error('回測尚未執行');this.clock.command(command);return command==='pause'?'目前步驟完成後暫停，保留尚未執行的事件':command==='step'?'完整執行下一個觸發事件後暫停':'依序繼續全部模擬步驟';}
+  speed(value:number):string{this.clock.setSpeed(value);return value?'時間快進 '+value+'×；每個步驟仍完整執行':'直接前進至觸發點；逐次等待 Codex、送單與核對完成';}
   async marketData():Promise<HistoryDataset>{
     if(this.dataset)return this.dataset;
     const id=this.report?.dataset_id;if(!id||! /^[a-f0-9-]{36}$/.test(id))throw new Error('回測舊版報表沒有保存原始行情，請重新執行');

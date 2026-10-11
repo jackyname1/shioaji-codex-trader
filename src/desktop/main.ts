@@ -153,7 +153,9 @@ function registerIpc(): void {
       features:service.engine.watchFeatures,metadata:service.engine.metadata,
       decisions:[...service.engine.decisionStates].map(([symbol,state])=>({symbol,...state}))}:null,
     backtest_progress:backtest.progress,backtest_result:backtest.report?{...backtest.report,fills:backtest.report.fills.slice(-80),
-      orders:backtest.report.orders.slice(-80),strategy_log:backtest.report.strategy_log.slice(-25),logs:backtest.report.logs.slice(-50)}:null,
+      orders:backtest.report.orders.slice(-80),strategy_log:backtest.report.strategy_log.slice(-25),logs:backtest.report.logs.slice(-50),
+      workflow:backtest.report.workflow?.slice(-400),failures:backtest.report.failures?.slice(-20),
+      timeline:backtest.report.timeline?.filter((_,index,rows)=>index%Math.max(1,Math.ceil(rows.length/1500))===0||index===rows.length-1)}:null,
     backtest_history:backtest.history,backtest_comparisons:backtest.comparisons,
     connection:{status:nativeConnection.status,remembered:credentialState.remembered,credential_state:credentialState.state,
       credential_message:credentialState.message,encrypted:secureAvailable(),busy:connectionBusy||operations.busy,has_ca:nativeConnection.hasCa},
@@ -351,6 +353,7 @@ async function smokeTest(): Promise<void> {
     await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-form').requestSubmit();})()`);
     await new Promise(resolve=>setTimeout(resolve,1800));
     await verifyLayout('paper');
+    if(width===1600)await verifyChartInteraction();
     await capture(`SYNTHETIC-ui-paper-${width}.png`,width,height);
   }
   await service.command('auto off');mode='live';
@@ -383,6 +386,36 @@ async function smokeTest(): Promise<void> {
   async function capture(name:string,width:number,height:number):Promise<void>{
     const shot=await window!.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:false,clip:{x:0,y:0,width,height,scale:1}}) as {data:string};
     writeFileSync(join(artifacts,name),Buffer.from(shot.data,'base64'));
+  }
+  async function verifyChartInteraction():Promise<void>{
+    const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
+    const view=()=>window!.webContents.executeJavaScript(`(()=>{const host=document.querySelector('#market-chart'),box=host.getBoundingClientRect();return {
+      offset:Number(host.dataset.offset),count:Number(host.dataset.count),scale:Number(host.dataset.priceScale),end:host.dataset.endAt,
+      maximum:Number(document.querySelector('#chart-pan').max),disabled:document.querySelector('#chart-pan').disabled,
+      x:box.x+box.width*.5,y:box.y+box.height*.45,right:box.right-25,dragging:host.classList.contains('dragging')};})()`);
+    await window!.webContents.executeJavaScript(`(()=>{const select=document.querySelector('#chart-window');select.value='30';select.dispatchEvent(new Event('change'));document.querySelector('#chart-latest').click();})()`);await pause();
+    const latest=await view();if(latest.count!==30||latest.disabled||latest.offset!==latest.maximum)throw new Error('圖表縮放與最新位置未通過');
+    await window!.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseWheel',x:latest.x,y:latest.y,deltaY:-150,deltaX:0});await pause();
+    const zoomed=await view();if(zoomed.count>=latest.count||zoomed.count<15)throw new Error('圖表滑鼠滾輪縮放未通過');
+    await window!.webContents.executeJavaScript(`document.querySelector('#chart-latest').click()`);await pause();const origin=await view();
+    await window!.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mousePressed',x:origin.x,y:origin.y,button:'left',clickCount:1});
+    await window!.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:origin.x+140,y:origin.y,button:'left',buttons:1});
+    await window!.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseReleased',x:origin.x+140,y:origin.y,button:'left',clickCount:1});await pause();
+    const dragged=await view();if(dragged.offset>=origin.offset||dragged.dragging)throw new Error('圖表滑鼠拖曳平移未通過');
+    await window!.webContents.executeJavaScript(`(()=>{const range=document.querySelector('#chart-pan');range.value='0';range.dispatchEvent(new Event('input'));})()`);await pause();
+    const slider=await view();if(slider.offset!==0)throw new Error('圖表底部時間軸未通過');
+    await window!.webContents.executeJavaScript(`document.querySelector('#chart-form').requestSubmit()`);await new Promise(resolve=>setTimeout(resolve,1200));
+    const refreshed=await view();if(refreshed.offset!==0||refreshed.count!==slider.count)throw new Error('行情更新重設正在檢視的圖表位置');
+    await window!.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mousePressed',x:refreshed.right,y:refreshed.y,button:'left',clickCount:1});
+    await window!.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:refreshed.right,y:refreshed.y+40,button:'left',buttons:1});
+    await window!.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseReleased',x:refreshed.right,y:refreshed.y+40,button:'left',clickCount:1});await pause();
+    const scaled=await view();if(scaled.scale===refreshed.scale)throw new Error('圖表右側價格軸拖曳縮放未通過');
+    if(Date.parse(scaled.end)>Date.parse(backtest.report!.asof))throw new Error('圖表操作看見模擬時間以後的行情');
+    await window!.webContents.executeJavaScript(`document.querySelector('#market-chart').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))`);await pause();
+    const reset=await view();if(reset.scale!==1||reset.offset!==reset.maximum)throw new Error('圖表雙擊重設未通過');
+    const result=await window!.webContents.executeJavaScript(`({strategy:document.querySelector('#bt-strategy').value,flow:document.querySelectorAll('[data-replay-stage]').length,workflow:document.querySelectorAll('#bt-workflow tbody tr').length})`);
+    if(result.strategy!=='codex'||result.flow!==5||result.workflow<5)throw new Error('每日 Codex 模擬流程與完整步驟報表未通過');
+    console.log('Electron wheel zoom, pointer pan, price-axis drag, bottom range, preserved viewport, cutoff and replay workflow: PASS');
   }
   async function verifyLayout(expected:string):Promise<void>{
     const result=await window!.webContents.executeJavaScript(`(()=>{
