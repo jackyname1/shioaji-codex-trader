@@ -78,7 +78,7 @@ function renderRuntime(state:DesktopState):void {
   text('experience',state.experience);text('codex-login-status',state.codex_login);
   if(!r||!s){text('headline','等待連線');return;}
   const labels={demo:'介面測試資料',paper:'模擬 · 真實行情',readonly:'實盤監控',live:'實盤 · 真實帳戶'};
-  text('mode-badge',r.mode==='demo'?'介面測試 · 虛構行情':paper?'真實行情 · 歷史模擬':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
+  text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':paper?'真實行情 · 歷史模擬':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
   const valid=r.plan&&Date.parse(r.plan.analysis.expires_at)>Date.parse(workspaceCutoff(state));
   text('headline',!r.connected?'等待連線':r.killed?'已停止新委託':!r.auto?'監控已開啟':r.paused?'買進已暫停':!r.session?'交易時段外，持續監控':!valid?'等待有效策略':r.blocked||!r.watch.healthy?'新買進暫停，保護監控持續':'全自動偵測中');
   text('runtime-note',r.mode==='demo'?'虛構行情與模擬資金；日期區間測試可隨時執行。':r.mode==='readonly'?'帳戶核對模式；確認現金、交割與可賣量後再切換。':
@@ -97,9 +97,11 @@ function renderRuntime(state:DesktopState):void {
   }else{text('equity',paper?fmt(value('bt-cash')):'—');text('cash',paper?fmt(value('bt-cash')):'—');text('cash-detail',paper?'設定的初始本金':'等待帳戶資料');text('settlement-detail',paper?'開始模擬後顯示交割款':'等待交割資料');text('data-status',paper?'等待開始模擬':'等待帳戶核對');}
   text('watch-count',r.watch.entries.filter(w=>w.state==='OBSERVE').length);text('watch-detail',r.watch.issue||`保留監控 ${r.watch.entries.filter(w=>w.state==='RETAINED').length} 檔`);
   text('next-label',paper?'模擬時間':'下一輪 Codex');text('next-strategy',paper?time(workspaceCutoff(state)):time(r.next_strategy_at));text('next-detail',paper?stamp(workspaceCutoff(state)):r.next_strategy_at?`${stamp(r.next_strategy_at)} · 台北`:'等待已驗證交易日');
-  text('schedule-strategy',paper?(value('bt-schedule')==='fixed'?value('bt-times'):value('bt-interval')+' 分鐘'):s.strategy_schedule==='fixed'?s.strategy_times.join(' / '):s.decision_interval_minutes+' 分鐘');text('analysis-status',paper?phase[state.backtest_progress.phase]??state.backtest_progress.phase:r.analyzing?'分析中':'等待策略');
-  text('schedule-monitor',(paper?value('bt-monitor'):s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
-  text('schedule-watch',(paper?value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
+  const replaySettings=paper&&!state.backtest_progress.running?state.backtest_result?.request:undefined;
+  text('schedule-strategy',paper?(replaySettings?(replaySettings.strategy_schedule==='fixed'?replaySettings.strategy_times.join(' / '):replaySettings.decision_interval_minutes+' 分鐘'):
+    value('bt-schedule')==='fixed'?value('bt-times'):value('bt-interval')+' 分鐘'):s.strategy_schedule==='fixed'?s.strategy_times.join(' / '):s.decision_interval_minutes+' 分鐘');text('analysis-status',paper?phase[state.backtest_progress.phase]??state.backtest_progress.phase:r.analyzing?'分析中':'等待策略');
+  text('schedule-monitor',(paper?replaySettings?.monitor_interval_seconds??value('bt-monitor'):s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
+  text('schedule-watch',(paper?replaySettings?.watch_refresh_minutes??value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
   el('live-authorization').hidden=r.mode!=='live';
   const live=state.live;
   text('live-state',r.auto&&live.authorized?'實盤交易已啟動':live.authorized?'本次實盤已授權':'實盤尚未授權');
@@ -139,7 +141,7 @@ function renderRuntime(state:DesktopState):void {
 function renderBacktest(state:DesktopState):void {
   const p=state.backtest_progress,r=state.backtest_result;renderReplay(state);
   text('bt-progress-title',phase[p.phase]??p.phase);text('bt-progress-detail',`${p.total_runs&&p.total_runs>1?`第 ${p.run} / ${p.total_runs} 組 · `:''}${p.day} · Codex ${p.codex_calls}`);
-  text('bt-progress-message',p.message);el<HTMLProgressElement>('bt-progress').value=p.total_points?Math.round(p.points/p.total_points*100):0;
+  text('bt-progress-message',p.message);el<HTMLProgressElement>('bt-progress').value=p.total_points?Math.round(p.points/p.total_points*100):p.phase==='COMPLETED'?100:0;
   el<HTMLButtonElement>('bt-run').disabled=p.running;el<HTMLButtonElement>('bt-compare').disabled=p.running;el<HTMLButtonElement>('bt-cancel').disabled=!p.running;
   el('bt-result').hidden=!r;el<HTMLButtonElement>('bt-json').disabled=!r;el<HTMLButtonElement>('bt-csv').disabled=!r;
   if(!r){renderedReport='';table('bt-history',['日期區間','策略排程','淨損益','報酬','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,fmt(h.net_pnl),fmt(h.return_pct)+'%',phase[h.status]??h.status,{label:'檢視',report:h.id}]));return;}

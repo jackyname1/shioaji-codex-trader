@@ -167,6 +167,8 @@ test('fast program replay requires no Codex calls, respects exact end time, and 
   const root = mkdtempSync(join(tmpdir(), 'chart-report-'));
   try { const controller = new BacktestController(root); controller.start(input, SettingsSchema.parse({})); await controller.wait();
     const next = new BacktestController(root); await next.restore();
+    assert.equal(next.progress.phase,next.report!.status);assert.equal(next.progress.total_runs,undefined);
+    assert.equal(next.progress.codex_calls,next.report!.metrics.codex_calls);
     const chart = await next.chart({ source: 'replay', symbol: '9001', start: input.start, end: input.end, interval: '1m' });
     assert.ok(chart.bars.length); assert.ok(chart.bars.every(b => b.at <= next.report!.asof));
   } finally { rmSync(root, { recursive: true, force: true }); }

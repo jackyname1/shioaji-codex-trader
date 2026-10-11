@@ -141,7 +141,8 @@ function registerIpc(): void {
       orders:backtest.report.orders.slice(-80),strategy_log:backtest.report.strategy_log.slice(-25),logs:backtest.report.logs.slice(-50)}:null,
     backtest_history:backtest.history,backtest_comparisons:backtest.comparisons,
     connection:{status:nativeConnection.status,remembered,encrypted:secureAvailable(),busy:connectionBusy||operations.busy,has_ca:nativeConnection.hasCa},
-    live:service?.liveReadiness()??{authorized:false,ready:false,account:'尚未連接帳戶',issues:['請先連接 Shioaji']},
+    live:smoke&&mode==='live'?{authorized:false,ready:false,account:'隔離測試帳戶',issues:['測試資料：不會啟用實盤交易']}
+      :service?.liveReadiness()??{authorized:false,ready:false,account:'尚未連接帳戶',issues:['請先連接 Shioaji']},
     analyst_events:[...(service?.analystEvents??[]).map(e=>({...e,context:'live' as const})),...backtest.analystEvents.map(e=>({...e,context:'replay' as const}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-80),
     replay:backtest.frame??null,replay_paused:backtest.clock.paused,replay_speed:backtest.clock.speed,
     replay_symbols:replaySymbols(),codex_models:codexModels()} satisfies DesktopState));
@@ -220,7 +221,7 @@ function registerIpc(): void {
   handle('trader:chart',async value=>{
     const request=ChartRequestSchema.parse(value);if(request.source==='replay'||smoke)return backtest.chart({...request,source:'replay'});
     if(!service?.engine.connected&&!smoke)throw new Error('圖表需要先連接 Shioaji 真實行情');
-    if(chartBusy)throw new Error('图表資料正在載入');chartBusy=true;
+    if(chartBusy)throw new Error('圖表資料正在載入');chartBusy=true;
     try{return await liveChart(request,service!.engine.settings,join(dataRoot,'backtests','cache'),chartAbort.signal);}
     finally{chartBusy=false;}
   });
@@ -319,8 +320,9 @@ async function smokeTest(): Promise<void> {
   if(!expectedStock||!selected.includes(expectedStock))throw new Error('快速切換股票圖表未通過');
   await window.webContents.executeJavaScript(`document.querySelector('#chart-start').value='2020-03-02';document.querySelector('#chart-end').value='2020-03-03'`);
   await backtest.select(backtest.comparisons[0]!.id);await new Promise(resolve=>setTimeout(resolve,1500));
-  const range=await window.webContents.executeJavaScript(`({start:document.querySelector('#chart-start').value,end:document.querySelector('#chart-end').value})`);
-  if(range.start!==backtest.report.request.start||range.end!==backtest.report.request.end)throw new Error('切換歷史報表圖表日期未通過');
+  const range=await window.webContents.executeJavaScript(`({start:document.querySelector('#chart-start').value,end:document.querySelector('#chart-end').value,schedule:document.querySelector('#schedule-strategy').textContent})`);
+  if(range.start!==backtest.report.request.start||range.end!==backtest.report.request.end
+    ||range.schedule!==backtest.report.request.decision_interval_minutes+' 分鐘'||backtest.progress.total_runs!==undefined)throw new Error('切換歷史報表日期與排程未通過');
   window.webContents.debugger.attach('1.3');
   const artifacts=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(artifacts,{recursive:true});
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){

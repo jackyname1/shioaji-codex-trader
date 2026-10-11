@@ -26,9 +26,14 @@ export class BacktestController {
   progress:BacktestProgress={running:false,phase:'IDLE',day:'',points:0,total_points:0,codex_calls:0,message:'選擇日期與排程，即可開始全自動測試'};
   private abort?:AbortController;private task?:Promise<void>;
   constructor(readonly root:string){}
+  private useReport(r:BacktestReport):void {
+    this.report=r;this.frame=r.final_frame;
+    this.progress={running:false,phase:r.status,day:r.request.end,points:0,total_points:0,
+      codex_calls:r.metrics.codex_calls,message:'已載入測試結果，可查看與匯出'};
+  }
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
-      if(['0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request){this.report=r;this.frame=r.final_frame;this.progress.message='已載入上次測試結果';}
+      if(['0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
       else this.progress.message='上一版報表仍保留在本機；新版請重新執行測試';
     }catch{/* New profile. */}
     await this.loadHistory();
@@ -49,7 +54,7 @@ export class BacktestController {
     if(!/^[a-f0-9-]{36}$/.test(id)||!this.history.some(r=>r.id===id))throw new Error('回測報表識別不合法');
     const r=JSON.parse(await readFile(join(this.root,`report-${id}.json`),'utf8')) as BacktestReport;
     if(r.id!==id||!['0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
-    this.report=r;this.dataset=undefined;this.frame=r.final_frame;return '已載入測試結果';
+    this.useReport(r);this.dataset=undefined;return '已載入測試結果';
   }
   private async save(report:BacktestReport):Promise<void>{
     await mkdir(this.root,{recursive:true,mode:0o700});
