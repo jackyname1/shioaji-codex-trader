@@ -415,6 +415,12 @@ async function smokeTest(): Promise<void> {
     const reset=await view();if(reset.scale!==1||reset.offset!==reset.maximum)throw new Error('圖表雙擊重設未通過');
     const result=await window!.webContents.executeJavaScript(`({strategy:document.querySelector('#bt-strategy').value,flow:document.querySelectorAll('[data-replay-stage]').length,workflow:document.querySelectorAll('#bt-workflow tbody tr').length})`);
     if(result.strategy!=='codex'||result.flow!==5||result.workflow<5)throw new Error('每日 Codex 模擬流程與完整步驟報表未通過');
+    for(const rsi of [true,false]){await window!.webContents.executeJavaScript(`(()=>{const input=document.querySelector('#chart-rsi');input.checked=${rsi};input.dispatchEvent(new Event('input'));})()`);await pause();
+      const panes=await window!.webContents.executeJavaScript(`(()=>{const host=document.querySelector('#market-chart'),bottom=n=>{const b=n.getBBox();return b.y+b.height;},time=Math.min(...[...host.querySelectorAll('[data-pane="time"]')].map(n=>n.getBBox().y));
+        return {time,volume:Math.max(...[...host.querySelectorAll('[data-pane="volume"]')].map(bottom)),rsi:host.querySelector('[data-pane="rsi"]')?bottom(host.querySelector('[data-pane="rsi"]')):0};})()`);
+      if(panes.volume>=panes.time||panes.rsi>=panes.time)throw new Error('圖表成交量、RSI 與時間軸文字重疊');
+    }
+    await window!.webContents.executeJavaScript(`document.activeElement?.blur()`);
     console.log('Electron wheel zoom, pointer pan, price-axis drag, bottom range, preserved viewport, cutoff and replay workflow: PASS');
   }
   async function verifyLayout(expected:string):Promise<void>{
