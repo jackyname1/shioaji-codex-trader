@@ -20,7 +20,7 @@ export interface DesktopState { status: string; logs: string[]; settings: string
   codex_auth:CodexLoginState;
   runtime:RuntimeView|null;backtest_progress:BacktestProgress;backtest_result:BacktestReport|null;
   backtest_history:BacktestSummary[];backtest_comparisons:BacktestSummary[];
-  connection:{status:string;remembered:boolean;encrypted:boolean;busy:boolean;has_ca:boolean};analyst_events:(AnalystEvent&{context:'live'|'replay'})[];
+  connection:{status:string;remembered:boolean;credential_state?:string;credential_message?:string;encrypted:boolean;busy:boolean;has_ca:boolean};analyst_events:(AnalystEvent&{context:'live'|'replay'})[];
   live:LiveReadiness;
   replay:ReplayFrame|null;replay_paused:boolean;replay_speed:number;replay_symbols:{symbol:string;name:string}[];
   codex_models:string[] }

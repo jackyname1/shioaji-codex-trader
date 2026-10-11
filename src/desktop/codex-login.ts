@@ -7,6 +7,7 @@ import type { ThreadEvent } from '@openai/codex-sdk';
 
 export interface CodexLoginState {
   state:'checking'|'signed_out'|'pending'|'ready'|'error'; message:string; can_open:boolean; device_code:string; testing:boolean;
+  test_state:'untested'|'connected'|'failed';
 }
 type Run = (binary:string,args:string[],options:{env:NodeJS.ProcessEnv;windowsHide:boolean;timeout:number}) => Promise<unknown>;
 type Launch = (binary:string,args:string[],options:SpawnOptions) => ChildProcess;
@@ -19,28 +20,34 @@ export function loginUrl(raw:string): string | undefined {
   } catch { /* Never open an arbitrary URL printed by a child process. */ }
 }
 export class CodexLogin {
-  readonly status:CodexLoginState={state:'checking',message:'正在檢查 Codex 登入',can_open:false,device_code:'',testing:false};
+  readonly status:CodexLoginState={state:'checking',message:'正在檢查 Codex 登入',can_open:false,device_code:'',testing:false,test_state:'untested'};
   private task?:Promise<void>; private child?:ChildProcess; private url?:string; private closed=false; private testAbort?:AbortController;
   private readonly run:Run; private readonly launch:Launch; private readonly binary:()=>string;
   private readonly timeout:number;
+  private probeSettings?:string;
   constructor(readonly profile:string,private readonly open:(url:string)=>Promise<void>,private readonly onReady:()=>Promise<void>,
     private readonly dependencies:{run?:Run;launch?:Launch;binary?:()=>string;sourceProfile?:string;timeout?:number;
-      probe?:(settings:Settings,signal:AbortSignal)=>Promise<AsyncIterable<ThreadEvent>>}={}) {
+      probe?:(settings:Settings,signal:AbortSignal)=>Promise<AsyncIterable<ThreadEvent>>;settings?:()=>Settings}={}) {
     this.run=dependencies.run??((binary,args,options)=>promisify(execFile)(binary,args,{...options,maxBuffer:20000}));
     this.launch=dependencies.launch??spawn;this.binary=dependencies.binary??bundledCodexPath;this.timeout=dependencies.timeout??300000;
   }
   private env():Record<string,string>{return codexEnvironment(process.env,this.profile);}
   async check():Promise<boolean>{
     if(this.task)return false;
-    return this.verify();
+    const ready=await this.verify();
+    if(ready&&this.dependencies.settings&&!this.status.testing){const settings=this.dependencies.settings();
+      if(this.probeSettings!==this.settingsKey(settings))this.status.test_state='untested';
+      if(this.status.test_state==='untested')void this.test(settings).catch(()=>undefined);}
+    return ready;
   }
+  private settingsKey(settings:Settings):string{return JSON.stringify([settings.codex_model,settings.codex_reasoning,settings.codex_path]);}
   private async verify():Promise<boolean>{
     if(this.closed)return false;
     try {
       prepareCodexProfile(this.profile,this.dependencies.sourceProfile);
       await this.run(this.binary(),['-c','cli_auth_credentials_store="file"','login','status'],{env:this.env(),windowsHide:true,timeout:15000});
       if(this.closed)return false;
-      this.status.state='ready';this.status.message='Codex 已登入 · 模擬與實盤共用';
+      this.status.state='ready';if(this.status.test_state==='untested')this.status.message='Codex 已登入 · 模擬與實盤共用';
       this.status.device_code='';this.status.can_open=false;this.url=undefined;
       await this.onReady().catch(()=>undefined);return true;
     } catch {
@@ -50,6 +57,7 @@ export class CodexLogin {
   start(device=false):string{
     if(this.task)return this.status.message;
     const force=device||this.status.state==='ready'||this.status.state==='error';
+    this.status.test_state='untested';
     this.status.state='checking';this.status.message='正在檢查 Codex 登入';
     this.task=(async()=>{
       if(!force && await this.verify())return;
@@ -62,7 +70,8 @@ export class CodexLogin {
       if(!success || !await this.verify())throw new Error('login failed');
     })().catch(()=>{
       if(!this.closed){this.status.state='error';this.status.message='Codex 登入未完成；可重新登入，或使用裝置登入';this.status.can_open=false;this.status.device_code='';this.url=undefined;}
-    }).finally(()=>{this.task=undefined;});
+    }).finally(()=>{this.task=undefined;
+      if(!this.closed&&this.status.state==='ready'&&this.dependencies.settings)void this.test(this.dependencies.settings()).catch(()=>undefined);});
     return this.status.message;
   }
   private login(device:boolean):Promise<boolean>{
@@ -92,6 +101,7 @@ export class CodexLogin {
   }
   async test(settings:Settings):Promise<string>{
     if(this.status.testing||this.task)throw new CodexError('Codex 登入或連線測試仍在進行');
+    this.probeSettings=this.settingsKey(settings);
     this.status.testing=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
     this.testAbort=controller;
     try{
@@ -104,12 +114,13 @@ export class CodexLogin {
       for await(const event of events){
         if('item' in event && ['command_execution','file_change','mcp_tool_call','web_search'].includes(event.item.type)){controller.abort();throw new CodexError('Codex 連線測試嘗試使用工具，已停止');}
         if(event.type==='item.completed'&&event.item.type==='agent_message')response=event.item.text;
+        if('item' in event&&event.item.type==='error')throw new Error(event.item.message);
         if(event.type==='turn.failed')throw new Error(event.error.message);if(event.type==='error')throw new Error(event.message);
         if(event.type==='turn.completed')complete=true;
       }
       if(!complete||JSON.parse(response).ok!==true)throw new Error('invalid output');
-      this.status.message='Codex 連線測試成功 · '+(settings.codex_model||'帳戶預設模型');return this.status.message;
-    }catch(error){this.status.message=controller.signal.aborted?'Codex 連線測試逾時，請檢查網路後重試':codexIssue(error);
+      this.status.test_state='connected';this.status.message='Codex 連線測試成功 · '+(settings.codex_model||'帳戶預設模型');return this.status.message;
+    }catch(error){this.status.test_state='failed';this.status.message=controller.signal.aborted?'Codex 連線測試逾時，請檢查網路後重試':codexIssue(error);
       if(/尚未登入|登入已過期/.test(this.status.message))this.status.state='error';throw new CodexError(this.status.message);}
     finally{clearTimeout(timer);this.status.testing=false;this.testAbort=undefined;}
   }

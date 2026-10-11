@@ -41,6 +41,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   windows:
+    if: github.event_name != 'pull_request'
     needs: test
     runs-on: windows-latest
     timeout-minutes: 20
@@ -80,7 +81,7 @@ jobs:
       contents: write
       actions: read
     concurrency:
-      group: release-publish-v0.2.0
+      group: release-publish-main
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5

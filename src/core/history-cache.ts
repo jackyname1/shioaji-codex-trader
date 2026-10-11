@@ -7,6 +7,7 @@ import { type ShioajiHttpBroker } from '../broker/http.js';
 import { addDays, twDay } from './models.js';
 import { historyWindows, validateCachedPoints } from './chart.js';
 import type { HistoryPoint } from './backtest-data.js';
+import { BrokerError, brokerStageIssue } from '../broker/health.js';
 
 let nextHistoryRequest=0;
 export async function cachedHistory(broker: ShioajiHttpBroker, root: string | undefined, symbol: string, exchange: 'TSE' | 'OTC',
@@ -24,21 +25,30 @@ export async function cachedHistory(broker: ShioajiHttpBroker, root: string | un
     let batch: HistoryPoint[] | undefined;
     if (path && range.end < today) try {
       const cached = validateCachedPoints(JSON.parse(await readFile(path, 'utf8')));
-      if (cached.every(p => p.symbol === symbol && twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end)) batch = cached;
+      if (cached.length&&cached.every(p => p.symbol === symbol && twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end)) batch = cached;
     } catch { /* Invalid or absent cache is fetched once. */ }
     progress(`${symbol} · ${range.start} — ${range.end}${batch ? ' · 已快取' : ' · 下載中'}`);
     if (!batch) {
       const slot=Math.max(Date.now(),nextHistoryRequest);nextHistoryRequest=slot+250;
       if(slot>Date.now())await delay(slot-Date.now(),undefined,{signal});
-      batch = historicalKbars(await broker.request('/data/kbars', { contract: { security_type: 'STK', exchange, code: symbol }, ...range }), symbol)
-        .filter(p => twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end);
+      const retries=[2000,4000,8000];
+      let raw:unknown;
+      for(let attempt=0;;attempt++){
+        signal.throwIfAborted();
+        try {raw=await broker.request('/data/kbars',{contract:{security_type:'STK',region:'TW',exchange,code:symbol,target_code:null},...range},{timeoutMs:10000});break;}
+        catch(error){if(!(error instanceof BrokerError)||!error.retryable||attempt>=retries.length)throw error;
+          progress(`${symbol} · 歷史服務暫時忙碌，正在重試 ${attempt+1}/${retries.length}`);
+          await delay(retries[attempt]!,undefined,{signal});}
+      }
+      try{batch = historicalKbars(raw, symbol).filter(p => twDay(new Date(p.at)) >= range.start && twDay(new Date(p.at)) <= range.end);}
+      catch(error){throw brokerStageIssue('歷史 K 線',error);}
       // Never make today's partial data look like a complete immutable cache.
       // The immutable cache retains the full API window. A simulation's cutoff only filters its returned view.
-      if (path && range.end < today) {
+      if (path && range.end < today && batch.length) {
         const temp = path + '.' + randomUUID() + '.tmp'; await writeFile(temp, JSON.stringify(batch), { mode: 0o600 }); await rename(temp, path);
       }
     }
     result.push(...batch.filter(p => Date.parse(p.at) <= Date.parse(cutoff)));
   }
-  return result;
+  return result.sort((a,b)=>a.at.localeCompare(b.at));
 }

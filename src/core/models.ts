@@ -52,6 +52,7 @@ export const AccountSchema = z.strictObject({
   asof: timestamp, cash: decimal, settlement_debits: nonnegative, settlement_credits: nonnegative,
   positions: z.array(PositionSchema), orders: z.array(OrderSchema), complete: z.boolean(),
   issue: z.string(), daily_buy_amount: nonnegative, daily_buy_count: quantity,
+  available: z.object({ cash:z.boolean(), settlements:z.boolean(), positions:z.boolean(), orders:z.boolean() }).optional(),
 }).refine(a => new Set(a.positions.map(p => p.symbol)).size === a.positions.length,
   '重複庫存標的');
 export type Account = z.infer<typeof AccountSchema>;
