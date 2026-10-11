@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { ExperienceSchema, ReviewSchema, type Experience, type ExperienceReview } from './experience.js';
 import { AccountSchema, OrderSchema, PlanSchema, ProtectionSchema, SessionSchema, SettingsSchema,
   active, storedSettings, type Account, type Order, type Plan, type Protection, type SessionDay, type Settings } from './models.js';
+import type { AnalystEvent } from './codex.js';
 
 export class Store {
   readonly db: DatabaseSync;
@@ -20,6 +21,7 @@ export class Store {
       this.db = new DatabaseSync(path);
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
         CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS analyst_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, tag TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS protections (symbol TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sessions (day TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -32,6 +34,20 @@ export class Store {
       if (version !== undefined && version !== 2) throw new Error('資料庫版本不同，請使用獨立的 TypeScript 資料庫');
       this.set('schema_version', 2);
     } catch (error) { this.releaseLock(); throw error; }
+  }
+  recordAnalystEvent(event:AnalystEvent):void {
+    const id=event.id??randomUUID();
+    this.db.prepare('INSERT INTO analyst_events(id,value) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value')
+      .run(id,JSON.stringify({...event,id}));
+  }
+  analystEvents(limit=200):AnalystEvent[]{
+    const rows=(limit>0?this.db.prepare('SELECT value FROM (SELECT sequence,value FROM analyst_events ORDER BY sequence DESC LIMIT ?) ORDER BY sequence').all(limit):
+      this.db.prepare('SELECT value FROM analyst_events ORDER BY sequence').all()) as {value:string}[];
+    return rows.map(row=>JSON.parse(row.value) as AnalystEvent);
+  }
+  analystEvent(id:string):AnalystEvent|undefined {
+    const row=this.db.prepare('SELECT value FROM analyst_events WHERE id=?').get(id) as {value:string}|undefined;
+    return row?JSON.parse(row.value) as AnalystEvent:undefined;
   }
   private acquireLock(): void {
     const path = this.lockPath!;

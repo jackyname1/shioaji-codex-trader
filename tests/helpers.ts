@@ -3,6 +3,18 @@ import { TradingCalendar } from '../src/core/calendar.js';
 import { Engine } from '../src/core/engine.js';
 import { PaperBroker, SyntheticMarket } from '../src/broker/paper.js';
 import { SettingsSchema, type Account, type Instrument, type Order, type Quote, type Snapshot } from '../src/core/models.js';
+import type { ExecutionRequest, ExecutionAdvice } from '../src/core/execution.js';
+/** Explicit deterministic stand-in for the second Codex turn, never used by application code. */
+export async function testSize(request:ExecutionRequest):Promise<ExecutionAdvice> {
+  const desired=request.condition?.shares??(request.action==='SELL'
+    ?request.account.positions.find(p=>p.symbol===request.symbol)?.sellable??0:30);
+  const lot=request.lots.find(l=>l.lot===(desired>=1000?'COMMON':'ODD')&&l.max_shares>0)
+    ??request.lots.find(l=>l.max_shares>0);
+  if(!lot)throw new Error('Test sizing request has no permitted quantity');
+  const shares=Math.floor(Math.min(desired,lot.max_shares)/lot.step)*lot.step;
+  return {request_id:request.request_id,symbol:request.symbol,action:shares?request.action:'HOLD',shares,
+    lot:lot.lot,limit_price:lot.limit_price,reason:'隔離測試替身：依當前現金與庫存確認數量'};
+}
 export const now = new Date('2026-10-08T10:00:00+08:00');
 export const settings = () => SettingsSchema.parse({mode:'demo',auto_execute:true,watch_min_amount:'0'});
 export const quote = (at = now): Quote => ({symbol:'9001',last:'30',bid:'29.95',ask:'30.05',

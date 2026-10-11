@@ -8,7 +8,7 @@ import type { HistoryDataset } from './backtest-data.js';
 import type { AnalystEvent } from './codex.js';
 import { csvDataset,syntheticDataset } from './backtest-data.js';
 import { shioajiDataset } from './backtest-source.js';
-import { CodexAnalyst } from './codex.js';
+import { CodexAnalyst,appendAnalystEvent } from './codex.js';
 import type { Settings } from './models.js';
 
 export interface BacktestSummary {id:string;created_at:string;status:string;start:string;end:string;synthetic:boolean;
@@ -31,7 +31,7 @@ export class BacktestController {
     this.progress={running:false,phase:r.status,day:r.request.end,points:0,total_points:0,
       codex_calls:r.metrics.codex_calls,at:r.asof,last_error:r.failures?.at(-1)?.issue,
       message:r.status==='FAILED'?'本次沒有有效盤中策略：'+(r.failures?.at(-1)?.issue??'請查看策略與資料紀錄'):'已載入測試結果，可查看與匯出'};
-    this.analystEvents=(r.workflow??[]).slice(-80).map(e=>({at:e.at,asof:e.at,stage:e.stage,message:e.message,model:'模擬執行引擎',reasoning:'程序步驟'}));
+    this.analystEvents=r.analyst_events??(r.workflow??[]).map(e=>({at:e.at,asof:e.at,stage:e.stage,message:e.message,model:'模擬執行引擎',reasoning:'程序步驟'}));
   }
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
@@ -81,15 +81,18 @@ export class BacktestController {
         this.dataset=dataset;const datasetId=randomUUID();
         await mkdir(this.root,{recursive:true,mode:0o700});
         await writeFile(join(this.root,'market-'+datasetId+'.json'),JSON.stringify(dataset),{mode:0o600});
-        const analyst=request.strategy==='codex'?new CodexAnalyst(snapshotSettings,join(this.root,'codex-profile'),undefined,join(dirname(this.root),'codex-login'),event=>{this.analystEvents.push(event);this.analystEvents=this.analystEvents.slice(-80);}):undefined;
+        const analyst=request.strategy==='codex'?new CodexAnalyst(snapshotSettings,join(this.root,'codex-profile'),undefined,join(dirname(this.root),'codex-login'),event=>{appendAnalystEvent(this.analystEvents,event);}):undefined;
         for(let index=0;index<intervals.length;index++){
           if(signal.aborted)break;
           if(request.strategy==='codex'&&consumed>=request.max_codex_calls){this.progress.message='整批 Codex 呼叫額度已用完，其餘比較未執行';break;}
           const runRequest={...request,comparison_intervals:[],decision_interval_minutes:intervals[index]!,max_codex_calls:Math.max(1,request.max_codex_calls-consumed)};
+          const eventStart=this.analystEvents.length;
           const r=await runBacktest(runRequest,dataset,snapshotSettings,analyst?(input,sig)=>analyst.analyze(input,sig):undefined,signal,
             p=>{this.progress={...p,codex_calls:consumed+p.codex_calls,run:index+1,total_runs:intervals.length};},this.clock,frame=>{this.frame=frame;},event=>{
-              this.analystEvents.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,model:'模擬執行引擎',reasoning:'程序步驟'});this.analystEvents=this.analystEvents.slice(-80);
-            });
+              this.analystEvents.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,model:'模擬執行引擎',reasoning:'程序步驟'});
+            },analyst?(input,sig)=>analyst.size(input,sig):undefined);
+          r.analyst_events=this.analystEvents.slice(eventStart);
+          if(analyst?.selection)r.model=analyst.selection.model;
           r.dataset_id=datasetId;
           this.report=r;consumed+=r.metrics.codex_calls;this.comparisons.push(reportSummary(r));await this.save(r);
           if(r.status==='CANCELLED')break;
