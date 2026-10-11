@@ -32,6 +32,7 @@ export class TradingService {
   private calendarTask?:Promise<void>;
   private bundleTask?:Promise<Bundle>;
   private lastWatchAttempt=0;
+  private lastConnectAttempt=0;
   lastMonitorAt='';
   analysisStatus='等待策略排程';
   analystEvents:AnalystEvent[]=[];
@@ -57,19 +58,22 @@ export class TradingService {
     this.queue = task.catch(() => undefined); return task;
   }
   async start(runTimer = true): Promise<void> {
-    await this.enqueue(() => this.engine.start(new Date()));
+    this.lastConnectAttempt=Date.now();
+    try { await this.enqueue(() => this.engine.start(new Date())); }
+    catch(error) { this.engine.dataUnavailable(error,new Date()); if(!runTimer)throw error; }
     if(runTimer){void this.refreshObservations().catch(()=>undefined);void this.ensureCalendar();}
     if (runTimer) this.timer = setInterval(() => {
       if (this.tickPending || this.stopping) return;
       this.tickPending = true;
       void this.enqueue(async () => {
         const now=new Date();
-        try { if(!this.lastMonitorAt||now.getTime()-Date.parse(this.lastMonitorAt)>=this.engine.settings.monitor_interval_seconds*1000) {
+        try { if(!this.engine.connected && now.getTime()-this.lastConnectAttempt>=10000){
+          this.lastConnectAttempt=now.getTime();await this.engine.start(now);
+        } else if(this.engine.connected && (!this.lastMonitorAt||now.getTime()-Date.parse(this.lastMonitorAt)>=this.engine.settings.monitor_interval_seconds*1000)) {
           await this.engine.tick(now);this.lastMonitorAt=now.toISOString();
         } }
-        catch { this.engine.entryBlocked = true; if (this.engine.account) this.engine.account.complete = false;
-          this.engine.quotes.clear(); this.engine.logOnce('ERROR','連線或資料核對失敗，暫停新委託，等待重新核對'); }
-        this.schedule(new Date());
+        catch (error) { this.engine.dataUnavailable(error, now); }
+        if(this.engine.connected)this.schedule(new Date());
         if(!this.calendarTask)void this.ensureCalendar();
         if(this.engine.settings.auto_watchlist&&!this.watchTask&&this.calendar.inSession(new Date(),'COMMON')
           &&Date.now()-this.lastWatchAttempt>=this.engine.settings.watch_refresh_minutes*60000)void this.refreshObservations().catch(()=>undefined);
@@ -231,7 +235,7 @@ export class TradingService {
     const s = SettingsSchema.parse(raw);
     await this.enqueue(async () => {
       if (s.mode === 'live' && s.auto_execute && !this.liveAuthorized) throw new Error('實盤自動執行須先確認本次授權');
-      if(s.mode==='live'&&['fee_rate','minimum_fee','fee_verified','sell_tax_rate','settlement_debit_sign',
+      if(s.mode==='live'&&['fee_rate','minimum_fee','sell_tax_rate',
         'min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
         'max_daily_buy_orders','daily_loss_fraction','whole_lots','allow_attention','price_deviation_fraction',
         'max_spread_fraction','quote_max_age','account_max_age','cooldown_seconds'].some(k=>s[k as keyof Settings]!==this.engine.settings[k as keyof Settings])) {
@@ -252,8 +256,6 @@ export class TradingService {
     const s=this.engine.settings,broker=this.broker instanceof ShioajiHttpBroker?this.broker.liveStatus():{account:'尚未連接實盤帳戶',issues:['請切換至實盤模式']};
     const issues=[...broker.issues];
     if(!this.engine.connected)issues.push('請先連接 Shioaji');
-    if(!s.fee_verified)issues.push('請在帳戶設定核對手續費率');
-    if(s.settlement_debit_sign==='unverified')issues.push('請在帳戶設定核對交割款符號');
     const a=this.engine.account;
     if(!a?.complete)issues.push(a?.issue||'帳戶快照尚未完整');
     else if(!(ageSeconds(now,a.asof)>=0&&ageSeconds(now,a.asof)<=s.account_max_age))issues.push('帳戶快照已過期，請重新核對');

@@ -7,6 +7,7 @@ import type { ConnectionInput } from './credentials.js';
 import type { ChartData,ChartRequest } from '../core/chart.js';
 import type { ReplayFrame } from '../core/backtest.js';
 import type { LiveReadiness } from '../core/live-session.js';
+import type { CodexLoginState } from './codex-login.js';
 export interface RuntimeView {
   mode:Settings['mode'];auto:boolean;paused:boolean;killed:boolean;blocked:boolean;connected:boolean;session:boolean;
   account:Account|null;plan:Plan|null;protections:Protection[];orders:Order[];quotes:Quote[];watch:WatchState;
@@ -16,6 +17,7 @@ export interface RuntimeView {
 }
 export interface DesktopState { status: string; logs: string[]; settings: string; connected: boolean; error: string;
   backtest:string; backtest_running:boolean; backtest_report:boolean; experience:string; codex_login:string;
+  codex_auth:CodexLoginState;
   runtime:RuntimeView|null;backtest_progress:BacktestProgress;backtest_result:BacktestReport|null;
   backtest_history:BacktestSummary[];backtest_comparisons:BacktestSummary[];
   connection:{status:string;remembered:boolean;encrypted:boolean;busy:boolean;has_ca:boolean};analyst_events:(AnalystEvent&{context:'live'|'replay'})[];
@@ -32,7 +34,9 @@ export interface TraderBridge {
   cancelBacktest():Promise<string>;
   exportBacktest(format:'json'|'csv'):Promise<string>;
   selectBacktest(id:string):Promise<string>;
-  loginCodex():Promise<string>;
+  loginCodex(method?:'device'):Promise<string>;
+  openCodexLogin():Promise<string>;
+  testCodex():Promise<string>;
   selectFile(kind:'ca'):Promise<string>;
   connectApi(input:ConnectionInput):Promise<string>;
   connectSaved():Promise<string>;

@@ -44,7 +44,7 @@ export interface BacktestProgress {running:boolean;phase:string;day:string;point
 export interface BacktestQuality {sessions:number;covered_sessions:number;calendar_verified:boolean;missing_sessions:string[];warmup:Record<string,number>;
   insufficient_symbols:string[];last_marks:Record<string,string>;strategy_slots:number;successful_strategies:number;skipped_strategies:number}
 export interface BacktestReport {
-  version:'0.1.0'|'0.4.0'|'0.5.0';final_frame?:ReplayFrame;dataset_id?:string;timeline?:{at:string;equity:string;cash:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
+  version:'0.2.0'|'0.1.0'|'0.4.0'|'0.5.0';final_frame?:ReplayFrame;dataset_id?:string;timeline?:{at:string;equity:string;cash:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
   source:string;synthetic:boolean;frequency:string;model:string;prompt_version:string;settings:Record<string,unknown>;
   metrics:{initial_cash:string;final_cash:string;settlement_credits:string;stock_value:string;final_equity:string;
     net_pnl:string;return_pct:string;realized_pnl:string;unrealized_pnl:string;fees:string;taxes:string;max_drawdown_pct:string;
@@ -182,7 +182,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     const final=equity(account),realized=fills.reduce((sum,f)=>sum.plus(f.realized_pnl??'0'),d(0)),unrealized=marketValue(account).minus(broker.remainingCost());
     const sales=fills.filter(f=>f.action==='SELL'),refusals=store.db.prepare("SELECT COUNT(*) AS n FROM experiences WHERE json_extract(value,'$.kind')='RISK_REFUSAL'").get() as {n:number};
     const finalFrame:ReplayFrame={at:now.toISOString(),account:structuredClone(account),watch:structuredClone(engine.watch),plan:engine.plan?structuredClone(engine.plan):null,protections:store.protections(),quotes:replayQuotes(now),fills:fills.slice(-100),net_pnl:final.minus(request.initial_cash).toFixed(2)};onFrame?.(finalFrame);
-    return {version:'0.1.0',final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
+    return {version:'0.2.0',final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
       model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:'scheduled-screening-v2',
       settings:Object.fromEntries(['min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
         'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','plan_max_minutes','experience_enabled',

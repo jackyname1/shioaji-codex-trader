@@ -59,7 +59,6 @@ export class Risk {
       if (!p || order.shares > p.sellable - reserved) reasons.push('可賣股數不足；今日新增零股不可當沖');
       return reasons;
     }
-    if (!s.fee_verified && s.mode === 'live') reasons.push('尚未確認實際手續費設定');
     const e = equity(account);
     if (e.lte(0)) return [...reasons, '淨資產不明或非正數'];
     const buys = others.filter(o => o.action === 'BUY');

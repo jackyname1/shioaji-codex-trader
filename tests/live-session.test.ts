@@ -52,7 +52,7 @@ class NativeFixture {
 }
 async function serviceFixture(f = new NativeFixture(), path=':memory:') {
   const service = new TradingService(path,'live',(store,s,session)=>new ShioajiHttpBroker(store,s,true,f.fetch,session));
-  await service.saveSettings({...service.engine.settings,fee_verified:true,settlement_debit_sign:'positive',codex_enabled:true,auto_watchlist:false});
+  await service.saveSettings({...service.engine.settings,codex_enabled:true,auto_watchlist:false});
   await service.start(false);
   const plan={id:'fixture-plan',created_at:new Date().toISOString(),analysis:{snapshot_id:'fixture-snapshot',
     expires_at:new Date(Date.now()+3600000).toISOString(),stance:'HOLD_ONLY' as const,candidates:[],decisions:[],summary:'隔離測試，沒有下單策略'}};
@@ -101,13 +101,11 @@ test('live monitoring works without CA while authorization identifies the missin
     await assert.rejects(service.activateLive(),/CA/);assert.equal(service.liveAuthorized,false);assert.equal(f.mutations,0);
   } finally {await service.close();}
 });
-test('unverified fees, settlement direction, expired login and uncertain orders cannot obtain a trading grant',async()=>{
+test('built-in costs need no manual confirmation; expired login and uncertain orders cannot obtain a grant',async()=>{
   const {service,f}=await serviceFixture();
   try {
-    await service.saveSettings({...service.engine.settings,fee_verified:false});await assert.rejects(service.activateLive(),/手續費率/);
-    await service.saveSettings({...service.engine.settings,fee_verified:true,settlement_debit_sign:'unverified'});
-    await assert.rejects(service.activateLive(),/交割款符號/);
-    await service.saveSettings({...service.engine.settings,settlement_debit_sign:'positive'});
+    assert.ok(!service.liveReadiness().issues.some(i=>/手續費|交割款符號/.test(i)));
+    await service.activateLive();assert.equal(service.liveAuthorized,true);await service.command('lock-live');
     f.expires=0;await assert.rejects(service.activateLive(),/過期/);f.expires=3600;
     service.store.saveOrder(order({status:'UNKNOWN',created_at:new Date().toISOString()}));
     await assert.rejects(service.activateLive(),/待核對/);assert.equal(f.mutations,0);
@@ -148,7 +146,7 @@ test('port changes keep account identity stable and legacy migration verifies th
     const legacy=createHash('sha256').update(JSON.stringify({account_type:'S',broker_id:'TEST',account_id:f.account,simulation:false,origin:'http://127.0.0.1:18981/api/v1'})).digest('hex');
     store.set('account_fingerprint',legacy);await connect('http://127.0.0.1:39876');
     assert.equal(store.get('account_fingerprint'),identity);assert.equal(store.get('account_identity_version'),2);await broker!.close();
-    f.account='OTHER';await assert.rejects(connect('http://127.0.0.1:49876'),/帳戶或服務模式/);
+    f.account='OTHER';await assert.rejects(connect('http://127.0.0.1:49876'),/帳戶身分/);
   } finally {await broker?.close();store.close();}
 });
 test('desktop account changes and consent prompts reject concurrent operations and release their lock after failure',async()=>{

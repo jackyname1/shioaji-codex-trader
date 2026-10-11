@@ -10,6 +10,7 @@ import { nextStrategy } from './schedule.js';
 import { active, ageSeconds, d, equity, remaining, twDay, type Account, type Analysis, type Candidate, type Features,
   type Instrument, type Order, type Plan, type Quote, type Settings, type Snapshot, type SmartSpec } from './models.js';
 import { NoSubmissionError, type Broker } from '../broker/types.js';
+import { brokerIssue } from '../broker/health.js';
 
 export interface Bundle { pool: Candidate[]; features: Record<string,Features>; metadata: Record<string,Instrument>;
   fundamentals?: Record<string,unknown>; announcements?: unknown[]; limitations?: string[] }
@@ -22,6 +23,7 @@ export class Engine {
   pausedEntries: boolean;
   killed: boolean;
   connected = false;
+  dataIssue = '';
   private _entryBlocked=false;
   get entryBlocked():boolean{return this._entryBlocked;}
   set entryBlocked(value:boolean){this._entryBlocked=value;this.store.set('entry_blocked',value);}
@@ -43,8 +45,16 @@ export class Engine {
   log(kind: string, message: string): void { this.store.audit(kind,message); this.recent.push(`${kind}: ${message}`); this.recent = this.recent.slice(-100); }
   logOnce(kind: string, message: string): void { if (!this.recent.slice(-20).includes(`${kind}: ${message}`)) this.log(kind,message); }
   async start(now: Date): Promise<void> {
-    await this.broker.connect(); this.connected = true; await this.reconcile(now); await this.refreshAccount(now);
-    await this.updateSubscriptions(now); this.log('START',`模式=${this.settings.mode}；自動執行=${this.settings.auto_execute}`);
+    await this.broker.connect(); this.connected = true;
+    try { await this.reconcile(now); await this.refreshAccount(now); await this.updateSubscriptions(now); }
+    catch (error) { this.dataUnavailable(error, now); }
+    this.log('START',`模式=${this.settings.mode}；自動執行=${this.settings.auto_execute}`);
+  }
+  dataUnavailable(error: unknown, now: Date): void {
+    this.dataIssue = brokerIssue(error); this.quotes.clear();
+    this.account = { ...(this.account ?? { cash:'0', settlement_debits:'0', settlement_credits:'0', positions:[], orders:[],
+      daily_buy_count:0, daily_buy_amount:'0' }), asof:now.toISOString(), complete:false, issue:this.dataIssue };
+    this.logOnce('CONNECTION', this.dataIssue);
   }
   async close(): Promise<void> { this.connected = false; await this.broker.close(); }
   setSettings(s: Settings): void {
@@ -86,6 +96,7 @@ export class Engine {
     const known = new Set(account.orders.map(o => o.local_id));
     account.orders.push(...local.filter(o => active(o) && !known.has(o.local_id)));
     this.account = account; this.lastRefresh = now;
+    this.dataIssue = account.complete ? '' : account.issue;
     const key = 'baseline_' + twDay(now);
     if (account.complete && !this.store.get(key)) { this.store.set(key,{equity:equity(account).toFixed(),at:now.toISOString()});
       this.log('BASELINE','建立今日首次有效快照基準；不是歷史開盤資產'); }

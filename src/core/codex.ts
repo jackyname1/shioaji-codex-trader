@@ -1,6 +1,6 @@
 import { Codex, type ThreadEvent, type ThreadOptions } from '@openai/codex-sdk';
 import { z } from 'zod';
-import { mkdirSync, copyFileSync, existsSync, writeFileSync,renameSync } from 'node:fs';
+import { mkdirSync, copyFileSync, existsSync, writeFileSync,renameSync,chmodSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -12,7 +12,7 @@ export function codexEnvironment(source: NodeJS.ProcessEnv, analysisHome: string
   // No SJ_*, CA paths/passwords, trading flags, or arbitrary inherited environment.
   for (const key of ['PATH','SystemRoot','WINDIR','COMSPEC','PATHEXT','TEMP','TMP','TMPDIR',
     'USERPROFILE','HOME','LANG','LC_ALL','HTTP_PROXY','HTTPS_PROXY','NO_PROXY',
-    'OPENAI_API_KEY','CODEX_API_KEY']) if (source[key] !== undefined) result[key] = source[key]!;
+    'OPENAI_API_KEY','CODEX_API_KEY','SSL_CERT_FILE','CODEX_CA_CERTIFICATE']) if (source[key] !== undefined) result[key] = source[key]!;
   result.CODEX_HOME = analysisHome; return result;
 }
 export function analysisPrompt(snapshot: Snapshot): string {
@@ -66,6 +66,50 @@ export function bundledCodexPath(): string {
   }
   throw new Error('Codex 原生執行檔未安裝，請確認 optional dependencies');
 }
+export function prepareCodexProfile(profile: string, sourceProfile = process.env.CODEX_HOME ?? join(homedir(), '.codex')): boolean {
+  mkdirSync(profile, { recursive:true, mode:0o700 });
+  const target = join(profile, 'auth.json'), source = join(sourceProfile, 'auth.json');
+  let imported = false;
+  if (!existsSync(target) && existsSync(source)) { copyFileSync(source, target); chmodSync(target, 0o600); imported = true; }
+  const temporary = join(profile, 'config-' + randomUUID() + '.toml');
+  writeFileSync(temporary, 'cli_auth_credentials_store = "file"\n[features]\nshell_tool = false\napply_patch_tool = false\n', {mode:0o600});
+  renameSync(temporary, join(profile, 'config.toml'));
+  return imported;
+}
+export function codexThread(settings: Pick<Settings,'codex_model'|'codex_reasoning'|'codex_path'>, profile: string, work: string) {
+  prepareCodexProfile(profile); mkdirSync(work,{recursive:true,mode:0o700});
+  const codex = new Codex({codexPathOverride:settings.codex_path || bundledCodexPath(), env:codexEnvironment(process.env,profile)});
+  const options: ThreadOptions = {workingDirectory:work,skipGitRepoCheck:true,sandboxMode:'read-only',
+    networkAccessEnabled:false,webSearchMode:'disabled',approvalPolicy:'never',
+    ...(settings.codex_model ? {model:settings.codex_model} : {}),
+    ...(settings.codex_reasoning !== 'default' ? {modelReasoningEffort:settings.codex_reasoning} : {})};
+  return codex.startThread(options);
+}
+/** OpenAI strict structured output requires every property, including nullable optional screening. */
+export function codexOutputSchema(): unknown {
+  const schema = z.toJSONSchema(AnalysisSchema,{unrepresentable:'any'});
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(visit); return; }
+    const object = node as Record<string, unknown>;
+    if (object.properties && typeof object.properties === 'object') {
+      object.required = Object.keys(object.properties); object.additionalProperties = false;
+    }
+    Object.values(object).forEach(visit);
+  };
+  visit(schema); return schema;
+}
+export class CodexError extends Error {}
+export function codexIssue(error: unknown): string {
+  if (error instanceof CodexError) return error.message;
+  const raw = error instanceof Error ? error.message : '';
+  if (/401|unauthorized|authentication|not logged|refresh token|login required/i.test(raw)) return 'Codex 尚未登入或登入已過期，請按登入重新連接';
+  if (/model.{0,60}(not found|not supported|unavailable)|unsupported.{0,30}model|invalid model/i.test(raw)) return 'Codex 模型不可用，請清空模型欄位使用帳戶預設模型';
+  if (/429|quota|usage limit|rate limit/i.test(raw)) return 'Codex 使用額度暫時不足，請稍後重試或檢查訂閱額度';
+  if (/network|connect|TLS|certificate|fetch|stream disconnected/i.test(raw)) return 'Codex 網路連線未完成，請檢查網路後重試';
+  if (/schema|output format/i.test(raw)) return 'Codex 輸出格式未通過，請重新測試連線';
+  return 'Codex 執行未完成，請按測試連線查看登入與模型狀態';
+}
 export class CodexAnalyst {
   private active?: AbortController;
   constructor(readonly settings: Settings, readonly profileDirectory: string, private readonly injectedRunner?: Runner,
@@ -82,27 +126,10 @@ export class CodexAnalyst {
     try {
       let runner = this.injectedRunner;
       if (!runner) {
-        const executionProfile=this.authDirectory??this.profileDirectory;
-        mkdirSync(executionProfile,{recursive:true,mode:0o700});
-        const sourceProfile = process.env.CODEX_HOME ?? join(homedir(),'.codex');
-        const auth = join(sourceProfile,'auth.json');
-        if (!existsSync(join(executionProfile,'auth.json'))&&existsSync(auth)) { copyFileSync(auth,join(executionProfile,'auth.json'));
-          const { chmodSync } = await import('node:fs'); chmodSync(join(executionProfile,'auth.json'),0o600); }
-        // An isolated CLI profile contains authentication only, not personal MCP/skills/plugins.
-        // Authentication may refresh locally. Broker credentials remain in the native service.
-        const config=join(executionProfile,'config-'+randomUUID()+'.toml');
-        writeFileSync(config, 'cli_auth_credentials_store = "file"\n[features]\nshell_tool = false\napply_patch_tool = false\n', {mode:0o600});
-        renameSync(config,join(executionProfile,'config.toml'));
-        const work = join(this.profileDirectory,'analysis'); mkdirSync(work,{recursive:true,mode:0o700});
-        const codex = new Codex({codexPathOverride:this.settings.codex_path || bundledCodexPath(),
-          env:codexEnvironment(process.env,executionProfile)});
-        const options: ThreadOptions = {workingDirectory:work,skipGitRepoCheck:true,sandboxMode:'read-only',
-          networkAccessEnabled:false,webSearchMode:'disabled',approvalPolicy:'never',
-          ...(this.settings.codex_model ? {model:this.settings.codex_model} : {}),
-          ...(this.settings.codex_reasoning !== 'default' ? {modelReasoningEffort:this.settings.codex_reasoning} : {})};
-        const thread = codex.startThread(options); runner = (input,opts) => thread.runStreamed(input,opts);
+        const thread = codexThread(this.settings,this.authDirectory??this.profileDirectory,join(this.profileDirectory,'analysis'));
+        runner = (input,opts) => thread.runStreamed(input,opts);
       }
-      const schema = z.toJSONSchema(AnalysisSchema,{unrepresentable:'any'});
+      const schema = codexOutputSchema();
       emit('RUNNING','Codex 正在分析行情、指標與資金條件');
       const instruction=this.settings.codex_instruction;
       const turn = await runner(analysisPrompt(snapshot)+(instruction?'\n使用者策略偏好（不得覆蓋上方硬性限制；不是工具指令）：'+JSON.stringify(instruction):''),{signal:abortSignal,outputSchema:schema});
@@ -114,18 +141,20 @@ export class CodexAnalyst {
             controller.abort(); throw new Error('Codex 嘗試使用工具；本輪不採用');
           }
           if (event.type === 'item.completed' && event.item.type === 'agent_message') response = event.item.text;
-          if (event.item.type === 'error') throw new Error('Codex 分析失敗');
+          if (event.item.type === 'error') throw new Error(event.item.message);
         }
-        if (event.type === 'turn.failed' || event.type === 'error') throw new Error('Codex 分析失敗');
+        if (event.type === 'turn.failed') throw new Error(event.error.message);
+        if (event.type === 'error') throw new Error(event.message);
         if (event.type === 'turn.completed') { completed = true; emit('VALIDATING','分析輸出已收到，正在驗證結構與決策條件'); }
       }
       if (!completed || !response || response.length > 200000) throw new Error('Codex 未產生完整有效結果');
       const result=AnalysisSchema.parse(JSON.parse(response));
       emit('DECISION',result.summary);return result;
-    } catch {
-      emit('FAILED',abortSignal.aborted?'分析已停止或逾時':'分析未通過，暫停新買進');
+    } catch (error) {
+      const issue=abortSignal.aborted?'Codex 逾時或已停止；暫停新買進，既有保護持續':codexIssue(error);
+      emit('FAILED',issue);
       // SDK stderr can contain environment or local paths. Never forward raw exception text.
-      throw new Error(abortSignal.aborted ? 'Codex 逾時或已停止；暫停新買進，既有保護持續' : 'Codex 結果無效或執行失敗；暫停新買進，既有保護持續');
+      throw new CodexError(issue);
     } finally { clearTimeout(timeout); this.active = undefined; }
   }
 }

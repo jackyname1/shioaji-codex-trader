@@ -117,8 +117,7 @@ export const SettingsSchema = z.strictObject({
   max_spread_fraction: positiveFraction.default('0.02'), quote_max_age: quantity.min(1).max(300).default(30),
   account_max_age: quantity.min(1).max(300).default(60), cooldown_seconds: quantity.max(86400).default(120),
   fee_rate: fraction.default('0.001425'), minimum_fee: nonnegative.default('20'),
-  sell_tax_rate: fraction.default('0.003'), fee_verified: z.boolean().default(false),
-  settlement_debit_sign: z.enum(['unverified', 'positive', 'negative']).default('unverified'),
+  sell_tax_rate: fraction.default('0.003'),
   allow_attention: z.boolean().default(false), codex_enabled: z.boolean().default(false),
   experience_enabled: z.boolean().default(true), experience_limit: quantity.min(5).max(100).default(40),
   official_facts_enabled: z.boolean().default(true), codex_path: z.string().default(''),
@@ -142,6 +141,13 @@ export const SettingsSchema = z.strictObject({
 }).refine(s => d(s.max_exposure_fraction).plus(s.min_cash_fraction).lte(1), '現金保留加持倉上限不得超過 100%')
   .refine(s => s.postmarket_time >= '13:40' && s.postmarket_time <= '17:00', '盤後檢討時間須為 13:40–17:00');
 export type Settings = z.infer<typeof SettingsSchema>;
+/** Upgrade persisted 0.1 settings without carrying manual confirmation gates forward. */
+export function storedSettings(raw: unknown): Settings {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return SettingsSchema.parse({});
+  const value = { ...raw } as Record<string, unknown>;
+  delete value.fee_verified; delete value.settlement_debit_sign;
+  return SettingsSchema.parse(value);
+}
 export const SessionSchema = z.strictObject({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), open: z.boolean(), source: z.string().min(1), verified_at: timestamp,
 });
