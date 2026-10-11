@@ -62,7 +62,7 @@ test('removing a held or pending symbol retains risk monitoring and never exceed
 test('watch filtering rejects stale metadata, suspended securities and insufficient completed history',()=>{
   const b=bundle();b.metadata['9001']!.verified_at='2026-10-07T09:00:00+08:00';b.metadata['9002']!.suspended=true;b.features['9003']!.sufficient=false;
   const w=selectWatchlist(emptyWatch(),b,settings(),plan(),account(),[],[],now);assert.deepEqual(w.entries.map(w=>w.symbol),['9004','9005']);
-  assert.match(w.issue,/少於 5/);
+  assert.equal(w.healthy,true);assert.match(w.issue,/本輪 2 檔符合條件/);
 });
 test('new Codex priorities replace older unheld observations even when all still qualify, keeping the cap',()=>{
   const s=SettingsSchema.parse({watch_max_symbols:5}),b=bundle(),first=plan();let w=selectWatchlist(emptyWatch(),b,s,first,account(),[],[],now);

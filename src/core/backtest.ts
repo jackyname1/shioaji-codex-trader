@@ -164,7 +164,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     try{progress('SNAPSHOT',`${twClock(now)} 建立當時帳戶、行情與已完成日 K 快照`);
       activity(now.toISOString(),'SNAPSHOT','建立當時帳戶、行情、觀測股與已完成日 K 快照');
       const snapshot=await engine.snapshot(now,review);snapshot.synthetic=dataset.synthetic;
-      snapshot.hard_limits={...snapshot.hard_limits,historical_replay:true,virtual_time:now.toISOString()};snapshot.data_limitations=limitations;
+      snapshot.hard_limits={...snapshot.hard_limits,historical_replay:true,virtual_time:now.toISOString()};snapshot.data_limitations=[...new Set([...snapshot.data_limitations,...limitations])];
       let analysis:Analysis;
       stage=review?'REVIEW':'ANALYSIS';
       if(request.strategy==='codex'){calls++;progress(stage,`${twClock(now)} 等待 Codex ${review?'盤後檢討':'選股與設定條件'}完成；虛擬時間保持不動`);
@@ -255,7 +255,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     const final=equity(account),realized=fills.reduce((sum,f)=>sum.plus(f.realized_pnl??'0'),d(0)),unrealized=marketValue(account).minus(broker.remainingCost());
     const sales=fills.filter(f=>f.action==='SELL'),refusals=store.db.prepare("SELECT COUNT(*) AS n FROM experiences WHERE json_extract(value,'$.kind')='RISK_REFUSAL'").get() as {n:number};
     nextEvent='';const finalFrame=frame(now);onFrame?.(finalFrame);
-    return {version:'0.2.0',final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
+    return {version:'0.1.0',final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
       model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:'two-stage-trading-v3',
       settings:Object.fromEntries(['min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
         'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','plan_max_minutes','experience_enabled',

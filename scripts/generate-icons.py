@@ -23,6 +23,17 @@ def stroke(draw, points, color, width, scale):
         draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill=color)
 
 
+def mark(draw, scale):
+    """An orbital compass: two arcs and a four-point light, never a letter."""
+    left = curve((183, 104), [((94, 140), (74, 253), (129, 331)), ((153, 365), (183, 388), (218, 400))])
+    right = curve((329, 400), [((420, 363), (441, 250), (385, 173)), ((362, 138), (333, 115), (294, 103))])
+    stroke(draw, left, "#7e9cb5", 18, scale)
+    stroke(draw, right, "#63dfc1", 18, scale)
+    star = [(256, 141), (280, 228), (368, 252), (280, 276), (256, 363), (232, 276), (144, 252), (232, 228)]
+    draw.polygon([(x*scale, y*scale) for x, y in star], fill="#eef8ff")
+    draw.polygon([(x*scale, y*scale) for x, y in [(256, 141), (280, 228), (256, 252), (232, 228)]], fill="#75ecd0")
+
+
 def app_icon(size):
     factor = 4
     side = size*factor
@@ -39,13 +50,7 @@ def app_icon(size):
     image.paste(background, mask=mask)
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle(tuple(v*scale for v in (22, 22, 490, 490)), radius=110*scale, outline="#3d566d", width=max(1, round(3*scale)))
-    points = curve((310, 147), [((291, 130), (270, 122), (245, 124)), ((204, 126), (177, 147), (178, 177)),
-        ((179, 206), (204, 215), (254, 225)), ((304, 235), (333, 253), (333, 292)),
-        ((333, 333), (297, 359), (249, 361)), ((221, 362), (195, 353), (174, 335))])
-    stroke(draw, points, "#e8f3fc", 56, scale)
-    star = [(374, 99), (384, 122), (407, 132), (384, 142), (374, 165), (364, 142), (341, 132), (364, 122)]
-    draw.polygon([(x*scale, y*scale) for x, y in star], fill="#66e0c0")
-    stroke(draw, [(163, 411), (346, 411)], "#30516d", 5, scale)
+    mark(draw, scale)
     return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
@@ -54,9 +59,7 @@ def tray_icon(status):
     draw = ImageDraw.Draw(image)
     scale = 4
     draw.rounded_rectangle((12, 12, 244, 244), radius=60, fill="#142a40", outline="#66839a", width=4)
-    points = curve((39, 19), [((34, 15), (24, 15), (22, 21)), ((20, 27), (26, 28), (32, 30)),
-        ((39, 31), (43, 35), (41, 41)), ((39, 48), (28, 48), (23, 44))])
-    stroke(draw, points, "#ecf7ff", 7, scale)
+    mark(draw, .5)
     color = {"ready": "#66e0c0", "active": "#78b9ff", "paused": "#f3c37b", "offline": "#91a0b4"}[status]
     draw.ellipse((176, 28, 232, 84), fill="#142a40")
     draw.ellipse((180, 32, 228, 80), fill=color)

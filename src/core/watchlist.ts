@@ -85,7 +85,8 @@ export function selectWatchlist(previous:WatchState,bundle:WatchBundle,settings:
     entries.push({symbol,name:pool.get(symbol)?.name??symbol,state:'RETAINED',source:'SCANNER',eligible:false,score:0,
       reason,added_at:at,checked_at:at,misses:0});changes.push({at,symbol,action:'RETAIN',reason});
   }
-  return {asof:at,plan_id:plan?.id??'',healthy:true,issue:entries.filter(w=>w.state==='OBSERVE'&&w.eligible).length<5?'符合條件少於 5 檔，保留現金等待': '',
+  const qualified=entries.filter(w=>w.state==='OBSERVE'&&w.eligible).length;
+  return {asof:at,plan_id:plan?.id??'',healthy:true,issue:qualified===0?'本輪沒有合格觀測股；保留現金，持倉保護持續':qualified<5?`本輪 ${qualified} 檔符合條件，依 Codex 條件監測，不強制補股`:'',
     scans:previous.scans+1,adds:(previous.adds??0)+changes.filter(c=>c.action==='ADD').length,
     removes:(previous.removes??0)+changes.filter(c=>c.action==='REMOVE').length,
     entries:entries.sort((a,b)=>a.state.localeCompare(b.state)||b.score-a.score),changes:[...previous.changes,...changes].slice(-120)};

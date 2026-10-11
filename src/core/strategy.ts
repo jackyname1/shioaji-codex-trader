@@ -7,7 +7,8 @@ export function indicators(bars: Bar[]): Features {
     || b.close <= 0 || b.high < b.low || b.volume < 0)) return { sufficient: false, sessions: bars.length };
   const closes = bars.map(b => b.close), last = bars.at(-1)!;
   const result: Features = { sufficient: true, sessions: bars.length, asof: last.date,
-    daily_amount:d(last.close).times(last.volume).toFixed() };
+    daily_amount:last.amount??d(last.close).times(last.volume).toFixed(),
+    daily_amount_source:last.amount!==undefined?'TRADE_AMOUNT':'CLOSE_VOLUME_ESTIMATE' };
   for (const n of [5,20,60] as const) if (closes.length >= n) result[`ma${n}`] = mean(closes.slice(-n));
   const changes = closes.slice(-14).map((c, i) => c - closes[closes.length - 15 + i]!);
   const up = mean(changes.map(c => Math.max(0, c))), down = mean(changes.map(c => Math.max(0, -c)));
@@ -32,7 +33,7 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
   const candidates = new Set(a.candidates), held = new Set(snapshot.account.positions.map(x => x.symbol));
   if (a.candidates.some(x => !universe.has(x))) throw new Error('候選包含資料範圍以外的股票');
   if(a.candidates.length>settings.watch_max_symbols)throw new Error('候選超過本機觀測股上限');
-  if (universe.size >= 5 && candidates.size < 5) throw new Error('候選須列出至少 5 檔；可以全部觀望');
+  // An empty HOLD_ONLY plan is a valid decision. Never force unqualified stocks into a strategy.
   if(a.screening?.entry&&d(a.screening.entry.allocation_fraction).gt(settings.max_order_fraction))throw new Error('策略配置超過硬性單筆上限');
   if(a.screening&&d(a.screening.min_amount).lt(settings.watch_min_amount))throw new Error('策略流動性低於本機觀測門檻');
   if(snapshot.review_only&&a.screening?.entry)throw new Error('盤後檢討不能啟用進場規則');

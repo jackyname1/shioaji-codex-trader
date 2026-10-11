@@ -9,6 +9,7 @@ import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addD
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import { NoSubmissionError, type Broker } from './types.js';
 import { cachedHistory } from '../core/history-cache.js';
+import { largestStockScanner, type StockScanner } from './scanner.js';
 import { LiveSession } from '../core/live-session.js';
 import { BrokerHealthSchema, BrokerError, brokerStageIssue, marketReady, requestStage } from './health.js';
 
@@ -426,9 +427,8 @@ export class ShioajiHttpBroker implements Broker {
   }
   async discover(countRequested: number, now: Date): Promise<Candidate[]> {
     const collected = new Map<string, Candidate>();
-    for (const scannerType of ['AmountRank','VolumeRank','ChangePercentRank']) {
-      const raw = z.array(z.object({ code: z.string(), name: z.string(), close: number, total_amount: number })).parse(
-        await this.request('/data/scanner', { scanner_type: scannerType,date:twDay(now), ascending: false, count: Math.min(200,countRequested * 2) }));
+    for (const scannerType of ['AmountRank','VolumeRank','ChangePercentRank'] as StockScanner[]) {
+      const raw = await largestStockScanner(this,scannerType,twDay(now),countRequested*2);
       for (const r of raw) if (/^[1-9]\d{3}$/.test(r.code) && d(r.close).gt(0)) collected.set(r.code,
         { symbol: r.code, name: r.name, last: r.close, amount: r.total_amount, source: 'Shioaji ' + scannerType });
     }
@@ -451,7 +451,8 @@ export class ShioajiHttpBroker implements Broker {
       const day = twDay(new Date(row.at)); if (day >= twDay(now)) continue;
       const b = grouped.get(day), high = Number(row.high), low = Number(row.low), close = Number(row.close), volume = row.volume_shares;
       grouped.set(day, { date: day, high: b ? Math.max(b.high,high) : high, low: b ? Math.min(b.low,low) : low,
-        close, volume: (b?.volume ?? 0) + volume });
+        close, volume: (b?.volume ?? 0) + volume,
+        ...(row.amount_twd!==undefined&&(!b||b.amount!==undefined)?{amount:d(b?.amount??0).plus(row.amount_twd).toFixed()}:{}) });
     }
     return [...grouped.values()].sort((a,b) => a.date.localeCompare(b.date));
   }

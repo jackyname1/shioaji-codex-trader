@@ -64,10 +64,12 @@ test('historical features, dynamic rankings and quotes exclude future data at th
   assert.equal(a.quotes(new Date(at.getTime()+1000)).length,0);
 });
 test('daily CSV reveals open at the simulated start and close only at 13:30, using prior volume',async()=>{
-  const data=csvDataset('symbol,date,open,high,low,close,volume_shares\n9001,2026-01-02,29,30,28,29,270000\n9001,2026-01-05,30,35,25,33,99999999');
+  const data=csvDataset('symbol,date,open,high,low,close,volume_shares,amount_twd\n9001,2026-01-02,29,30,28,29,270000,7800000\n9001,2026-01-05,30,35,25,33,99999999,3200000000');
   const market=new HistoricalMarket(data,'0.01');await market.subscribe(['9001'],false);
   const q=market.quotes(new Date(start+'T09:10:00+08:00'))[0]!;
   assert.equal(q.last,'30');assert.equal(q.ask_shares,10);
+  assert.equal(market.points.find(p=>p.at===q.trade_at)!.amount_twd,undefined);
+  assert.equal(market.points.find(p=>p.at==='2026-01-05T05:30:00.000Z')!.amount_twd,'3200000000');
   assert.equal(market.quotes(new Date(start+'T13:30:00+08:00'))[0]!.last,'33');
   assert.equal((await market.history('9001',new Date(start+'T12:00:00+08:00'))).at(-1)!.close,29);
 });
@@ -146,15 +148,19 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
     calls.push({path,body});let result:unknown;
     if(path==='/api/v1/info')result={simulation:false};
     else if(path.endsWith('/health'))result={status:'healthy',token_stale:false};
-    else if(path.endsWith('/data/scanner'))result=Array.from({length:10},(_,n)=>({code:String(9001+Math.floor(n/2)),name:'test'}));
+    else if(path.endsWith('/data/scanner'))result=Array.from({length:10},(_,n)=>({code:String((body.ascending?9001:9301)+Math.floor(n/2)),
+      name:'test',close:30,total_amount:body.ascending?200000000+n*1000000:4500+n*1000}));
     else if(path.includes('/data/contracts/'))result={security_type:'STK',code:path.split('/')[5],exchange:'TSE'};
-    else if(path.endsWith('/data/kbars'))result={datetime:[String(body.start)+'T09:10:00'],Open:['30'],High:['31'],Low:['29'],Close:['30'],Volume:[1000]};
+    else if(path.endsWith('/data/kbars'))result={datetime:[String(body.start)+'T09:10:00'],Open:['30'],High:['31'],Low:['29'],Close:['30'],Volume:[1000],Amount:[30000000]};
     else throw new Error('Unexpected endpoint');return new Response(JSON.stringify(result));
   };
   try {const request=BacktestRequestSchema.parse({start:'2026-07-01',end:'2026-07-03',source:'shioaji',strategy:'codex'});
     const load=()=>shioajiDataset(request,SettingsSchema.parse({}),dir,new AbortController().signal,()=>undefined,fetcher);
     const first=await load(),historyCount=calls.filter(x=>x.path.endsWith('/data/kbars')).length;assert.ok(first.points.length>0);
-    assert.equal(calls.find(x=>x.path.endsWith('/data/scanner'))!.body.date,'2026-06-30');assert.equal(Object.keys(first.names).length,5);assert.equal(new Set(first.points.map(p=>p.symbol+':'+p.at)).size,first.points.length);
+    const scan=calls.find(x=>x.path.endsWith('/data/scanner'))!.body;
+    assert.equal(scan.date,'2026-06-30');assert.equal(scan.ascending,true);assert.equal(scan.count,200);
+    assert.deepEqual(Object.keys(first.names).sort(),['9001','9002','9003','9004','9005']);assert.equal(first.points[0]!.amount_twd,'30000000');
+    assert.equal(new Set(first.points.map(p=>p.symbol+':'+p.at)).size,first.points.length);
     await load();assert.equal(calls.filter(x=>x.path.endsWith('/data/kbars')).length,historyCount);
     const scannerCount=calls.filter(x=>x.path.endsWith('/data/scanner')).length;
     const selected=await shioajiDataset(BacktestRequestSchema.parse({...request,symbols:['9001']}),SettingsSchema.parse({}),dir,new AbortController().signal,()=>undefined,fetcher);

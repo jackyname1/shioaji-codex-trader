@@ -5,7 +5,7 @@ import { Risk, alignedPrice, fee } from './risk.js';
 import { evaluate, updateProtection } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
 import { experienceContext } from './experience.js';
-import { emptyWatch, selectWatchlist, ruleEntry, type WatchState } from './watchlist.js';
+import { emptyWatch, selectWatchlist, watchEligibility, ruleEntry, type WatchState } from './watchlist.js';
 import { nextStrategy } from './schedule.js';
 import { active, ageSeconds, d, equity, remaining, twDay, type Account, type Analysis, type Candidate, type Features,
   type Instrument, type Order, type Plan, type Quote, type Settings, type Snapshot, type SmartSpec } from './models.js';
@@ -165,13 +165,16 @@ export class Engine {
     const pending = [...symbols];
     await Promise.all(Array.from({length:3},async () => {
       for (;;) { const symbol = pending.shift(); if (!symbol) break;
-        const key = `history_${twDay(now)}_${symbol}`;
+        const key = `history_v2_${twDay(now)}_${symbol}`;
+        let issue='';
         let bars = this.store.get<import('./models.js').Bar[]>(key);
-        if (!bars) { try { bars = await this.broker.history(symbol,now); if (bars.length) this.store.set(key,bars); } catch { bars = []; } }
+        if (!bars) { try { bars = await this.broker.history(symbol,now); if (bars.length) this.store.set(key,bars); }
+          catch(error) { bars = [];issue=brokerIssue(error); } }
         const f = indicators(bars);
+        if(!f.sufficient)f.issue=issue||`歷史 K 線只有 ${bars.length} 個已完成交易日，至少需要 20 日`;
         if (this.settings.mode !== 'demo'||this.store.get('historical_real_data')) {
           let previous = '9999-12-31'; try { previous = this.calendar.next(twDay(now),-1); } catch { /* fail closed */ }
-          if (!f.asof || f.asof < previous) { f.sufficient = false; f.issue = '歷史行情過期或交易日未知'; }
+          if (!f.asof || f.asof < previous) { f.sufficient = false; f.issue ||= '歷史行情過期或交易日未知'; }
         }
         features[symbol] = f;
       }
@@ -194,16 +197,26 @@ export class Engine {
   }
   snapshotFromBundle(bundle: Bundle, now: Date, review = false): Snapshot {
     const a = this.account; if (!a?.complete) throw new Error('帳戶快照不完整，暫停新決策');
+    const baseline=this.baseline(now),loss=baseline?d(baseline).minus(equity(a)):undefined;
+    const cash=spendableCash(a,this.settings),minimum=equity(a).times(this.settings.min_cash_fraction),room=d(cash.available).minus(minimum);
     this.metadata = {...this.metadata,...bundle.metadata};
     const limits = Object.fromEntries(['whole_lots','min_cash_fraction','max_order_fraction','max_symbol_fraction',
       'max_exposure_fraction','max_daily_buy_fraction','max_daily_buy_orders','daily_loss_fraction',
       'price_deviation_fraction','minimum_fee','fee_rate','sell_tax_rate','plan_max_minutes','watch_min_amount','watch_max_symbols'].map(k => [k,this.settings[k as keyof Settings]]));
     return {snapshot_id:randomUUID(),asof:now.toISOString(),synthetic:this.settings.mode === 'demo',review_only:review,
       account:{cash:a.cash,settlement_debits:a.settlement_debits,settlement_credits:a.settlement_credits,
-        equity:equity(a).toFixed(),daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
+        equity:equity(a).toFixed(),available_cash:cash.available,order_cash_reserved:cash.reserved,
+        minimum_cash_reserve:minimum.toFixed(),buying_power:room.gt(0)?room.toFixed():'0',
+        daily_baseline_equity:baseline??null,daily_loss_amount:loss?(loss.gt(0)?loss.toFixed():'0'):null,
+        daily_loss_ratio:loss&&d(baseline!).gt(0)?(loss.gt(0)?loss.div(baseline!).toFixed():'0'):null,
+        daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
       universe:bundle.pool,features:bundle.features,hard_limits:limits,
+      instruments:structuredClone(bundle.metadata),data_readiness:{pool_count:bundle.pool.length,
+        history_ready:bundle.pool.filter(c=>bundle.features[c.symbol]?.sufficient).length,
+        eligible_symbols:bundle.pool.filter(c=>!watchEligibility(c,bundle.features[c.symbol],bundle.metadata[c.symbol],this.settings,undefined,now).length).map(c=>c.symbol),
+        history_issues:Object.entries(bundle.features).flatMap(([symbol,f])=>f.issue?[{symbol,issue:f.issue}]:[])},
       existing_protection:Object.fromEntries(this.store.protections().map(p => [p.symbol,p.spec])),
       observation:{symbols:this.watch.entries.map(w=>w.symbol),refresh_minutes:this.settings.watch_refresh_minutes,
         max_symbols:this.settings.watch_max_symbols,next_strategy_at:nextStrategy(now,this.settings,this.calendar)?.at??null},

@@ -12,6 +12,7 @@ const price = z.string().regex(/^\d+(?:\.\d+)?$/).refine(v => d(v).gt(0));
 export const HistoryPointSchema = z.strictObject({
   symbol:z.string().regex(/^[1-9]\d{3}$/), at:z.string().datetime({offset:true}),
   open:price,high:price,low:price,close:price,volume_shares:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  amount_twd:z.string().regex(/^\d+(?:\.\d+)?$/).optional(),
   bid:price.optional(),ask:price.optional(),bid_shares:z.number().int().nonnegative().optional(),ask_shares:z.number().int().nonnegative().optional(),
 }).refine(x => d(x.high).gte(x.open) && d(x.high).gte(x.close) && d(x.low).lte(x.open) && d(x.low).lte(x.close), 'OHLC 範圍不符')
   .refine(x => (x.bid === undefined) === (x.ask === undefined) && (!x.bid || d(x.bid).lte(x.ask!)), '買賣報價不符');
@@ -28,7 +29,7 @@ export function normalizeHistoryPoints(input:HistoryPoint[],conflicts:'reject'|'
   for(const raw of input){const parsed=HistoryPointSchema.parse(raw),p={...parsed,at:new Date(parsed.at).toISOString()},key=p.symbol+':'+p.at;
     const previous=unique.get(key);
     if(previous){duplicates++;
-      const equal=(['open','high','low','close','bid','ask'] as const).every(k=>previous[k]===undefined||p[k]===undefined?previous[k]===p[k]:d(previous[k]!).eq(p[k]!))
+      const equal=(['open','high','low','close','bid','ask','amount_twd'] as const).every(k=>previous[k]===undefined||p[k]===undefined?previous[k]===p[k]:d(previous[k]!).eq(p[k]!))
         &&(['volume_shares','bid_shares','ask_shares'] as const).every(k=>previous[k]===p[k]);
       if(!equal){if(conflicts==='reject')throw new Error(`回測股票 ${p.symbol} 在 ${new Date(p.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})} 的價格或成交量不一致，請核對 CSV 後重新匯入`);revisions++;}
     }
@@ -53,6 +54,7 @@ export function csvDataset(text: string): HistoryDataset {
     if (daily && !validDay(r.date!)) throw new Error('回測 CSV 日期不合法');
     const at = daily ? r.date+'T13:30:00+08:00' : r.at!;
     const p:HistoryPoint={symbol:r.symbol!,at,open:r.open!,high:r.high!,low:r.low!,close:r.close!,volume_shares:Number(r.volume_shares)};
+    if(r.amount_twd)p.amount_twd=r.amount_twd;
     for (const h of ['bid','ask'] as const) if (r[h]) p[h]=r[h];
     for (const h of ['bid_shares','ask_shares'] as const) if (r[h]) p[h]=Number(r[h]);
     points.push(HistoryPointSchema.parse(p));
@@ -86,14 +88,15 @@ export class HistoricalMarket implements Broker {
       const days=new Map<string,Bar>();
       for(const p of rows) {const day=twDay(new Date(p.at)),old=days.get(day);
         days.set(day,{date:day,close:Number(p.close),high:Math.max(old?.high??0,Number(p.high)),
-          low:Math.min(old?.low??Infinity,Number(p.low)),volume:(old?.volume??0)+p.volume_shares});}
+          low:Math.min(old?.low??Infinity,Number(p.low)),volume:(old?.volume??0)+p.volume_shares,
+          ...(p.amount_twd!==undefined&&(!old||old.amount!==undefined)?{amount:d(old?.amount??0).plus(p.amount_twd).toFixed()}:{})});}
       this.daily.set(symbol,[...days.values()]);
     }
     if(dataset.frequency==='DAILY') {
       this.points=dataset.points.flatMap(p => {
         const day=twDay(new Date(p.at)),previous=this.daily.get(p.symbol)!.filter(b=>b.date<day).at(-1);
         const starts:HistoryPoint[]=['09:10','09:11'].map(clock=>({...p,at:new Date(`${day}T${clock}:00+08:00`).toISOString(),
-          high:p.open,low:p.open,close:p.open,volume_shares:Math.floor((previous?.volume??0)/270),
+          high:p.open,low:p.open,close:p.open,volume_shares:Math.floor((previous?.volume??0)/270),amount_twd:undefined,
           bid:undefined,ask:undefined,bid_shares:undefined,ask_shares:undefined}));
         return [...starts,p];
       }).sort((a,b)=>a.at.localeCompare(b.at)||a.symbol.localeCompare(b.symbol));
@@ -129,7 +132,7 @@ export class HistoricalMarket implements Broker {
     const result:Candidate[]=[];
     for(const symbol of this.bySymbol.keys()) {const p=this.latest(symbol,now),previous=(await this.history(symbol,now)).at(-1);if(!p||!previous)continue;
       result.push({symbol,name:this.dataset.names[symbol]?.name??(this.dataset.synthetic?'虛構股票 '+symbol:symbol),
-        last:p.close,amount:d(previous.close).times(previous.volume).toFixed(),source:'歷史資料池：以前一已完成交易日成交金額排序'});}
+        last:p.close,amount:previous.amount??d(previous.close).times(previous.volume).toFixed(),source:'歷史資料池：以前一已完成交易日成交金額排序'});}
     return result.sort((a,b)=>d(b.amount).cmp(a.amount)).slice(0,count);
   }
   async submit():Promise<Order>{throw new Error('歷史行情源禁止真實委託');}
