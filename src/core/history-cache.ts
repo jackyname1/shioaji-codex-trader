@@ -21,7 +21,7 @@ export async function cachedHistory(broker: ShioajiHttpBroker, root: string | un
   for (const range of windows) {
     signal.throwIfAborted();
     // Market history belongs to the contract/date, never the app's automatically chosen local port.
-    const key = createHash('sha256').update(JSON.stringify(['shioaji-1.7.7-minutes-v4', symbol, exchange, range])).digest('hex');
+    const key = createHash('sha256').update(JSON.stringify(['shioaji-1.7.7-minutes-v5-amount', symbol, exchange, range])).digest('hex');
     const path = root ? join(root, key + '.json') : undefined;
     let batch: HistoryPoint[] | undefined;
     if (path && range.end < today) try {

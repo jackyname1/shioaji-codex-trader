@@ -2,11 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import {resetRelease} from './reset-release.mjs';
 
 const repository = 'jackyname1/shioaji-codex-trader';
 const commit = process.env.RELEASE_COMMIT;
 const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-const api = (path, ...args) => JSON.parse(gh('api', `repos/${repository}/${path}`, ...args));
+const api = (path, ...args) => {const response=gh('api', `repos/${repository}/${path}`, ...args);return response.trim()?JSON.parse(response):null;};
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 if (process.env.GH_REPO !== repository || process.env.GITHUB_REF !== 'refs/heads/main' || !/^[a-f0-9]{40}$/.test(commit ?? '')) {
   throw new Error('Release publication requires the verified repository main commit.');
@@ -35,9 +36,6 @@ let tagObject;
 try { tagObject = api(`git/ref/tags/${tag}`).object; }
 catch (error) { if (!/HTTP 404|Not Found|status.?404/i.test(String(error.stderr ?? error.message))) throw error; }
 for (let depth=0;tagObject?.type==='tag'&&depth<4;depth++) tagObject=api(`git/tags/${tagObject.sha}`).object;
-if (tagObject && (tagObject.type !== 'commit' || tagObject.sha !== commit)) {
-  throw new Error(`${tag} already points to another commit. Increment the package version for a new release.`);
-}
 const verifyAssets = async release => {
   for (const name of names) {
     const asset = release.assets.find(item => item.name === name);
@@ -46,6 +44,16 @@ const verifyAssets = async release => {
     }
   }
 };
+let resetConfig;
+try{resetConfig=JSON.parse(await readFile('.github/release-reset.json','utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
+const resetPending=resetConfig?.version===packageJson.version&&releases.some(r=>resetConfig.remove_releases.some(old=>old.id===r.id)
+  ||r.tag_name===`reset-${tag}-${commit.slice(0,12)}`);
+if(resetPending){
+  await resetRelease({api,gh,config:resetConfig,commit,tag,tagObject,releases,names,directory,verifyAssets});
+}else{
+if (tagObject && (tagObject.type !== 'commit' || tagObject.sha !== commit)) {
+  throw new Error(`${tag} already points to another commit. Increment the package version for a new release.`);
+}
 if (existing && !existing.draft) {
   if (!tagObject) throw new Error('The published release has no verifiable Git tag. Create a new version.');
   // An identical rerun is read-only. Published tags, notes and download files are never replaced.
@@ -66,4 +74,5 @@ await verifyAssets(updated);
 if (!tagObject) api('git/refs', '--method', 'POST', '-f', `ref=refs/tags/${tag}`, '-f', `sha=${commit}`);
 gh('release', 'edit', tag, '--draft=false', '--prerelease=true', '--title', `Shioaji Codex Trader ${tag} · Pre-release`, '--notes-file', resolve(directory, 'RELEASE_NOTES.md'));
 console.log(gh('release', 'view', tag, '--json', 'url,tagName,assets'));
+}
 }

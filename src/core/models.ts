@@ -153,22 +153,27 @@ export const SessionSchema = z.strictObject({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), open: z.boolean(), source: z.string().min(1), verified_at: timestamp,
 });
 export type SessionDay = z.infer<typeof SessionSchema>;
-export interface Bar { date: string; close: number; high: number; low: number; volume: number }
+export interface Bar { date: string; close: number; high: number; low: number; volume: number; amount?:string }
 export interface Candidate { symbol: string; name: string; last: string; amount: string; source: string }
 export interface Features {
   sufficient: boolean; sessions: number; asof?: string; issue?: string;
   ma5?: number; ma20?: number; ma60?: number; rsi14?: number; atr14?: number;
   support20?: number; resistance20?: number; volume_ratio20?: number; return20?: number;
   daily_amount?: string;
+  daily_amount_source?:'TRADE_AMOUNT'|'CLOSE_VOLUME_ESTIMATE';
 }
 export interface Snapshot {
   snapshot_id: string; asof: string; synthetic: boolean; review_only: boolean;
   account: { cash: string; settlement_debits: string; settlement_credits: string; equity: string;
     daily_buy_amount: string; daily_buy_count: number; positions: Position[];
-    open_orders: { symbol: string; action: string; shares: number; limit_price: string }[] };
+    open_orders: { symbol: string; action: string; shares: number; limit_price: string }[];
+    available_cash?:string;buying_power?:string;minimum_cash_reserve?:string;order_cash_reserved?:string;
+    daily_baseline_equity?:string|null;daily_loss_amount?:string|null;daily_loss_ratio?:string|null };
   universe: Candidate[]; features: Record<string, Features>; hard_limits: Record<string, unknown>;
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
   news: unknown[]; data_limitations: string[];
+  instruments?:Record<string,Instrument>;
+  data_readiness?:{pool_count:number;history_ready:number;eligible_symbols:string[];history_issues:{symbol:string;issue:string}[]};
   experience?: import('./experience.js').ExperienceContext;
   observation?: { symbols: string[]; refresh_minutes: number; max_symbols: number; next_strategy_at: string | null };
 }

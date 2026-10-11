@@ -80,11 +80,12 @@ test('protection cannot loosen stop or disable an activated trailing stop',() =>
   assert.equal(p.spec.stop_price,'29'); assert.equal(p.spec.trailing_activate,'33'); assert.equal(p.high_water,'34');
   assert.equal(evaluate(p,'28'),'STOP'); assert.equal(evaluate(p,'34'),'');
 });
-test('analysis checks snapshot identity, expiry, minimum candidates, history and review mode',() => {
+test('analysis checks snapshot identity, expiry, available candidates, history and review mode',() => {
   const input = snapshot(), s = settings(), a = demoAnalysis(input,s,now);
   assert.ok(validateAnalysis(a,input,now,s).id);
   assert.throws(() => validateAnalysis({...a,snapshot_id:'wrong'},input,now,s));
-  assert.throws(() => validateAnalysis({...a,candidates:['9001']},input,now,s));
+  assert.ok(validateAnalysis({...a,candidates:['9001']},input,now,s).id);
+  assert.throws(() => validateAnalysis({...a,candidates:[]},input,now,s));
   assert.throws(() => validateAnalysis({...a,expires_at:now.toISOString()},input,now,s));
   assert.throws(() => validateAnalysis(a,{...input,review_only:true},now,s));
   input.features['9001']!.sufficient=false; assert.throws(() => validateAnalysis(a,input,now,s));

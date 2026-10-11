@@ -7,6 +7,7 @@ import { TradingCalendar } from './calendar.js';
 import { addDays, SettingsSchema, twDay, type Settings } from './models.js';
 import { validateDataset, type HistoryDataset, type HistoryPoint } from './backtest-data.js';
 import { BrokerHealthSchema, marketReady } from '../broker/health.js';
+import { largestStockScanner } from '../broker/scanner.js';
 import type { BacktestRequest, BacktestProgress } from './backtest.js';
 
 export async function shioajiDataset(request:BacktestRequest,settings:Settings,cacheRoot:string,signal:AbortSignal,
@@ -36,8 +37,7 @@ export async function shioajiDataset(request:BacktestRequest,settings:Settings,c
         await calendar.refresh(year,signal);seedDate=calendar.next(request.start,-1);
       }
       report('UNIVERSE',`讀取 ${seedDate} 歷史成交金額排行，建立本次歷史資料池`);
-      const ranks=z.array(z.object({code:z.string(),name:z.string()})).parse(await broker.request('/data/scanner',
-        {date:seedDate,scanner_type:'AmountRank',ascending:false,count:60}));
+      const ranks=await largestStockScanner(broker,'AmountRank',seedDate,200);
       const seen=new Set<string>();pool=ranks.filter(x=>{if(!/^[1-9]\d{3}$/.test(x.code)||seen.has(x.code))return false;seen.add(x.code);return true;}).slice(0,20);
     }
     if(!pool.length)throw new Error('回測無法取得起始日前歷史股票池；不使用今日排行替代');

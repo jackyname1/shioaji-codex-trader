@@ -252,7 +252,7 @@ function registerIpc(): void {
     const events=analystHistory(value);if(!events.length)throw new Error('尚未產生 Codex 執行紀錄');
     const target=await dialog.showSaveDialog({title:'匯出完整 Codex 紀錄',defaultPath:'Codex-execution-history.json',filters:[{name:'JSON',extensions:['json']}]});
     if(target.canceled||!target.filePath)return '已取消匯出';
-    writeFileSync(target.filePath,JSON.stringify({version:'0.2.3',scope:value,events},null,2),{mode:0o600});return '完整 Codex 紀錄已匯出';
+    writeFileSync(target.filePath,JSON.stringify({version:app.getVersion(),scope:value,events},null,2),{mode:0o600});return '完整 Codex 紀錄已匯出';
   });
   handle('trader:hide',() => { if (tray) window?.hide(); else window?.minimize(); });
   handle('trader:backtest',value=>operations.run(async()=>{
