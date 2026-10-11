@@ -72,7 +72,9 @@ export function prepareCodexProfile(profile: string, sourceProfile = process.env
   let imported = false;
   if (!existsSync(target) && existsSync(source)) { copyFileSync(source, target); chmodSync(target, 0o600); imported = true; }
   const temporary = join(profile, 'config-' + randomUUID() + '.toml');
-  writeFileSync(temporary, 'cli_auth_credentials_store = "file"\n[features]\nshell_tool = false\napply_patch_tool = false\n', {mode:0o600});
+  writeFileSync(temporary, 'cli_auth_credentials_store = "file"\n[features]\nshell_tool = false\n'+
+    'plugins = false\nremote_plugin = false\napps = false\nmulti_agent = false\nshell_snapshot = false\n'+
+    (process.platform==='win32'?'[windows]\nsandbox = "unelevated"\n':''), {mode:0o600});
   renameSync(temporary, join(profile, 'config.toml'));
   return imported;
 }
@@ -104,10 +106,13 @@ export function codexIssue(error: unknown): string {
   if (error instanceof CodexError) return error.message;
   const raw = error instanceof Error ? error.message : '';
   if (/401|unauthorized|authentication|not logged|refresh token|login required/i.test(raw)) return 'Codex 尚未登入或登入已過期，請按登入重新連接';
-  if (/model.{0,60}(not found|not supported|unavailable)|unsupported.{0,30}model|invalid model/i.test(raw)) return 'Codex 模型不可用，請清空模型欄位使用帳戶預設模型';
+  if (/model.{0,100}(not found|not supported|unavailable|does not exist|does not support|not available)|(?:unsupported|unknown|invalid|not support).{0,60}model/i.test(raw)) return 'Codex 模型不可用，請清空模型欄位使用帳戶預設模型';
+  if (/reasoning.{0,100}(unsupported|not support|invalid)|unsupported.{0,60}(reasoning|effort)/i.test(raw)) return 'Codex 模型不支援此推理強度，請使用模型預設';
   if (/429|quota|usage limit|rate limit/i.test(raw)) return 'Codex 使用額度暫時不足，請稍後重試或檢查訂閱額度';
   if (/network|connect|TLS|certificate|fetch|stream disconnected/i.test(raw)) return 'Codex 網路連線未完成，請檢查網路後重試';
   if (/schema|output format/i.test(raw)) return 'Codex 輸出格式未通過，請重新測試連線';
+  if (/sandbox|CreateProcess|os error|permission denied|access.{0,10}denied/i.test(raw)) return 'Codex 本機執行環境未能啟動，請重開程式後測試連線';
+  if (/invalid output|SyntaxError|JSON|未產生完整有效/.test(raw)) return 'Codex 沒有回傳完整分析結果，請重新測試連線';
   return 'Codex 執行未完成，請按測試連線查看登入與模型狀態';
 }
 export class CodexAnalyst {

@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Engine, type Bundle } from './engine.js';
-import { CodexAnalyst, type AnalystEvent } from './codex.js';
+import { CodexAnalyst, CodexError, codexIssue, type AnalystEvent } from './codex.js';
+import { BrokerError, brokerIssue } from '../broker/health.js';
 import { collectFacts } from './facts.js';
 import { SettingsSchema, ageSeconds, twDay, type Settings } from './models.js';
 import { demoAnalysis } from './strategy.js';
@@ -21,6 +22,7 @@ export class TradingService {
   readonly engine: Engine;
   readonly liveSession = new LiveSession();
   private liveEpoch = 0;
+  private automaticLive:boolean;
   private queue: Promise<unknown> = Promise.resolve();
   private timer?: NodeJS.Timeout;
   private tickPending = false;
@@ -40,7 +42,9 @@ export class TradingService {
   get analyzing():boolean{return !!this.decisionTask;}
   get scanning():boolean{return !!this.watchTask;}
   private closeTask?: Promise<void>;
-  constructor(path: string, mode?: Settings['mode'], createMarket?: (store: Store, settings: Settings, session: LiveSession) => Broker) {
+  constructor(path: string, mode?: Settings['mode'], createMarket?: (store: Store, settings: Settings, session: LiveSession) => Broker,
+    options:{automaticLive?:boolean}={}) {
+    this.automaticLive=options.automaticLive??false;
     this.store = new Store(path);
     const stored = this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {}),auto_execute:false});
     const priorMode = this.store.get<string>('database_mode');
@@ -61,6 +65,7 @@ export class TradingService {
     this.lastConnectAttempt=Date.now();
     try { await this.enqueue(() => this.engine.start(new Date())); }
     catch(error) { this.engine.dataUnavailable(error,new Date()); if(!runTimer)throw error; }
+    await this.syncLiveSession();
     if(runTimer){void this.refreshObservations().catch(()=>undefined);void this.ensureCalendar();}
     if (runTimer) this.timer = setInterval(() => {
       if (this.tickPending || this.stopping) return;
@@ -77,7 +82,7 @@ export class TradingService {
         if(!this.calendarTask)void this.ensureCalendar();
         if(this.engine.settings.auto_watchlist&&!this.watchTask&&this.calendar.inSession(new Date(),'COMMON')
           &&Date.now()-this.lastWatchAttempt>=this.engine.settings.watch_refresh_minutes*60000)void this.refreshObservations().catch(()=>undefined);
-      }).finally(() => { this.tickPending = false; }).catch(() => undefined);
+      }).then(()=>this.syncLiveSession()).finally(() => { this.tickPending = false; }).catch(() => undefined);
     },1000);
   }
   private schedule(now: Date): void {
@@ -153,18 +158,21 @@ export class TradingService {
       }
       await this.enqueue(() => { signal.throwIfAborted(); return this.engine.activate(analysis,snapshot,new Date()); });
       this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
-    } catch {
-      this.analysisStatus=review?'盤後檢討未通過':'本輪策略未通過，停止新買進';
+    } catch (error) {
+      const issue=signal.aborted?'Codex 分析已停止':error instanceof CodexError?codexIssue(error):
+        error instanceof BrokerError?brokerIssue(error):error instanceof Error&&/^(帳戶快照|Codex 使用|Codex 決策|計畫有效|候選|買進標的|盤後檢討|策略|行情|歷史|觀測)/.test(error.message)?error.message:'策略資料或分析結果尚未通過核對';
+      this.analysisStatus=issue;
+      if(!this.analystEvents.some(e=>e.stage==='FAILED'&&Date.parse(e.at)>=Date.now()-2000))this.analystEvents.push({at:new Date().toISOString(),asof:new Date().toISOString(),stage:'FAILED',message:issue,model:s.codex_model||'Codex 預設模型',reasoning:s.codex_reasoning});
       if (!this.stopping) await this.enqueue(async () => {
         if(!review)this.engine.entryBlocked = true;
         this.store.recordExperience({id:'analysis-failure:'+randomUUID(),at:new Date().toISOString(),mode:this.engine.settings.mode,
           kind:'ANALYSIS_FAILURE',symbol:'',action:'NONE',shares:0,price:null,fee:null,tax:null,realized_pnl:null,
           note:'分析逾時、資料不足或 schema／快照核對失敗；未採用該輪結果'});
-        this.engine.log('ANALYSIS_FAIL','分析逾時、資料不足或結果未通過檢查；停止新買進，既有保護持續');
+        this.engine.log('ANALYSIS_FAIL',issue+'；停止新買進，既有保護持續');
         // A failed analysis must also cancel owned outstanding entry orders when execution is enabled.
         if (!review&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,new Date());
       });
-      throw new Error('本輪決策未啟用；請查看本機狀態');
+      throw new Error('本輪決策未啟用：'+issue);
     }
   }
   async command(input: string): Promise<string> {
@@ -226,7 +234,7 @@ export class TradingService {
         case 'cancel-all': for (const o of this.store.orders(true)) await this.engine.cancel(o.local_id,now); return '已核對本程式的未完成委託';
         case 'calendar': return '已更新 ' + await this.calendar.refresh(Number(args[0] ?? twDay(now).slice(0,4)),this.stop.signal) + ' 天行事曆';
         case 'reconcile': await this.engine.reconcile(now); await this.engine.refreshAccount(now); return '已重新核對帳戶及委託';
-        case 'help': return 'status | experience | decide | review | watch | start-auto | pause | resume | stop | lock-live | continue | auto on/off | cancel ID | cancel-all | reconcile | calendar 年份 | help | exit\n實盤請從桌面「啟動實盤」確認本次授權。stop 不會自動撤單；exit 關閉監控，不會自動撤銷券商掛單。';
+        case 'help': return 'status | experience | decide | review | watch | start-auto | pause | resume | stop | lock-live | continue | auto on/off | cancel ID | cancel-all | reconcile | calendar 年份 | help | exit\n桌面實盤連線後會自動核對帳戶；「開始自動交易」才會啟用策略執行。stop 不會自動撤單；exit 關閉監控，不會自動撤銷券商掛單。';
         default: throw new Error('未知指令，輸入 help 查看');
       }
     });
@@ -282,8 +290,15 @@ export class TradingService {
       this.engine.log('LIVE_CONSENT',`${scope==='trade'?'本次實盤':'本次撤單'}授權已開啟；重新連線、重啟、鎖定或變更交易風控後失效`);
     });
   }
+  private async syncLiveSession():Promise<void>{
+    // Desktop live-mode selection is the user's intent. Establish readiness independently of Codex/automation.
+    // Never restore a running strategy or undo an explicit stop/lock; grants remain account-bound and in memory.
+    if(!this.automaticLive||this.stopping||this.liveAuthorized||this.engine.killed||!this.liveReadiness().ready)return;
+    try {await this.activateLive();}
+    catch(error){if(!this.stopping)this.engine.logOnce('LIVE_READY',brokerIssue(error));}
+  }
   private lockLive(): void {
-    this.liveEpoch++;this.liveSession.revoke();this.engine.setSettings({...this.engine.settings,auto_execute:false});
+    this.automaticLive=false;this.liveEpoch++;this.liveSession.revoke();this.engine.setSettings({...this.engine.settings,auto_execute:false});
     this.engine.log('LIVE_LOCK','實盤授權已關閉；不影響券商既有掛單');
   }
   close(): Promise<void> {

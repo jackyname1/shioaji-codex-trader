@@ -80,7 +80,7 @@ jobs:
       contents: write
       actions: read
     concurrency:
-      group: release-publish-v0.2.0
+      group: release-publish-main
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5

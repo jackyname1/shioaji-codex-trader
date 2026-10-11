@@ -46,14 +46,14 @@ export class Engine {
   logOnce(kind: string, message: string): void { if (!this.recent.slice(-20).includes(`${kind}: ${message}`)) this.log(kind,message); }
   async start(now: Date): Promise<void> {
     await this.broker.connect(); this.connected = true;
-    try { await this.reconcile(now); await this.refreshAccount(now); await this.updateSubscriptions(now); }
-    catch (error) { this.dataUnavailable(error, now); }
+    await this.syncAccount(now);
+    try {await this.updateSubscriptions(now);} catch(error){this.dataUnavailable(error,now);}
     this.log('START',`模式=${this.settings.mode}；自動執行=${this.settings.auto_execute}`);
   }
   dataUnavailable(error: unknown, now: Date): void {
-    this.dataIssue = brokerIssue(error); this.quotes.clear();
+    this.dataIssue = brokerIssue(error);
     this.account = { ...(this.account ?? { cash:'0', settlement_debits:'0', settlement_credits:'0', positions:[], orders:[],
-      daily_buy_count:0, daily_buy_amount:'0' }), asof:now.toISOString(), complete:false, issue:this.dataIssue };
+      daily_buy_count:0, daily_buy_amount:'0',available:{cash:false,settlements:false,positions:false,orders:false} }), asof:now.toISOString(), complete:false, issue:this.dataIssue };
     this.logOnce('CONNECTION', this.dataIssue);
   }
   async close(): Promise<void> { this.connected = false; await this.broker.close(); }
@@ -78,7 +78,9 @@ export class Engine {
   kill(enabled = true): void { this.killed = enabled; this.store.set('kill_switch',enabled);
     this.log('KILL',enabled ? '停止全部新委託；現有掛單仍須撤單' : '解除停止委託'); }
   async reconcile(now: Date, force = false): Promise<void> {
-    const prior = this.store.orders(true), orders = await this.broker.reconcile(prior,force);
+    const prior = this.store.orders(true);
+    if(!prior.length){this.lastReconcile=now;return;}
+    const orders = await this.broker.reconcile(prior,force);
     for (const o of orders) {
       const old = prior.find(x => x.local_id === o.local_id);
       if (old) this.recordReconciledFill(o,old.filled,now);
@@ -88,6 +90,12 @@ export class Engine {
     this.lastReconcile = now;
     if (orders.some(o => ['UNKNOWN','SUBMITTING','PREPARED'].includes(o.status)))
       this.logOnce('BLOCK','有未確認委託，停止新增委託；先核對券商結果，不會盲目重送');
+  }
+  private async syncAccount(now:Date,force=false):Promise<void>{
+    let failure:unknown;
+    try{await this.reconcile(now,force);}catch(error){failure=error;}
+    try{await this.refreshAccount(now);}catch(error){failure??=error;}
+    if(failure)this.dataUnavailable(failure,now);
   }
   async refreshAccount(now: Date): Promise<Account> {
     const account = await this.broker.account(now), local = this.store.orders();
@@ -200,14 +208,14 @@ export class Engine {
     const resumed = this.lastTick && now.getTime() - this.lastTick.getTime() > 45000;
     const changed = this.generation !== this.broker.generation;
     if (resumed || changed || this.metadataDay !== twDay(now)) {
-      this.quotes.clear(); await this.reconcile(now,true); await this.refreshAccount(now); await this.updateSubscriptions(now);
+      this.quotes.clear(); await this.syncAccount(now,true); await this.updateSubscriptions(now);
       this.generation = this.broker.generation;
       if (resumed || changed) this.logOnce('RESUME','連線或系統狀態變更，清除行情並重新核對');
     }
     this.lastTick = now;
-    if (!this.lastReconcile || now.getTime() - this.lastReconcile.getTime() >= 15000) await this.reconcile(now);
+    if (!this.lastReconcile || now.getTime() - this.lastReconcile.getTime() >= 15000)try{await this.reconcile(now);}catch(error){this.dataUnavailable(error,now);}
     if (!this.lastRefresh || now.getTime() - this.lastRefresh.getTime() >= 20000 || this.broker.dirty) {
-      await this.reconcile(now); await this.refreshAccount(now);
+      await this.syncAccount(now);
     }
     if (this.plan && Date.parse(this.plan.analysis.expires_at) <= now.getTime() && this.canExecute())
       for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.cancel(o.local_id,now);

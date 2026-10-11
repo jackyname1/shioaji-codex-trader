@@ -18,7 +18,7 @@ import { BacktestController } from '../core/backtest-controller.js';
 import { BacktestRequestSchema,fillsCsv } from '../core/backtest.js';
 import { experienceStatus } from '../core/experience.js';
 import { z } from 'zod';
-import { CredentialVault,NativeConnection,ConnectionInputSchema } from './credentials.js';
+import { CredentialVault,NativeConnection,connectionInput,type CredentialState } from './credentials.js';
 import { liveChart } from '../core/live-chart.js';
 import { ChartRequestSchema } from '../core/chart.js';
 import { bundledShioajiPath } from './broker-runtime.js';
@@ -34,7 +34,8 @@ let mode = SettingsSchema.shape.mode.parse(smoke?'demo':argsMode==='live'?'live'
 const directory = dirname(fileURLToPath(import.meta.url));
 let dataRoot = '';
 let backtest:BacktestController;
-let vault:CredentialVault,nativeConnection:NativeConnection,remembered=false;
+let vault:CredentialVault,nativeConnection:NativeConnection;
+let credentialState:CredentialState={remembered:false,state:'empty',message:'尚未保存登入設定'};
 let connectionBusy=false,chartBusy=false;const chartAbort=new AbortController();
 const operations=new DesktopOperations();let liveActionEpoch=0;
 const brokerPath=():Promise<string>=>bundledShioajiPath(app.isPackaged?join(process.resourcesPath,'shioaji'):join(directory,'../../../resources/shioaji'));
@@ -55,16 +56,16 @@ else {
     commonSettings=new DesktopSettings(dataRoot);
     commonSettings.migrate(preferences.last_mode,preferences.connections[preferences.last_mode]?.stock_account_index??0);
     const secure={isEncryptionAvailable:()=>safeStorage.isEncryptionAvailable()&&(process.platform!=='linux'||safeStorage.getSelectedStorageBackend()!=='basic_text'),
-      encryptString:safeStorage.encryptString,decryptString:safeStorage.decryptString};
+      encryptString:(value:string)=>safeStorage.encryptString(value),decryptString:(value:Buffer)=>safeStorage.decryptString(value)};
     vault=new CredentialVault(join(dataRoot,'private'),secure);nativeConnection=new NativeConnection(join(dataRoot,'native-service'),brokerPath);
-    const saved=await vault.read();remembered=!!saved;
+    const saved=await vault.read();credentialState=await vault.status();
     backtest=new BacktestController(join(dataRoot,'backtests'));await backtest.restore();
     await connect(mode);
     codexLogin=new CodexLogin(join(dataRoot,'codex-login'),url=>shell.openExternal(url),async()=>{
       const selected=service;if(!selected||quitting||selected.engine.settings.codex_enabled)return;
       await selected.saveSettings({...selected.engine.settings,codex_enabled:true});
       if(selected===service)commonSettings.save(selected.engine.settings);
-    });
+    },{settings:()=>service?.engine.settings??commonSettings.apply(SettingsSchema.parse({}),mode,nativeConnection.baseUrl)});
     if(smoke){codexLogin.status.state='signed_out';codexLogin.status.message='隔離測試：不會使用真實 Codex 登入';}
     createWindow(); createTray(); registerIpc();
     if(!smoke)void codexLogin.check();
@@ -88,7 +89,7 @@ async function connect(nextMode: Settings['mode'],override?:Settings): Promise<v
         store.set('legacy_account_origin',store.settings().base_url);
       store.saveSettings(commonSettings.apply(store.settings(),mode,base,override));
     }finally{store.close();}
-    service = new TradingService(path,mode);
+    service = new TradingService(path,mode,undefined,{automaticLive:!smoke&&mode==='live'});
     commonSettings.save(service.engine.settings);
     preferences.last_mode=mode;preferences.connections[mode]={base_url:base,stock_account_index:index};
     if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
@@ -154,7 +155,8 @@ function registerIpc(): void {
     backtest_progress:backtest.progress,backtest_result:backtest.report?{...backtest.report,fills:backtest.report.fills.slice(-80),
       orders:backtest.report.orders.slice(-80),strategy_log:backtest.report.strategy_log.slice(-25),logs:backtest.report.logs.slice(-50)}:null,
     backtest_history:backtest.history,backtest_comparisons:backtest.comparisons,
-    connection:{status:nativeConnection.status,remembered,encrypted:secureAvailable(),busy:connectionBusy||operations.busy,has_ca:nativeConnection.hasCa},
+    connection:{status:nativeConnection.status,remembered:credentialState.remembered,credential_state:credentialState.state,
+      credential_message:credentialState.message,encrypted:secureAvailable(),busy:connectionBusy||operations.busy,has_ca:nativeConnection.hasCa},
     live:smoke&&mode==='live'?{authorized:false,ready:false,account:'隔離測試帳戶',issues:['測試資料：不會啟用實盤交易']}
       :service?.liveReadiness()??{authorized:false,ready:false,account:'尚未連接帳戶',issues:['請先連接 Shioaji']},
     analyst_events:[...(service?.analystEvents??[]).map(e=>({...e,context:'live' as const})),...backtest.analystEvents.map(e=>({...e,context:'replay' as const}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-80),
@@ -186,6 +188,7 @@ function registerIpc(): void {
     }
     await service.saveSettings(settings);
     commonSettings.save(service.engine.settings);
+    if(!smoke)void codexLogin.check();
     if (settings.keep_awake && blocker === undefined) blocker = powerSaveBlocker.start('prevent-app-suspension');
     else if (!settings.keep_awake && blocker !== undefined) {powerSaveBlocker.stop(blocker);blocker=undefined;}
     return '設定已儲存 · 模擬與實盤共用';
@@ -225,15 +228,18 @@ function registerIpc(): void {
     if(backtest.progress.running||service.store.orders(true).length||service.engine.account?.orders.some(active))throw new Error('目前仍有回測或未完成委託，不能變更 API 連線');
     connectionBusy=true;
     try{const settings=SettingsSchema.parse({...service.engine.settings,auto_execute:false});
-      const validated=ConnectionInputSchema.parse(input);await service.close();service=undefined;
+      const validated=connectionInput(input,await vault.read());
+      // Saving is independent of native login/account readiness, and cannot silently clear the previous successful save.
+      try{await vault.save(validated);}finally{credentialState=await vault.status();}
+      await service.close();service=undefined;
       await nativeConnection.close();await nativeConnection.start(validated);
-      await vault.save(validated);remembered=validated.remember;await connect(mode,settings);
+      await connect(mode,settings);
       return initialError||'Shioaji 已連線，可開始模擬或 Codex 分析';
     }finally{connectionBusy=false;if(!service)await connect(mode);}
   });
   handle('trader:connect-api',apiConnect);
   handle('trader:connect-saved',async()=>{const input=await vault.read();if(!input)throw new Error('尚未記住 API 金鑰');return apiConnect(input);});
-  handle('trader:forget-credentials',()=>operations.run(async()=>{await vault.clear();remembered=false;return '已移除記住的金鑰與憑證設定';}));
+  handle('trader:forget-credentials',()=>operations.run(async()=>{await vault.clear();credentialState=await vault.status();return '已移除記住的金鑰與憑證設定';}));
   handle('trader:chart',async value=>{
     const request=ChartRequestSchema.parse(value);if(request.source==='replay'||smoke)return backtest.chart({...request,source:'replay'});
     if(!nativeConnection.connected&&!smoke)throw new Error('圖表需要先連接 Shioaji 真實行情');
@@ -275,16 +281,10 @@ async function enableLive(startAutomation:boolean,afterAuthorization?:(selected:
     const selected=service,epoch=liveActionEpoch;
     if(!selected||mode!=='live'||!nativeConnection.connected)throw new Error('請先連接實盤帳戶');
     if(startAutomation&&!await codexLogin.check())throw new CodexError('Codex 尚未登入，請先按登入');
-    const live=await selected.prepareLive(),s=selected.engine.settings;
     if(!(startAutomation?selected.liveAuthorized:selected.liveCancelAuthorized)){
-      const percent=(v:string):string=>(Number(v)*100).toLocaleString('zh-TW')+'%';
-      const answer=await dialog.showMessageBox(window!,{type:'warning',buttons:['取消',startAutomation?'確認並啟動實盤':'確認授權撤單'],defaultId:0,cancelId:0,
-        message:startAutomation?'啟動本次現股自動交易':'授權本次處理券商掛單',
-        detail:`帳戶 ${live.account}\n可用現金與交割、CA 及券商回報已核對。\n現金保留 ${percent(s.min_cash_fraction)}；單筆 ${percent(s.max_order_fraction)}；單檔 ${percent(s.max_symbol_fraction)}；日損失 ${percent(s.daily_loss_fraction)} 停止新買進。\n${startAutomation?'確認後依有效 Codex 策略執行現股限價單。':'只處理本程式的券商掛單，自動交易保持關閉。'}今日新增股數不當沖。授權僅本次有效；停損需本機持續運作且不保證成交。`});
-      if(answer.response!==1)return '已取消實盤授權';
       if(quitting||epoch!==liveActionEpoch||selected!==service)throw new Error('實盤啟動已停止');
       await selected.activateLive(startAutomation?'trade':'cancel');
-    }
+    }else await selected.prepareLive();
     if(quitting||epoch!==liveActionEpoch||selected!==service){selected.liveSession.revoke();throw new Error('實盤啟動已停止');}
     return afterAuthorization?afterAuthorization(selected):selected.command('start-auto');
   });
@@ -358,7 +358,7 @@ async function smokeTest(): Promise<void> {
   await new Promise(resolve=>setTimeout(resolve,1600));await verifyLayout('live');
   const liveUi=await window.webContents.executeJavaScript(`(async()=>({ack:!!document.querySelector('#ack'),button:document.querySelector('#start-live').textContent,
     authorized:(await window.trader.state()).live.authorized,rejected:await window.trader.authorizeLive().then(()=>false,()=>true)}))()`);
-  if(liveUi.ack||!liveUi.button.includes('啟動實盤')||liveUi.authorized||!liveUi.rejected)throw new Error('單次實盤授權介面或測試隔離未通過');
+  if(liveUi.ack||!liveUi.button.includes('開始自動交易')||liveUi.authorized||!liveUi.rejected)throw new Error('實盤帳戶與自動交易分開或測試隔離未通過');
   await capture('SYNTHETIC-ui-live.png',1600,960);mode='demo';
   await new Promise(resolve=>setTimeout(resolve,1200));
   await window.webContents.executeJavaScript(`document.querySelector('#open-settings').click()`);
@@ -400,7 +400,7 @@ async function smokeTest(): Promise<void> {
   }
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
-  console.log('Electron single workspace at 1366/1600/1920, both modes, single live confirmation UI, rapid chart selection, report dates, independent settings, built-in Shioaji, credentials, replay and tray: PASS'); await exit();
+  console.log('Electron single workspace at 1366/1600/1920, both modes, automatically ready live account, rapid chart selection, report dates, independent settings, built-in Shioaji, credentials, replay and tray: PASS'); await exit();
 }
 async function verifyRenderer(): Promise<void> {
   const result = await window!.webContents.executeJavaScript(`(async () => ({ bridge: typeof window.trader?.state === 'function',

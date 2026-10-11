@@ -10,7 +10,7 @@ import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addD
 import { NoSubmissionError, type Broker } from './types.js';
 import { cachedHistory } from '../core/history-cache.js';
 import { LiveSession } from '../core/live-session.js';
-import { BrokerHealthSchema, BrokerError, marketReady, requestStage } from './health.js';
+import { BrokerHealthSchema, BrokerError, brokerStageIssue, marketReady, requestStage } from './health.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -34,7 +34,6 @@ const nativeTradeSchema = z.object({ contract: z.object({ code: z.string(), secu
 type NativeTrade = z.infer<typeof nativeTradeSchema>;
 const positionSchema = z.object({ id: count, code: z.string(), direction: z.literal('Buy'), cond: z.literal('Cash'),
   quantity: count, yd_quantity: count, price: number, last_price: number });
-const detailSchema = z.object({ date: z.string(), direction: z.literal('Buy'), cond: z.literal('Cash'), quantity: count });
 export function sellableInventory(quantity: number, yesterday: number,
   rows: { date: string; quantity: number; direction: string; cond: string }[], today: string): number {
   if (!quantity) return 0;
@@ -136,19 +135,23 @@ export class ShioajiHttpBroker implements Broker {
     this.production = settings.mode === 'live';
     this.api = loopbackOrigin(settings.base_url) + '/api/v1';
   }
-  async request(path: string, body?: unknown): Promise<unknown> {
+  async request(path: string, body?: unknown, options: { timeoutMs?: number } = {}): Promise<unknown> {
     const stage = requestStage(path);
     try {
     const response = await this.fetcher(this.api + path, { method: body === undefined ? 'GET' : 'POST',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body), redirect: 'error',
-      signal: AbortSignal.any([this.stop.signal, AbortSignal.timeout(15000)]) });
-    if (!response.ok) { await response.body?.cancel(); throw new BrokerError(`Shioaji ${stage}讀取失敗（HTTP ${response.status}），請重試或檢查 API 權限`); }
+      signal: AbortSignal.any([this.stop.signal, AbortSignal.timeout(options.timeoutMs ?? (path.startsWith('/portfolio/') ? 45000 : 15000))]) });
+    if (!response.ok) { await response.body?.cancel(); throw new BrokerError(`Shioaji ${stage}讀取失敗（HTTP ${response.status}），請重試或檢查 API 權限`,response.status >= 500,response.status); }
     return JSON.parse(await boundedText(response)) as unknown;
     } catch (error) {
       if (error instanceof BrokerError) throw error;
-      throw new BrokerError(`Shioaji ${stage}暫時無法取得，請檢查本機服務與網路`);
+      throw new BrokerError(`Shioaji ${stage}暫時無法取得，請檢查本機服務與網路`,!this.stop.signal.aborted);
     }
+  }
+  private async read<T>(path:string,schema:z.ZodType<T>,body?:unknown):Promise<T> {
+    try {return schema.parse(await this.request(path,body));}
+    catch(error){throw brokerStageIssue(requestStage(path),error);}
   }
   private selectors(): { account_type: string; broker_id: string; account_id: string } {
     if (!this.selected) throw new Error('證券帳戶尚未選定');
@@ -217,7 +220,7 @@ export class ShioajiHttpBroker implements Broker {
         const response = await this.fetcher(this.api + '/stream/data?region=TW&security_type=STK', {
           headers: { Accept: 'text/event-stream' }, redirect: 'error', signal: AbortSignal.any([this.stop.signal, connection.signal]) });
         if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('SSE 無法連接');
-        this.streamReady = true; this.invalidate(); attempt = 0;
+        this.streamReady = true; this.formatFault=false; this.invalidate(); attempt = 0;
         const reader = response.body.getReader(), decoder = new TextDecoder(), parser = new SseParser();
         try { for (;;) {
           const { value, done } = await reader.read(); if (done) break;
@@ -271,14 +274,14 @@ export class ShioajiHttpBroker implements Broker {
     for (const symbol of symbols) {
       const instrument = metadata[symbol]; if (!instrument) continue;
       for (const odd of wholeLots ? [true,false] : [true]) for (const quoteType of ['Tick','BidAsk']) {
-        const body = { security_type: 'STK', region: 'TW', code: symbol, exchange: instrument.exchange, quote_type: quoteType, intraday_odd: odd };
+        const body = { security_type: 'STK', region: 'TW', code: symbol, exchange: instrument.exchange, target_code:null, quote_type: quoteType, intraday_odd: odd };
         wanted.set(`${symbol}:${odd}:${quoteType}`, body);
       }
     }
     if (wanted.size > 160) throw new Error('行情需求超過本程式 160 個訂閱上限，請減少觀測或持倉範圍');
     if (this.settings.manage_quote_subscriptions) for (const [key, body] of this.subscribed) if (!wanted.has(key)) {
       const result = await this.request('/stream/unsubscribe', body) as { success?: boolean };
-      if (result.success !== true) throw new Error('舊行情訂閱釋放失敗，保留原狀並停止新增訂閱');
+      if (result.success !== true) throw new BrokerError('Shioaji 行情退訂未成功，正在保留原訂閱並重試');
       this.subscribed.delete(key); this.store.set('quote_subscriptions', [...this.subscribed]);
       const quoteKey = key.slice(0, key.lastIndexOf(':')); this.parts.delete(quoteKey); this.changed.delete(quoteKey);
     }
@@ -286,7 +289,7 @@ export class ShioajiHttpBroker implements Broker {
     if (this.subscribed.size + additions.length > 160) throw new Error('共享行情模式已達 160 個訂閱，請使用專用 Shioaji 服務或啟用訂閱管理');
     for (const [key, body] of wanted) if (!this.subscribed.has(key) || this.subscriptionGeneration !== this.generation) {
       const result = await this.request('/stream/subscribe', body) as { success?: boolean };
-      if (result.success !== true) throw new Error('行情訂閱失敗'); this.subscribed.set(key, body);
+      if (result.success !== true) throw new BrokerError('Shioaji 行情訂閱未成功，請確認行情權限或訂閱額度'); this.subscribed.set(key, body);
       this.store.set('quote_subscriptions', [...this.subscribed]);
     }
     this.subscriptionGeneration = generation;
@@ -299,11 +302,11 @@ export class ShioajiHttpBroker implements Broker {
     for (const symbol of symbols) {
       const cached = this.metadata.get(symbol);
       if (cached && twDay(new Date(cached.verified_at)) === twDay(now)) { result[symbol] = cached; continue; }
-      const raw = stockSchema.parse(await this.request(`/data/contracts/${encodeURIComponent(symbol)}/info?region=TW&security_type=STK`));
-      if (raw.code !== symbol) throw new Error('商品代碼不符');
+      const raw = await this.read(`/data/contracts/${encodeURIComponent(symbol)}/info?region=TW&security_type=STK`,stockSchema);
+      if (raw.code !== symbol) throw new BrokerError('Shioaji 商品資料回傳代碼不符，暫停使用該商品');
       // Source date, not fetch date, controls readiness. Old limits must never authorize an order.
       const sourceDate = /^\d{4}-\d{2}-\d{2}$/.test(raw.update_date) ? raw.update_date : '';
-      if (!sourceDate) throw new Error('商品資料日期無法核對');
+      if (!sourceDate) throw new BrokerError('Shioaji 商品資料日期無法核對，等待契約更新');
       const value = InstrumentSchema.parse({ symbol, name: raw.name, exchange: raw.exchange, category: raw.category,
         kind: /^[1-9]\d{3}$/.test(symbol) ? 'STOCK' : symbol.startsWith('00') ? 'ETF' : 'OTHER',
         reference: raw.reference, limit_down: raw.limit_down, limit_up: raw.limit_up,
@@ -321,9 +324,9 @@ export class ShioajiHttpBroker implements Broker {
     }
     const generation = this.generation;
     const refresh = force || this.authoritativeRequired || Date.now() - this.tradesSyncedAt >= 60000;
-    const values = z.array(nativeTradeSchema).parse(await this.request('/order/trades', { ...this.selectors(), refresh }));
+    const values = await this.read('/order/trades',z.array(nativeTradeSchema), { ...this.selectors(), refresh });
     if (values.some(t => t.order.account.broker_id !== this.selected?.broker_id || t.order.account.account_id !== this.selected?.account_id))
-      throw new Error('委託回傳帳戶不符');
+      throw new BrokerError('Shioaji 委託回傳帳戶不符，請重新連線');
     this.trades = values;
     if (refresh) { this.tradesSyncedAt = Date.now(); if (generation === this.generation) this.authoritativeRequired = false; }
   }
@@ -347,7 +350,7 @@ export class ShioajiHttpBroker implements Broker {
         status: local.status === 'CANCEL_PENDING' && ['PENDING','PARTIAL','SUBMITTING'].includes(mapped) ? 'CANCEL_PENDING' : mapped, filled });
     }
     const reservePrice = price.gt(0) ? price.toFixed() : this.metadata.get(trade.contract.code)?.limit_up;
-    if (!reservePrice || d(reservePrice).lte(0)) throw new Error('外部市價委託缺少資金預留參考價');
+    if (!reservePrice || d(reservePrice).lte(0)) throw new BrokerError('Shioaji 外部市價委託尚無可核對的預留價格，等待商品資料');
     // Unknown/unsupported external orders freeze new orders while still reserving cash/inventory.
     const supported = native.order_cond === 'Cash' && ['Common','IntradayOdd'].includes(native.order_lot);
     return OrderSchema.parse({ local_id: 'external-' + native.id, broker_id: native.id,
@@ -366,40 +369,57 @@ export class ShioajiHttpBroker implements Broker {
   }
   async account(now: Date): Promise<Account> {
     const start = new Date(), sequence = this.eventSequence, generation = this.generation;
-    await this.refreshTrades();
-    const balance = z.object({ acc_balance: number, date: z.string(), errmsg: z.string() }).parse(
-      await this.request('/portfolio/account_balance', this.selectors()));
-    if (balance.errmsg) throw new BrokerError('Shioaji 交割戶餘額查詢未成功，帳務稍後自動重試；歷史模擬仍可使用');
-    if (!/^\d{4}-\d{2}-\d{2}/.test(balance.date) || balance.date.slice(0,10) !== twDay(now))
-      throw new BrokerError('Shioaji 交割戶餘額日期尚未更新，帳務稍後自動重試；歷史模擬仍可使用');
-    const rows = z.array(z.object({ amount: number, date: z.string(), T: z.number().int() })).parse(
-      await this.request('/portfolio/settlements', this.selectors()));
-    let debits = d(0), credits = d(0), issue = '';
-    for (const r of rows) {
-      if (r.T < 0 || d(r.amount).eq(0)) continue;
-      // Native documents specify date/amount/T, but not a universal debit sign.
-      // Reserve every outstanding amount; never spend a credit before bank settlement.
-      // This is conservative for either sign and requires no account-specific user switch.
-      debits = debits.plus(d(r.amount).abs());
-    }
-    const positions = z.array(positionSchema).parse(await this.request('/portfolio/position_unit', { ...this.selectors(), unit: 'Share' }));
-    const cleanPositions = [];
-    for (const p of positions) {
-      const details = z.array(detailSchema).parse(await this.request('/portfolio/position_detail', { ...this.selectors(), detail_id: p.id }));
-      cleanPositions.push({ symbol: p.code, shares: p.quantity, sellable: sellableInventory(p.quantity,p.yd_quantity,details,twDay(now)),
-        average_price: p.price, last_price: p.last_price });
-    }
-    await this.instruments([...new Set(this.trades.filter(t => d(t.order.price).lte(0)).map(t => t.contract.code))], now);
-    const orders = this.trades.map(t => this.normalizeTrade(t));
-    const buys = orders.filter(o => o.action === 'BUY' && twDay(new Date(o.created_at)) === twDay(now) && (active(o) || o.filled > 0));
-    const health = z.object({ state: z.string(), reasons: z.array(z.object({ reason: z.string() })) }).parse(
-      await this.request('/order/trade_cache_health', this.selectors()));
-    if (health.state === 'Degraded' || health.reasons.some(r => r.reason !== 'NoBaseline')) issue = '委託回報尚未完成核對';
-    if (!this.streamReady || this.formatFault) issue = '行情串流中斷或格式異常，禁止新增委託';
-    if (sequence !== this.eventSequence || generation !== this.generation) issue = '快照取得期間有委託或連線變動，等待重新核對';
+    const previous = this.lastAccount;
+    const available={cash:previous?.available?.cash??!!previous,settlements:previous?.available?.settlements??!!previous,
+      positions:previous?.available?.positions??!!previous,orders:previous?.available?.orders??!!previous};
+    let cash=previous?.cash??'0',debits=previous?.settlement_debits??'0',credits=previous?.settlement_credits??'0';
+    let positions=previous?.positions??[],orders=previous?.orders??[],buys=orders.filter(o=>o.action==='BUY'&&twDay(new Date(o.created_at))===twDay(now)&&(active(o)||o.filled>0));
+    const issues:string[]=[];let tradesCurrent=false;
+    const failed=(stage:string,error:unknown):void=>{issues.push(brokerStageIssue(stage,error).message);};
+    // Account panels are independent, as in Pro. A failed report/bank query must not discard a successful positions query.
+    try {
+      await this.refreshTrades();
+      const relevant=this.trades.filter(t=>t.status.deal_quantity>0||!['Filled','Cancelled','Failed','Inactive'].includes(t.status.status));
+      await this.instruments([...new Set(relevant.filter(t=>d(t.order.price).lte(0)).map(t=>t.contract.code))],now);
+      orders=relevant.map(t=>this.normalizeTrade(t));available.orders=true;
+      buys=orders.filter(o=>o.action==='BUY'&&twDay(new Date(o.created_at))===twDay(now)&&(active(o)||o.filled>0));
+      const health=await this.read('/order/trade_cache_health',z.object({state:z.enum(['Unknown','Healthy','Degraded']),reasons:z.array(z.object({reason:z.string()}))}),this.selectors());
+      if(health.state!=='Healthy'||health.reasons.length){this.authoritativeRequired=true;throw new BrokerError('Shioaji 委託回報尚未完成核對，稍後自動重試');}
+      tradesCurrent=true;available.orders=true;
+    } catch(error){failed('委託回報',error);}
+    const readBalance=async():Promise<void>=>{try {
+      const balance=await this.read('/portfolio/account_balance',z.object({acc_balance:number,date:z.string(),errmsg:z.string()}),this.selectors());
+      if(balance.errmsg.trim())throw new BrokerError('Shioaji 交割戶餘額查詢未成功，帳務稍後自動重試；歷史模擬仍可使用');
+      if(!/^\d{4}-\d{2}-\d{2}/.test(balance.date)||balance.date.slice(0,10)!==twDay(now))
+        throw new BrokerError('Shioaji 交割戶餘額日期尚未更新，帳務稍後自動重試；歷史模擬仍可使用');
+      cash=balance.acc_balance;available.cash=true;
+    } catch(error){failed('交割戶餘額',error);}};
+    const readSettlements=async():Promise<void>=>{try {
+      const rows=await this.read('/portfolio/settlements',z.array(z.object({amount:number,date:z.string(),T:z.number().int()})),this.selectors());
+      // Reserve all outstanding amounts; never spend unsettled credits or require a manual sign setting.
+      debits=rows.filter(r=>r.T>=0).reduce((sum,r)=>sum.plus(d(r.amount).abs()),d(0)).toFixed();credits='0';available.settlements=true;
+    } catch(error){failed('交割款',error);}};
+    const readPositions=async():Promise<void>=>{try {
+      const rows=await this.read('/portfolio/position_unit',z.array(positionSchema),{...this.selectors(),unit:'Share'});
+      const grouped=new Map<string,{code:string;quantity:number;yd_quantity:number;cost:ReturnType<typeof d>;last_price:string}>();
+      for(const p of rows.filter(p=>p.quantity>0)){
+        const old=grouped.get(p.code);
+        grouped.set(p.code,{code:p.code,quantity:(old?.quantity??0)+p.quantity,yd_quantity:(old?.yd_quantity??0)+p.yd_quantity,
+          cost:(old?.cost??d(0)).plus(d(p.price).times(p.quantity)),last_price:p.last_price});
+      }
+      positions=[...grouped.values()].map(p=>{
+        const acquired=tradesCurrent?buys.filter(o=>o.symbol===p.code).reduce((sum,o)=>sum+o.filled,0):p.quantity;
+        // Share and yd_quantity already use shares. Detail has no unit selector and is not a display/readiness gate.
+        // Subtract all known same-day purchases as well: selling old inventory cannot make new shares day-tradable.
+        return {symbol:p.code,shares:p.quantity,sellable:Math.max(0,Math.min(p.quantity,p.yd_quantity,p.quantity-acquired)),average_price:p.cost.div(p.quantity).toFixed(),last_price:p.last_price};
+      });available.positions=true;
+    } catch(error){failed('庫存',error);}};
+    await Promise.all([readBalance(),readSettlements(),readPositions()]);
+    if(sequence!==this.eventSequence||generation!==this.generation)issues.push('Shioaji 快照取得期間有委託或連線變動，等待重新核對');
     this.dirty = sequence !== this.eventSequence || generation !== this.generation;
-    this.lastAccount = AccountSchema.parse({ asof: start.toISOString(), cash: balance.acc_balance, settlement_debits: debits.toFixed(),
-      settlement_credits: credits.toFixed(), positions: cleanPositions, orders, complete: !issue, issue,
+    const issue=[...new Set(issues)].join('；');
+    this.lastAccount = AccountSchema.parse({ asof: start.toISOString(), cash, settlement_debits: debits,
+      settlement_credits: credits, positions, orders, complete: !issue, issue,available,
       daily_buy_count: buys.length, daily_buy_amount: buys.reduce((sum,o) => sum.plus(d(o.limit_price).times(active(o) ? o.shares : o.filled)),d(0)).toFixed() });
     return this.lastAccount;
   }
@@ -407,7 +427,7 @@ export class ShioajiHttpBroker implements Broker {
     const collected = new Map<string, Candidate>();
     for (const scannerType of ['AmountRank','VolumeRank','ChangePercentRank']) {
       const raw = z.array(z.object({ code: z.string(), name: z.string(), close: number, total_amount: number })).parse(
-        await this.request('/data/scanner', { scanner_type: scannerType, ascending: false, count: Math.min(200,countRequested * 2) }));
+        await this.request('/data/scanner', { scanner_type: scannerType,date:twDay(now), ascending: false, count: Math.min(200,countRequested * 2) }));
       for (const r of raw) if (/^[1-9]\d{3}$/.test(r.code) && d(r.close).gt(0)) collected.set(r.code,
         { symbol: r.code, name: r.name, last: r.close, amount: r.total_amount, source: 'Shioaji ' + scannerType });
     }

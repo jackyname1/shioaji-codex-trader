@@ -30,7 +30,7 @@ function table(id:string,headers:string[],rows:Cell[][],empty='目前沒有資�
 }
 let messageTimer:ReturnType<typeof setTimeout>|undefined;
 const message=(s:string):void=>{text('message',s);el('message').classList.add('visible');clearTimeout(messageTimer);messageTimer=setTimeout(()=>el('message').classList.remove('visible'),6000);};
-async function run(operation:()=>Promise<unknown>):Promise<void>{try{message(String(await operation()??'完成'));await refresh();}
+async function run(operation:()=>Promise<unknown>):Promise<void>{message('正在處理…');try{message(String(await operation()??'完成'));await refresh();}
   catch(e){message(e instanceof Error?e.message.replace(/^Error invoking remote method '[^']+': Error: /,''):'操作未完成');}}
 let codexDirty=false;let latestState:DesktopState|undefined;
 let settingsDirty=false,polling=false,latestSettings:Settings|undefined,renderedReport='';
@@ -93,12 +93,13 @@ function renderRuntime(state:DesktopState):void {
     text('runtime-note','圖表、持倉、監測與 Codex 使用同一個模擬時間');}
   const a=r.account;
   if(a){const stocks=a.positions.reduce((sum,p)=>sum+Number(p.last_price)*p.shares,0);
-    text('equity',fmt(Number(a.cash)-Number(a.settlement_debits)+Number(a.settlement_credits)+stocks));
+    const have=a.available??{cash:true,settlements:true,positions:true,orders:true};
+    text('equity',have.cash&&have.positions&&have.settlements?fmt(Number(a.cash)-Number(a.settlement_debits)+Number(a.settlement_credits)+stocks):'—');
     const reserves=a.orders.filter(o=>o.action==='BUY'&&!['FILLED','CANCELLED','REJECTED'].includes(o.status))
       .reduce((sum,o)=>sum+Number(o.limit_price)*(o.shares-o.filled)+Math.max(Number(s.minimum_fee),Math.ceil(Number(o.limit_price)*(o.shares-o.filled)*Number(s.fee_rate))),0);
-    text('cash',fmt(Math.max(0,Number(a.cash)-Number(a.settlement_debits)-reserves)));
-    text('cash-detail',`股票市值 ${fmt(stocks)} · 今日買進 ${a.daily_buy_count} 筆`);
-    text('settlement-detail',`交割預留 ${fmt(a.settlement_debits)} · 待收 ${fmt(a.settlement_credits)}`);
+    text('cash',have.cash&&have.settlements&&have.orders?fmt(Math.max(0,Number(a.cash)-Number(a.settlement_debits)-reserves)):have.cash?fmt(a.cash):'—');
+    text('cash-detail',have.cash&&(!have.settlements||!have.orders)?'交割戶餘額 · 可用資金仍在核對':have.positions?`股票市值 ${fmt(stocks)} · ${a.complete?'帳務已更新':'部分資料待更新'}`:'持倉正在載入');
+    text('settlement-detail',have.settlements?`交割預留 ${fmt(a.settlement_debits)} · 待收 ${fmt(a.settlement_credits)}`:'交割資料正在載入');
     text('data-status',`${paper?'模擬時間':a.complete?'帳戶已核對':'帳戶未確認'} · ${stamp(a.asof)}`);
   }else{text('equity',paper?fmt(value('bt-cash')):'—');text('cash',paper?fmt(value('bt-cash')):'—');text('cash-detail',paper?'設定的初始本金':'等待帳戶資料');text('settlement-detail',paper?'開始模擬後顯示交割款':'等待交割資料');text('data-status',paper?'等待開始模擬':'等待帳戶核對');}
   text('watch-count',r.watch.entries.filter(w=>w.state==='OBSERVE').length);text('watch-detail',r.watch.issue||`保留監控 ${r.watch.entries.filter(w=>w.state==='RETAINED').length} 檔`);
@@ -110,13 +111,12 @@ function renderRuntime(state:DesktopState):void {
   text('schedule-watch',(paper?replaySettings?.watch_refresh_minutes??value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
   el('live-authorization').hidden=r.mode!=='live';
   const live=state.live;
-  text('live-state',r.auto&&live.authorized?'實盤交易已啟動':live.authorized?'本次實盤已授權':'實盤尚未授權');
-  text('live-account',live.account);text('live-issues',live.issues[0]??(live.authorized?'每筆送單仍核對帳戶與風控':'按啟動後確認一次，本次有效'));
+  text('live-state',r.killed?'交易已停止':r.auto&&live.authorized?'自動交易執行中':live.ready?'實盤帳戶已就緒':r.connected?'實盤已連線 · 資料更新中':'等待帳戶連線');
+  text('live-account',live.account);text('live-issues',live.issues[0]??'帳務持續更新 · 自動交易依策略與風控執行');
   el('live-issues').title=live.issues.join('；');
-  text('live-settings-status',live.issues.length?live.issues.join('；'):'CA 與帳戶資料已就緒；確認一次即可啟動');
-  text('start-live',r.auto&&live.authorized?'▶ 執行中':live.authorized?'▶ 恢復實盤':'▶ 啟動實盤');
+  text('live-settings-status',live.issues.length?live.issues.join('；'):'實盤帳戶已就緒；不需另外啟動或確認授權');
+  text('start-live',state.connection.busy?'正在核對…':r.auto&&live.authorized?'▶ 自動交易中':'▶ 開始自動交易');
   el<HTMLButtonElement>('start-live').disabled=state.connection.busy||live.authorized&&r.auto&&!r.paused&&!r.killed;
-  el<HTMLButtonElement>('authorize').disabled=state.connection.busy||live.authorized&&r.auto&&!r.paused&&!r.killed;
   el<HTMLButtonElement>('lock-live').disabled=!live.authorized&&!r.auto;
   for(const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]'))button.disabled=state.connection.busy;
   el('connection-dot').classList.toggle('connected',r.connected);text('sidebar-connection',r.connected?'Shioaji 已連線':'等待連線');
@@ -130,7 +130,7 @@ function renderRuntime(state:DesktopState):void {
     row.classList.toggle('selected',w.symbol===selectedSymbol);row.title=w.reason;row.onclick=event=>{if(!(event.target as HTMLElement).closest('button'))void run(()=>showStock(w.symbol));};}
   table('watchlist',['股票','名稱','來源','資格','評分','原因'],r.watch.entries.map(w=>[w.symbol,w.name,w.source==='CODEX'?'Codex 候選':'動態掃描',w.eligible?'已確認':action[w.state]??w.state,w.score,w.reason]));
   table('watch-changes',['台北時間','股票','動作','原因'],r.watch.changes.slice(-20).reverse().map(c=>[stamp(c.at),c.symbol,action[c.action]??c.action,c.reason]));
-  table('positions',['股票','股數 / 可賣','成本 / 現價','損益'],(a?.positions??[]).map(p=>[p.symbol,`${fmt(p.shares)} / ${fmt(p.sellable)}`,`${fmt(p.average_price)} / ${fmt(p.last_price)}`,fmt((Number(p.last_price)-Number(p.average_price))*p.shares)]),'目前無持倉');
+  table('positions',['股票','股數 / 可賣','成本 / 現價','損益'],(a?.positions??[]).map(p=>[p.symbol,`${fmt(p.shares)} / ${fmt(p.sellable)}`,`${fmt(p.average_price)} / ${fmt(p.last_price)}`,fmt((Number(p.last_price)-Number(p.average_price))*p.shares)]),a?.available?.positions===false?'持倉資料正在載入':'目前無持倉');
   table('orders',['股票 / 方向','成交 / 股數','限價','狀態',''],r.orders.map(o=>[`${o.symbol} ${action[o.action]}`,`${o.filled} / ${o.shares}`,o.limit_price,action[o.status]??o.status,
     o.purpose==='EXTERNAL'?'外部委託':{label:'撤單核對',command:'cancel '+o.local_id}]),'目前無未完成委託');
   const stance={BUY_ALLOWED:'允許條件買進',HOLD_ONLY:'保留現金／觀望',REDUCE:'減碼優先'};
@@ -172,7 +172,6 @@ async function refresh():Promise<void>{if(polling)return;polling=true;
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-command]'))b.addEventListener('click',()=>void run(()=>workspaceCommand(b.dataset.command!)));
 el<HTMLFormElement>('command-form').addEventListener('submit',e=>{e.preventDefault();const command=value('command');el<HTMLInputElement>('command').value='';void run(()=>window.trader.command(command));});
 el('hide').addEventListener('click',()=>void run(()=>window.trader.minimize()));el('exit').addEventListener('click',()=>void run(()=>window.trader.exit()));
-el('authorize').addEventListener('click',()=>void run(()=>window.trader.authorizeLive()));
 const dirty=():void=>{settingsDirty=true;text('settings-state','尚未儲存');};
 el('settings-form').addEventListener('input',dirty);el('settings-form').addEventListener('change',dirty);el('settings').addEventListener('input',dirty);
 const times=(v:string):string[]=>v.split(/[,，、\s]+/).map(x=>x.trim()).filter(Boolean);
@@ -253,18 +252,26 @@ function conditionList(id:string,rows:[string,string][],note=''):void {
   const host=el(id);host.replaceChildren();for(const [label,v] of rows){const row=document.createElement('div');row.className='condition-item';const l=document.createElement('span'),n=document.createElement('strong');l.textContent=label;n.textContent=v;row.append(l,n);host.append(row);}if(note){const p=document.createElement('p');p.textContent=note;host.append(p);}
 }
 function renderExtras(state:DesktopState):void {
-  text('native-status',state.connection.status);el<HTMLButtonElement>('connect-api').disabled=state.connection.busy;text('credential-state',state.connection.remembered?'已使用系統加密記住設定':'未記住金鑰');
-  el<HTMLInputElement>('remember-keys').disabled=!state.connection.encrypted;
-  if(!state.connection.encrypted)el<HTMLInputElement>('remember-keys').checked=false;
+  text('native-status',state.connection.status+' · '+(state.connection.credential_message??''));el<HTMLButtonElement>('connect-api').disabled=state.connection.busy;
+  text('credential-state',state.connection.remembered?'設定已保存':state.connection.credential_state==='unreadable'?'設定需重新保存':!state.connection.encrypted?'系統加密待恢復':'尚未保存設定');
+  el('credential-state').title=state.connection.credential_message??'';
+  for(const id of ['api-key','secret-key']){el<HTMLInputElement>(id).required=!state.connection.remembered;
+    el<HTMLInputElement>(id).placeholder=state.connection.remembered?'已保存，留空沿用原設定':id==='api-key'?'輸入 API Key':'輸入 Secret Key';}
+  // Keep the user's choice. A transient encryption failure must not silently turn "remember" off.
+  el<HTMLInputElement>('remember-keys').disabled=state.connection.busy;
   el<HTMLButtonElement>('connect-saved').disabled=!state.connection.remembered;
   const auth=state.codex_auth;
-  text('codex-auth-state',auth.testing?'測試中':auth.state==='ready'?'已登入':auth.state==='pending'?'登入中':auth.state==='checking'?'檢查中':'未登入');
+  text('codex-auth-state',auth.testing?'測試中':auth.test_state==='failed'?'連線待修復':auth.state==='ready'?(auth.test_state==='connected'?'連線成功':'已登入'):auth.state==='pending'?'登入中':auth.state==='checking'?'檢查中':'未登入');
   text('codex-login',auth.state==='ready'?'重新登入':'登入');
   el<HTMLButtonElement>('codex-login').disabled=auth.state==='pending'||auth.state==='checking'||auth.testing;
   el('codex-open').hidden=!auth.can_open;el('codex-device').hidden=auth.state==='ready'||auth.state==='pending'||auth.testing;
   el<HTMLButtonElement>('codex-test').disabled=auth.testing||auth.state==='pending'||auth.state==='checking';
   text('codex-device-code',auth.device_code?'裝置代碼：'+auth.device_code:'');el('codex-device-code').hidden=!auth.device_code;
   const scoped=workspaceRuntime(state);let events=workspaceEvents(state);
+  const failure=simulationView(state)&&state.backtest_progress.phase==='FAILED'?state.backtest_progress.message:
+    !scoped?.analyzing&&events.at(-1)?.stage==='FAILED'?events.at(-1)!.message:'';
+  text('analysis-issue',failure);el('analysis-issue').hidden=!failure;el('analysis-status').title=failure;
+  if(failure)text('analysis-status',/Codex/.test(failure)?'Codex 連線或分析失敗':'資料讀取未完成');
   if(simulationView(state)&&!events.length){const logs=state.backtest_result?.strategy_log??[];
     events=logs.filter(log=>log.at<=workspaceCutoff(state)).slice(-25).map(log=>({at:log.at,asof:log.at,stage:log.review?'REVIEW':'DECISION',message:log.summary,model:state.backtest_result!.model,reasoning:'程式策略',context:'replay' as const}));
     if(!events.length&&scoped?.plan)events=[{at:scoped.plan.created_at,asof:state.replay!.at,stage:'DECISION',message:scoped.plan.analysis.summary,model:'快速程式策略',reasoning:'程式策略',context:'replay' as const}];}
