@@ -9,6 +9,7 @@ import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addD
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import { NoSubmissionError, type Broker } from './types.js';
 import { cachedHistory } from '../core/history-cache.js';
+import { LiveSession } from '../core/live-session.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -117,6 +118,7 @@ export class ShioajiHttpBroker implements Broker {
   private formatFault = false;
   private info?: z.infer<typeof infoSchema>;
   private selected?: z.infer<typeof selectorSchema>;
+  private health?: z.infer<typeof healthSchema>;
   private trades: NativeTrade[] = [];
   private tradesSyncedAt = 0;
   private authoritativeRequired = true;
@@ -129,7 +131,7 @@ export class ShioajiHttpBroker implements Broker {
   private lastAccount?: Account;
   private seenEvents = new Set<string>();
   constructor(readonly store: Store, public settings: Settings, readonly allowLive = false,
-    private readonly fetcher: typeof fetch = fetch) {
+    private readonly fetcher: typeof fetch = fetch, private readonly liveSession = new LiveSession()) {
     this.production = settings.mode === 'live';
     this.api = loopbackOrigin(settings.base_url) + '/api/v1';
   }
@@ -148,18 +150,24 @@ export class ShioajiHttpBroker implements Broker {
   async connect(): Promise<void> {
     this.info = infoSchema.parse(await this.request('/info'));
     if (this.settings.mode !== 'demo' && this.info.simulation) throw new Error('模擬與實盤都需要正式服務的真實行情');
-    const health = healthSchema.parse(await this.request('/health'));
+    const health = this.health = healthSchema.parse(await this.request('/health'));
     if (health.token_stale || (health.token_expires_in_seconds !== undefined && health.token_expires_in_seconds <= 0))
       throw new Error('Shioaji 登入已過期');
-    if (this.production && (health.ca_expired !== false || !health.ca_expires_in_days || health.ca_expires_in_days <= 0))
-      throw new Error('正式下單前必須確認 CA 已啟用且尚未過期');
     const accounts = z.array(selectorSchema).parse(await this.request('/auth/accounts')).filter(a => a.account_type === 'S');
     this.selected = accounts[this.settings.stock_account_index];
     if (!this.selected || !this.selected.signed) throw new Error('選定的證券帳戶不存在或未簽署');
-    const fingerprint = createHash('sha256').update(JSON.stringify({ ...this.selectors(), simulation: this.info.simulation, origin: this.api })).digest('hex');
+    const identity = { ...this.selectors(), simulation: this.info.simulation };
+    const fingerprint = createHash('sha256').update(JSON.stringify(identity)).digest('hex');
     const prior = this.store.get<string>('account_fingerprint');
-    if (prior && prior !== fingerprint) throw new Error('帳戶或服務模式已變更，請使用新的獨立資料庫');
+    if (prior && prior !== fingerprint) {
+      // Upgrade a port-bound legacy identity only after the SAME selected account matches its old hash.
+      const origin = this.store.get<string>('legacy_account_origin') ?? this.settings.base_url;
+      const legacy = createHash('sha256').update(JSON.stringify({ ...identity, origin: loopbackOrigin(origin) + '/api/v1' })).digest('hex');
+      if (this.store.get('account_identity_version') === 2 || prior !== legacy)
+        throw new Error('帳戶或服務模式已變更，請使用新的獨立資料庫');
+    }
     this.store.set('account_fingerprint', fingerprint);
+    this.store.set('account_identity_version', 2); this.store.delete('legacy_account_origin');
     const saved = this.store.get<Array<[string, Record<string, unknown>]>>('quote_subscriptions') ?? [];
     this.subscribed = new Map(saved);
     const schema = await this.fetcher(new URL('/openapi.json', this.settings.base_url), {
@@ -175,6 +183,29 @@ export class ShioajiHttpBroker implements Broker {
     this.streamTask = this.streamLoop();
   }
   async close(): Promise<void> { this.stop.abort(); await this.streamTask; this.parts.clear(); }
+  liveStatus(): { account: string; issues: string[] } {
+    const issues: string[] = [], health = this.health;
+    if (!this.production || !this.allowLive) issues.push('請切換至實盤模式');
+    if (!this.selected?.signed) issues.push('證券帳戶尚未核對');
+    if (health?.ca_expired !== false || !health.ca_expires_in_days || health.ca_expires_in_days <= 0) issues.push('請載入有效 CA 憑證後重新連線');
+    if (!health || health.token_stale || (health.token_expires_in_seconds !== undefined && health.token_expires_in_seconds <= 0)) issues.push('API 登入尚未確認或已過期');
+    if (this.info?.agent_harness?.enabled || this.info?.agent_harness?.audience) issues.push('官方服務需要可信任主機能力票證');
+    if (!this.streamReady || this.formatFault) issues.push('行情串流尚未完成核對');
+    return { account: this.selected ? `${this.selected.broker_id} · 尾碼 ${this.selected.account_id.slice(-4)}` : '尚未連接帳戶', issues };
+  }
+  async verifyLiveConnection(): Promise<void> {
+    if (!this.production || !this.allowLive) throw new NoSubmissionError('請切換至實盤模式');
+    this.info = infoSchema.parse(await this.request('/info'));
+    if (this.info.simulation) { this.liveSession.revoke(); throw new NoSubmissionError('服務切換成模擬模式，禁止實盤'); }
+    this.health = healthSchema.parse(await this.request('/health'));
+    const accounts = z.array(selectorSchema).parse(await this.request('/auth/accounts')).filter(a => a.account_type === 'S');
+    const selected = accounts[this.settings.stock_account_index];
+    if (!selected?.signed || selected.broker_id !== this.selected?.broker_id || selected.account_id !== this.selected?.account_id) {
+      this.liveSession.revoke(); throw new NoSubmissionError('實盤帳戶已變更，請重新連線並核對');
+    }
+    const issues = this.liveStatus().issues;
+    if (issues.length) throw new NoSubmissionError(issues.join('；'));
+  }
   private invalidate(): void { this.parts.clear(); this.changed.clear(); this.generation++; this.dirty = true; this.authoritativeRequired = true; }
   private async streamLoop(): Promise<void> {
     let attempt = 0;
@@ -358,7 +389,7 @@ export class ShioajiHttpBroker implements Broker {
     if (health.state === 'Degraded' || health.reasons.some(r => r.reason !== 'NoBaseline')) issue = '委託回報尚未完成核對';
     if (!this.streamReady || this.formatFault) issue = '行情串流中斷或格式異常，禁止新增委託';
     if (sequence !== this.eventSequence || generation !== this.generation) issue = '快照取得期間有委託或連線變動，等待重新核對';
-    this.dirty = false;
+    this.dirty = sequence !== this.eventSequence || generation !== this.generation;
     this.lastAccount = AccountSchema.parse({ asof: start.toISOString(), cash: balance.acc_balance, settlement_debits: debits.toFixed(),
       settlement_credits: credits.toFixed(), positions: cleanPositions, orders, complete: !issue, issue,
       daily_buy_count: buys.length, daily_buy_amount: buys.reduce((sum,o) => sum.plus(d(o.limit_price).times(active(o) ? o.shares : o.filled)),d(0)).toFixed() });
@@ -395,17 +426,10 @@ export class ShioajiHttpBroker implements Broker {
     }
     return [...grouped.values()].sort((a,b) => a.date.localeCompare(b.date));
   }
-  private async mutationReady(): Promise<void> {
-    if (!this.production || !this.allowLive || process.env.LIVE_TRADING !== 'true') throw new NoSubmissionError('實盤下單尚未在本機啟用');
-    const consent = this.store.get<{ at: string; fingerprint: string }>('live_consent');
-    if (!consent || consent.fingerprint !== this.store.get('account_fingerprint')) throw new NoSubmissionError('缺少本機實盤授權');
-    const info = infoSchema.parse(await this.request('/info'));
-    if (info.simulation) throw new NoSubmissionError('服務切換成模擬模式，禁止實盤');
-    if (info.agent_harness?.enabled || info.agent_harness?.audience) throw new NoSubmissionError('官方服務需要可信任主機能力票證；本版禁止繞過 Agent Harness');
-    const health = healthSchema.parse(await this.request('/health'));
-    if (health.token_stale || health.ca_expired !== false || !health.ca_expires_in_days || health.ca_expires_in_days <= 0)
-      throw new NoSubmissionError('登入或 CA 狀態未確認，禁止下單');
-    if (!this.streamReady || this.formatFault) throw new NoSubmissionError('行情連線未完成核對');
+  private async mutationReady(scope:'trade'|'cancel'='trade'): Promise<void> {
+    if (!this.liveSession.authorized(this.store.get('account_fingerprint'),scope)) throw new NoSubmissionError('請先確認本次實盤授權');
+    await this.verifyLiveConnection();
+    if (!this.liveSession.authorized(this.store.get('account_fingerprint'),scope)) throw new NoSubmissionError('本次實盤授權已關閉');
   }
   async submit(o: Order): Promise<Order> {
     let m: Instrument | undefined;
@@ -422,6 +446,7 @@ export class ShioajiHttpBroker implements Broker {
         const plan = this.store.plan();
         if (!plan || plan.id !== o.plan_id || Date.parse(plan.analysis.expires_at) <= now.getTime()) throw new NoSubmissionError('買進計畫已過期');
       }
+      if (!this.liveSession.authorized(this.store.get('account_fingerprint'))) throw new NoSubmissionError('本次實盤授權已關閉');
     } catch (error) {
       if (error instanceof NoSubmissionError) throw error;
       throw new NoSubmissionError('送單前連線或資料核對失敗，未送出券商委託');
@@ -435,10 +460,11 @@ export class ShioajiHttpBroker implements Broker {
     return this.normalizeTrade(trade,o);
   }
   async cancel(o: Order): Promise<Order> {
-    try { await this.mutationReady(); await this.refreshTrades(true); }
+    try { await this.mutationReady('cancel'); await this.refreshTrades(true); }
     catch { throw new NoSubmissionError('撤單前連線或授權核對失敗，未送出撤單'); }
     const trade = this.trades.find(t => t.order.id === o.broker_id); if (!trade) throw new Error('撤單前查不到委託');
     const current = this.normalizeTrade(trade,o); if (!active(current)) return current;
+    if (!this.liveSession.authorized(this.store.get('account_fingerprint'),'cancel')) throw new NoSubmissionError('本次實盤授權已關閉，未送出撤單');
     const result = nativeTradeSchema.parse(await this.request('/order/cancel_order',{ trade_id:o.broker_id }));
     return this.normalizeTrade(result,{ ...o,status:'CANCEL_PENDING' });
   }

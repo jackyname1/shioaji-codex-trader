@@ -5,20 +5,22 @@ import { TradingCalendar } from './calendar.js';
 import { Engine, type Bundle } from './engine.js';
 import { CodexAnalyst, type AnalystEvent } from './codex.js';
 import { collectFacts } from './facts.js';
-import { SettingsSchema, twClock, twDay, type Settings } from './models.js';
+import { SettingsSchema, ageSeconds, twDay, type Settings } from './models.js';
 import { demoAnalysis } from './strategy.js';
 import { ShioajiHttpBroker } from '../broker/http.js';
 import { PaperBroker, SyntheticMarket } from '../broker/paper.js';
 import type { Broker } from '../broker/types.js';
 import { experienceStatus } from './experience.js';
 import { dueStrategy, nextStrategy, type ScheduleRun } from './schedule.js';
+import { LiveSession, type LiveReadiness } from './live-session.js';
 
-export const LIVE_ACK = '我確認啟用現股自動實盤交易並了解零股不可當沖';
 export class TradingService {
   readonly store: Store;
   readonly calendar: TradingCalendar;
   readonly broker: Broker;
   readonly engine: Engine;
+  readonly liveSession = new LiveSession();
+  private liveEpoch = 0;
   private queue: Promise<unknown> = Promise.resolve();
   private timer?: NodeJS.Timeout;
   private tickPending = false;
@@ -37,14 +39,16 @@ export class TradingService {
   get analyzing():boolean{return !!this.decisionTask;}
   get scanning():boolean{return !!this.watchTask;}
   private closeTask?: Promise<void>;
-  constructor(path: string, mode?: Settings['mode']) {
+  constructor(path: string, mode?: Settings['mode'], createMarket?: (store: Store, settings: Settings, session: LiveSession) => Broker) {
     this.store = new Store(path);
-    const stored = this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {})});
+    const stored = this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {}),auto_execute:false});
     const priorMode = this.store.get<string>('database_mode');
     if (priorMode && priorMode !== settings.mode) { this.store.close(); throw new Error('每種交易模式須使用獨立資料庫'); }
     this.store.set('database_mode',settings.mode); this.store.saveSettings(settings);
+    this.store.delete('live_consent');
     this.calendar = new TradingCalendar(this.store,settings.mode === 'demo');
-    const market = settings.mode === 'demo' ? new SyntheticMarket() : new ShioajiHttpBroker(this.store,settings,settings.mode === 'live');
+    const market = createMarket?.(this.store,settings,this.liveSession) ?? (settings.mode === 'demo' ? new SyntheticMarket()
+      : new ShioajiHttpBroker(this.store,settings,settings.mode === 'live',undefined,this.liveSession));
     this.broker = ['demo','paper'].includes(settings.mode) ? new PaperBroker(this.store,market,settings,this.calendar) : market;
     this.engine = new Engine(this.store,this.broker,settings,this.calendar);
   }
@@ -123,6 +127,7 @@ export class TradingService {
   }
   private async performDecision(review: boolean): Promise<void> {
     const s = this.engine.settings;
+    const signal = AbortSignal.any([this.stop.signal,this.decisionAbort!.signal]);
     if (s.mode !== 'demo' && !s.codex_enabled) throw new Error('請先啟用 Codex 並在本機登入');
     this.analysisStatus=review?'正在進行盤後檢討':'正在更新策略';
     await this.enqueue(() => this.engine.log('ANALYSIS','開始收集動態股票池；背景監控持續'));
@@ -139,10 +144,10 @@ export class TradingService {
       else {
         const profile = join(dirname(this.store.path),'codex-analysis-profile');
         this.analyst = new CodexAnalyst(s,profile,undefined,join(dirname(this.store.path),'codex-login'),event=>{this.analystEvents.push(event);this.analystEvents=this.analystEvents.slice(-80);});
-        this.decisionAbort?.signal.throwIfAborted();
-        analysis = await this.analyst.analyze(snapshot,AbortSignal.any([this.stop.signal,this.decisionAbort!.signal]));
+        signal.throwIfAborted();
+        analysis = await this.analyst.analyze(snapshot,signal);
       }
-      await this.enqueue(() => this.engine.activate(analysis,snapshot,new Date()));
+      await this.enqueue(() => { signal.throwIfAborted(); return this.engine.activate(analysis,snapshot,new Date()); });
       this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
     } catch {
       this.analysisStatus=review?'盤後檢討未通過':'本輪策略未通過，停止新買進';
@@ -160,6 +165,10 @@ export class TradingService {
   }
   async command(input: string): Promise<string> {
     const [name,...args] = input.trim().split(/\s+/);
+    if(name==='stop'||name==='lock-live'){
+      this.decisionAbort?.abort();this.analyst?.cancel();
+      if(this.engine.settings.mode==='live'){this.liveEpoch++;this.liveSession.revoke();}
+    }
     if (name === 'decide' || name === 'review') {
       if(this.decisionTask)throw new Error('上一輪分析仍在執行');
       if(!this.engine.settings.codex_enabled&&this.engine.settings.mode!=='demo')throw new Error('請先啟用 Codex 並在本機登入');
@@ -168,9 +177,15 @@ export class TradingService {
     if(name==='cancel-analysis'){this.decisionAbort?.abort();this.analyst?.cancel();return '已要求停止本輪分析';}
     if(name==='watch'){void this.refreshObservations().catch(()=>undefined);return '已排程觀測更新，無需呼叫 Codex';}
     if(name==='start-auto') {
-      if(!this.engine.connected)throw new Error('請先連接 Shioaji 真實行情');
-      if(!this.engine.settings.codex_enabled&&this.engine.settings.mode!=='demo')throw new Error('請先啟用 Codex 並在本機登入');
-      await this.command('auto on');await this.command('continue');await this.command('resume');
+      // One queued transition: a competing emergency stop cannot be undone by later resume steps.
+      await this.enqueue(() => {
+        if(!this.engine.connected)throw new Error('請先連接 Shioaji 真實行情');
+        if(!this.engine.settings.codex_enabled&&this.engine.settings.mode!=='demo')throw new Error('請先啟用 Codex 並在本機登入');
+        if(this.engine.settings.mode==='readonly')throw new Error('目前模式無法啟用自動委託');
+        if(this.engine.settings.mode==='live'&&!this.liveAuthorized)throw new Error('請先確認本次實盤授權');
+        this.engine.setSettings({...this.engine.settings,auto_execute:true});this.engine.kill(false);this.engine.pauseEntries(false);
+      });
+      if(this.engine.killed||!this.engine.settings.auto_execute)return '自動啟動已停止';
       if(!this.engine.plan||Date.parse(this.engine.plan.analysis.expires_at)<=Date.now()) {
         if(!this.decisionTask)await this.command('decide');
         return '已啟動自動模式；等待有效策略後依條件執行';
@@ -186,13 +201,17 @@ export class TradingService {
           if(this.engine.canExecute())for(const o of this.store.orders(true))if(o.purpose==='ENTRY')await this.engine.cancel(o.local_id,now);
           return '已暫停新買進，核對本程式進場掛單的撤單；保護監控持續';
         case 'resume': this.engine.pauseEntries(false); return '已恢復新增買進';
-        case 'stop': this.engine.kill(); return '停止全部新委託；現有掛單需另行撤單';
+        case 'stop': this.engine.kill();this.decisionAbort?.abort();this.analyst?.cancel();
+          if(this.engine.settings.mode==='live')this.lockLive();
+          return '停止全部新委託；現有掛單需另行撤單';
+        case 'lock-live': if(this.engine.settings.mode!=='live')throw new Error('目前不是實盤模式');
+          this.engine.kill();this.lockLive();return '實盤已鎖定；現有掛單仍須另行撤單';
         case 'continue': this.engine.kill(false); return '解除停止委託';
         case 'auto': {
           if (!['on','off'].includes(args[0] ?? '')) throw new Error('用法：auto on 或 auto off');
           if (args[0] === 'on' && this.engine.settings.mode === 'readonly') throw new Error('唯讀模式無法啟用自動委託');
           if (args[0] === 'on' && this.engine.settings.mode === 'live'
-            && (!this.store.get('live_consent') || process.env.LIVE_TRADING !== 'true')) throw new Error('須先在本機啟用實盤授權');
+            && !this.liveAuthorized) throw new Error('請先確認本次實盤授權');
           this.engine.setSettings({...this.engine.settings,auto_execute:args[0] === 'on'}); return '自動執行=' + this.engine.settings.auto_execute;
         }
         case 'cancel': {
@@ -203,32 +222,71 @@ export class TradingService {
         case 'cancel-all': for (const o of this.store.orders(true)) await this.engine.cancel(o.local_id,now); return '已核對本程式的未完成委託';
         case 'calendar': return '已更新 ' + await this.calendar.refresh(Number(args[0] ?? twDay(now).slice(0,4)),this.stop.signal) + ' 天行事曆';
         case 'reconcile': await this.engine.reconcile(now); await this.engine.refreshAccount(now); return '已重新核對帳戶及委託';
-        case 'help': return 'status | experience | decide | review | watch | start-auto | pause | resume | stop | continue | auto on/off | cancel ID | cancel-all | reconcile | calendar 年份 | help | exit\nstop 不會自動撤單；exit 關閉監控，不會自動撤銷券商掛單。';
+        case 'help': return 'status | experience | decide | review | watch | start-auto | pause | resume | stop | lock-live | continue | auto on/off | cancel ID | cancel-all | reconcile | calendar 年份 | help | exit\n實盤請從桌面「啟動實盤」確認本次授權。stop 不會自動撤單；exit 關閉監控，不會自動撤銷券商掛單。';
         default: throw new Error('未知指令，輸入 help 查看');
       }
     });
   }
   async saveSettings(raw: unknown): Promise<void> {
     const s = SettingsSchema.parse(raw);
-    if (s.mode === 'live' && s.auto_execute && (!this.store.get('live_consent') || process.env.LIVE_TRADING !== 'true'))
-      throw new Error('實盤自動執行須先取得本機授權');
     await this.enqueue(async () => {
+      if (s.mode === 'live' && s.auto_execute && !this.liveAuthorized) throw new Error('實盤自動執行須先確認本次授權');
+      if(s.mode==='live'&&['fee_rate','minimum_fee','fee_verified','sell_tax_rate','settlement_debit_sign',
+        'min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
+        'max_daily_buy_orders','daily_loss_fraction','whole_lots','allow_attention','price_deviation_fraction',
+        'max_spread_fraction','quote_max_age','account_max_age','cooldown_seconds'].some(k=>s[k as keyof Settings]!==this.engine.settings[k as keyof Settings])) {
+        this.lockLive();s.auto_execute=false;
+      }
+      if(['codex_model','codex_reasoning','codex_instruction','codex_enabled'].some(k=>s[k as keyof Settings]!==this.engine.settings[k as keyof Settings])) {
+        this.decisionAbort?.abort();this.analyst?.cancel();
+      }
       const changedLots = s.whole_lots !== this.engine.settings.whole_lots;
       this.engine.setSettings(s);
       if (changedLots && this.engine.connected) { this.engine.quotes.clear(); await this.engine.updateSubscriptions(new Date()); }
     });
     if(s.auto_watchlist&&!this.engine.watch.healthy)void this.refreshObservations().catch(()=>undefined);
   }
-  async activateLive(ack: string): Promise<void> {
-    if (ack !== LIVE_ACK || this.engine.settings.mode !== 'live' || process.env.LIVE_TRADING !== 'true') throw new Error('實盤授權文字或啟用方式不符');
-    if (!this.engine.settings.fee_verified || this.engine.settings.settlement_debit_sign === 'unverified' || !this.engine.account?.complete)
-      throw new Error('請先完成帳戶唯讀核對、手續費及交割款正負號確認');
-    await this.enqueue(() => { this.store.set('live_consent',{at:new Date().toISOString(),fingerprint:this.store.get('account_fingerprint')});
-      this.engine.log('LIVE_CONSENT','已在本機授權實盤；需另行 auto on 才開始新增委託'); });
+  get liveAuthorized(): boolean { return this.liveSession.authorized(this.store.get('account_fingerprint')); }
+  get liveCancelAuthorized(): boolean { return this.liveSession.authorized(this.store.get('account_fingerprint'),'cancel'); }
+  liveReadiness(now = new Date()): LiveReadiness {
+    const s=this.engine.settings,broker=this.broker instanceof ShioajiHttpBroker?this.broker.liveStatus():{account:'尚未連接實盤帳戶',issues:['請切換至實盤模式']};
+    const issues=[...broker.issues];
+    if(!this.engine.connected)issues.push('請先連接 Shioaji');
+    if(!s.fee_verified)issues.push('請在帳戶設定核對手續費率');
+    if(s.settlement_debit_sign==='unverified')issues.push('請在帳戶設定核對交割款符號');
+    const a=this.engine.account;
+    if(!a?.complete)issues.push(a?.issue||'帳戶快照尚未完整');
+    else if(!(ageSeconds(now,a.asof)>=0&&ageSeconds(now,a.asof)<=s.account_max_age))issues.push('帳戶快照已過期，請重新核對');
+    if(a?.orders.some(o=>['UNKNOWN','PREPARED','SUBMITTING','CANCEL_PENDING'].includes(o.status)))issues.push('仍有待核對委託');
+    return {authorized:this.liveAuthorized,ready:!issues.length,account:broker.account,issues:[...new Set(issues)]};
+  }
+  async prepareLive(): Promise<LiveReadiness> {
+    return this.enqueue(async()=>{
+      if(!(this.broker instanceof ShioajiHttpBroker)||this.engine.settings.mode!=='live'||!this.engine.connected)
+        throw new Error('請先連接實盤帳戶');
+      await this.broker.verifyLiveConnection();const now=new Date();
+      await this.engine.reconcile(now,true);await this.engine.refreshAccount(now);
+      const state=this.liveReadiness();if(!state.ready)throw new Error('實盤尚未就緒：'+state.issues.join('；'));
+      return state;
+    });
+  }
+  async activateLive(scope:'trade'|'cancel'='trade'): Promise<void> {
+    const epoch=this.liveEpoch;
+    await this.prepareLive();
+    await this.enqueue(()=>{
+      if(epoch!==this.liveEpoch)throw new Error('實盤啟動已停止');
+      const state=this.liveReadiness();if(!state.ready)throw new Error('實盤尚未就緒：'+state.issues.join('；'));
+      this.liveSession.grant(this.store.get<string>('account_fingerprint')??'',scope);
+      this.engine.log('LIVE_CONSENT',`${scope==='trade'?'本次實盤':'本次撤單'}授權已開啟；重新連線、重啟、鎖定或變更交易風控後失效`);
+    });
+  }
+  private lockLive(): void {
+    this.liveEpoch++;this.liveSession.revoke();this.engine.setSettings({...this.engine.settings,auto_execute:false});
+    this.engine.log('LIVE_LOCK','實盤授權已關閉；不影響券商既有掛單');
   }
   close(): Promise<void> {
     if (this.closeTask) return this.closeTask;
-    this.stopping = true; clearInterval(this.timer); this.stop.abort(); this.analyst?.cancel();
+    this.stopping = true;this.liveEpoch++;this.liveSession.revoke();clearInterval(this.timer); this.stop.abort(); this.analyst?.cancel();
     // Abort native HTTP/SSE immediately, then wait for queued operations and the analyst before closing SQLite.
     this.closeTask = (async () => {
       const closingBroker = this.broker.close();

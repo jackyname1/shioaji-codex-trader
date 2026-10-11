@@ -310,7 +310,7 @@ export class Engine {
     }
     const priorStatus = order.status;
     order.status = 'CANCEL_PENDING'; this.store.saveOrder(order);
-    try { const result = await this.broker.cancel(order); this.store.saveOrder(result);
+    try { const result = await this.broker.cancel(order); this.recordReconciledFill(result,order.filled,now);this.store.saveOrder(result);
       this.log('CANCEL',`${order.symbol} 撤單核對：${result.status}，已成交 ${result.filled} 股`); }
     catch (error) {
       if (error instanceof NoSubmissionError) { order.status = priorStatus; this.store.saveOrder(order); this.logOnce('BLOCK',`${order.symbol} ${error.message}`); }

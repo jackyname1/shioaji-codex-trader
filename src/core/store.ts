@@ -64,6 +64,7 @@ export class Store {
   set(key: string, value: unknown): void {
     this.db.prepare('INSERT INTO kv VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value));
   }
+  delete(key: string): void { this.db.prepare('DELETE FROM kv WHERE key=?').run(key); }
   settings(): Settings { return SettingsSchema.parse(this.get('settings') ?? {}); }
   saveSettings(s: Settings): void { this.set('settings', SettingsSchema.parse(s)); }
   orders(activeOnly = false): Order[] {
