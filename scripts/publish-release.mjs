@@ -37,7 +37,10 @@ if (!existing) {
 }
 // Publish the version requested by the user; retain older releases. Upload only after both Windows smoke tests pass.
 gh('release', 'upload', tag, ...names.map(name => resolve(directory, name)), '--clobber');
-const updated = api(`releases/tags/${tag}`);
+// The by-tag endpoint returns published releases; a new draft must be addressed by ID.
+const uploaded = api('releases?per_page=100').find(release => release.tag_name === tag);
+if (!uploaded) throw new Error('The uploaded release draft could not be found.');
+const updated = api(`releases/${uploaded.id}`);
 for (const name of names) {
   const asset = updated.assets.find(item => item.name === name);
   if (!asset || asset.size !== (await stat(resolve(directory, name))).size || (asset.digest && asset.digest !== `sha256:${digests.get(name)}`)) {
