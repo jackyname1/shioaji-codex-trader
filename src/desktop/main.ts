@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, dialog, powerSaveBlocker,
-  safeStorage, type IpcMainInvokeEvent } from 'electron';
+  safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync,readFileSync,writeFileSync,statSync,mkdirSync } from 'node:fs';
@@ -11,8 +11,9 @@ import { SettingsSchema,active, type Settings } from '../core/models.js';
 import { demoAnalysis } from '../core/strategy.js';
 import { Store } from '../core/store.js';
 import { loopbackOrigin } from '../broker/http.js';
+import { brokerIssue, BrokerError } from '../broker/health.js';
 import type { DesktopState } from './shared.js';
-import { bundledCodexPath,codexEnvironment } from '../core/codex.js';
+import { bundledCodexPath, CodexError, codexEnvironment, prepareCodexProfile } from '../core/codex.js';
 import { BacktestController } from '../core/backtest-controller.js';
 import { BacktestRequestSchema,fillsCsv } from '../core/backtest.js';
 import { experienceStatus } from '../core/experience.js';
@@ -22,6 +23,8 @@ import { liveChart } from '../core/live-chart.js';
 import { ChartRequestSchema } from '../core/chart.js';
 import { bundledShioajiPath } from './broker-runtime.js';
 import { DesktopOperations } from './operations.js';
+import { DesktopSettings } from './settings.js';
+import { CodexLogin } from './codex-login.js';
 
 let window: BrowserWindow | undefined, tray: Tray | undefined, service: TradingService | undefined;
 let quitting = false, initialError = '', blocker: number | undefined;
@@ -35,7 +38,7 @@ let vault:CredentialVault,nativeConnection:NativeConnection,remembered=false;
 let connectionBusy=false,chartBusy=false;const chartAbort=new AbortController();
 const operations=new DesktopOperations();let liveActionEpoch=0;
 const brokerPath=():Promise<string>=>bundledShioajiPath(app.isPackaged?join(process.resourcesPath,'shioaji'):join(directory,'../../../resources/shioaji'));
-let loginTask:Promise<void>|undefined,loginAbort:AbortController|undefined,loginStatus='可沿用本機 Codex 登入，或按登入連接帳戶';
+let commonSettings:DesktopSettings,codexLogin:CodexLogin;
 let preferences:{last_mode:Settings['mode'];connections:Partial<Record<Settings['mode'],{base_url:string;stock_account_index:number}>>}={last_mode:'paper',connections:{}};
 
 if (!smoke&&!app.requestSingleInstanceLock()) app.quit();
@@ -49,15 +52,24 @@ else {
       SettingsSchema.shape.mode.parse(p.last_mode);for(const c of Object.values(p.connections))if(c){loopbackOrigin(c.base_url);SettingsSchema.shape.stock_account_index.parse(c.stock_account_index);}
       preferences=p;if(!argsMode)mode=p.last_mode==='live'?'live':'paper';
     }catch{/* New or malformed preferences start in paper mode. */}
+    commonSettings=new DesktopSettings(dataRoot);
+    commonSettings.migrate(preferences.last_mode,preferences.connections[preferences.last_mode]?.stock_account_index??0);
     const secure={isEncryptionAvailable:()=>safeStorage.isEncryptionAvailable()&&(process.platform!=='linux'||safeStorage.getSelectedStorageBackend()!=='basic_text'),
       encryptString:safeStorage.encryptString,decryptString:safeStorage.decryptString};
     vault=new CredentialVault(join(dataRoot,'private'),secure);nativeConnection=new NativeConnection(join(dataRoot,'native-service'),brokerPath);
     const saved=await vault.read();remembered=!!saved;
     backtest=new BacktestController(join(dataRoot,'backtests'));await backtest.restore();
     await connect(mode);
+    codexLogin=new CodexLogin(join(dataRoot,'codex-login'),url=>shell.openExternal(url),async()=>{
+      const selected=service;if(!selected||quitting||selected.engine.settings.codex_enabled)return;
+      await selected.saveSettings({...selected.engine.settings,codex_enabled:true});
+      if(selected===service)commonSettings.save(selected.engine.settings);
+    });
+    if(smoke){codexLogin.status.state='signed_out';codexLogin.status.message='隔離測試：不會使用真實 Codex 登入';}
     createWindow(); createTray(); registerIpc();
+    if(!smoke)void codexLogin.check();
     if(saved&&!smoke){connectionBusy=true;try{await operations.run(async()=>{await nativeConnection.start(saved);await connect(mode);});}
-      catch{/* Show the redacted connection status in the account dialog. */}finally{connectionBusy=false;}}
+      catch(error){initialError=error instanceof Error?error.message:'Shioaji 自動登入未完成，請重新連線';}finally{connectionBusy=false;}}
     if(quitting)return;
     if (service?.engine.settings.keep_awake) blocker = powerSaveBlocker.start('prevent-app-suspension');
     if (service?.engine.settings.start_minimized && tray && !smoke) window!.hide();
@@ -67,23 +79,23 @@ else {
 async function connect(nextMode: Settings['mode'],override?:Settings): Promise<void> {
   if (service) await service.close(); service = undefined; initialError = ''; mode = nextMode;
   try {
-    const c=override??preferences.connections[mode],base=nativeConnection.baseUrl,index=c?.stock_account_index??0;
+    const base=nativeConnection.baseUrl,index=override?.stock_account_index??commonSettings.accountIndex;
     // Database identity belongs to the mode/account, not the automatically chosen port.
     const suffix=index===0?'':'-account-'+index;
     const path=join(dataRoot,`${mode}${suffix}.db`);
     const store=new Store(path);try{
       if(store.get('account_fingerprint')&&store.get('account_identity_version')!==2&&!store.get('legacy_account_origin'))
         store.set('legacy_account_origin',store.settings().base_url);
-      store.saveSettings(SettingsSchema.parse({...store.settings(),...(override??{}),mode,base_url:base,stock_account_index:index,auto_execute:false}));
+      store.saveSettings(commonSettings.apply(store.settings(),mode,base,override));
     }finally{store.close();}
     service = new TradingService(path,mode);
+    commonSettings.save(service.engine.settings);
     preferences.last_mode=mode;preferences.connections[mode]={base_url:base,stock_account_index:index};
     if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
     if(!smoke)service.engine.setSettings({...service.engine.settings,auto_execute:false});
     if(smoke||nativeConnection.connected)await service.start(!smoke&&mode==='live');
   }
-  catch {if(service){service.engine.connected=false;service.engine.entryBlocked=true;}
-    initialError = mode === 'demo' ? '模擬程式啟動失敗' : '無法連接或核對 Shioaji。請開啟帳戶設定，檢查 API 權限與 CA 後重新連線。'; }
+  catch(error) {initialError=mode==='demo'?'模擬程式啟動失敗':brokerIssue(error);}
 }
 function createWindow(): void {
   window = new BrowserWindow({width:1600,height:960,minWidth:1100,minHeight:680,icon:join(directory,'assets/app.png'),title:'Shioaji Codex Trader',
@@ -121,15 +133,17 @@ function registerIpc(): void {
     ipcMain.handle(name,async (event,value: unknown) => {
       trusted(event);
       try { return await action(value); }
-      catch (e) {if(e instanceof z.ZodError)throw new Error('設定驗證未通過：'+e.issues.slice(0,3).map(i=>`${i.path.join('.')||'設定'} ${i.message}`).join('；'));
+      catch (e) {if(e instanceof BrokerError||e instanceof CodexError)throw new Error(e.message);
+        if(e instanceof z.ZodError)throw new Error('設定驗證未通過：'+e.issues.slice(0,3).map(i=>`${i.path.join('.')||'設定'} ${i.message}`).join('；'));
         throw new Error(e instanceof Error && /^(?:回測|連線|CA|圖表|API|Codex|本機|用法|未知指令|委託 ID|實盤|每種|交易模式|須先|目前模式|請先|尚未|上一輪|程式正在|無法|本輪|自動|設定|停止)/.test(e.message)
         ? e.message : '操作未完成，請核對本機狀態與設定'); }
     });
   };
   handle('trader:state',() => ({status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
     settings:JSON.stringify(service?.engine.settings ?? SettingsSchema.parse({mode}),null,2),
-    connected:connected(),error:initialError,backtest:backtest.text(),backtest_running:backtest.progress.running,
-    backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:loginStatus,
+    connected:connected(),error:initialError||(mode==='live'?service?.engine.dataIssue??'':''),backtest:backtest.text(),backtest_running:backtest.progress.running,
+    backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:codexLogin.status.message,
+    codex_auth:{...codexLogin.status},
     runtime:service?{mode,auto:service.engine.settings.auto_execute,paused:service.engine.pausedEntries,killed:service.engine.killed,
       blocked:service.engine.entryBlocked,connected:connected(),session:service.calendar.inSession(new Date()),account:service.engine.account??null,
       plan:service.engine.plan??null,protections:service.store.protections(),orders:service.store.orders(true),quotes:[...service.engine.quotes.values()],
@@ -171,9 +185,10 @@ function registerIpc(): void {
       await connect(mode,settings);return initialError||'設定已儲存並重新連線；新連線設定使用獨立資料庫，自動執行已關閉，請先核對帳戶';
     }
     await service.saveSettings(settings);
+    commonSettings.save(service.engine.settings);
     if (settings.keep_awake && blocker === undefined) blocker = powerSaveBlocker.start('prevent-app-suspension');
     else if (!settings.keep_awake && blocker !== undefined) {powerSaveBlocker.stop(blocker);blocker=undefined;}
-    return '設定已儲存至本機 SQLite';
+    return '設定已儲存 · 模擬與實盤共用';
   }));
   handle('trader:configure',value => operations.run(async () => {
     const next = z.enum(['paper','live']).parse(value);
@@ -184,19 +199,20 @@ function registerIpc(): void {
   }));
   handle('trader:authorize',() => enableLive(true));
   handle('trader:hide',() => { if (tray) window?.hide(); else window?.minimize(); });
-  handle('trader:backtest',async value=>{
-    if(operations.busy||connectionBusy)throw new Error('目前連線或模式切換仍在進行');
+  handle('trader:backtest',value=>operations.run(async()=>{
+    if(connectionBusy)throw new Error('目前連線或模式切換仍在進行');
     if(!service)throw new Error('回測需要有效的本機設定');
     const request=BacktestRequestSchema.parse(value);let csv:string|undefined;
-    if(!smoke&&(!service.engine.connected||request.source!=='shioaji'||!['codex','rules'].includes(request.strategy)))
+    if(!smoke&&(!nativeConnection.connected||request.source!=='shioaji'||!['codex','rules'].includes(request.strategy)))
       throw new Error('回測需要連接 Shioaji 真實行情；請先完成 API 設定');
+    if(!smoke&&request.strategy==='codex'&&!await codexLogin.check())throw new CodexError('Codex 尚未登入，請先按登入；快速程式模擬可直接執行');
     if(request.source==='csv'){
       const result=await dialog.showOpenDialog(window!,{title:'匯入歷史行情 CSV（含至少 20 個交易日暖機資料）',properties:['openFile'],filters:[{name:'CSV',extensions:['csv']}]});
       if(result.canceled)return '已取消匯入';const path=result.filePaths[0]!;
       if(statSync(path).size>80000000)throw new Error('回測 CSV 超過 80 MB');csv=readFileSync(path,'utf8');
     }
     return backtest.start(request,service.engine.settings,csv);
-  });
+  }));
   handle('trader:backtest-cancel',()=>backtest.cancel());
   handle('trader:backtest-select',value=>{if(typeof value!=='string')throw new Error('回測報表識別不合法');return backtest.select(value);});
   handle('trader:file',async value=>{
@@ -220,7 +236,7 @@ function registerIpc(): void {
   handle('trader:forget-credentials',()=>operations.run(async()=>{await vault.clear();remembered=false;return '已移除記住的金鑰與憑證設定';}));
   handle('trader:chart',async value=>{
     const request=ChartRequestSchema.parse(value);if(request.source==='replay'||smoke)return backtest.chart({...request,source:'replay'});
-    if(!service?.engine.connected&&!smoke)throw new Error('圖表需要先連接 Shioaji 真實行情');
+    if(!nativeConnection.connected&&!smoke)throw new Error('圖表需要先連接 Shioaji 真實行情');
     if(chartBusy)throw new Error('圖表資料正在載入');chartBusy=true;
     try{return await liveChart(request,service!.engine.settings,join(dataRoot,'backtests','cache'),chartAbort.signal);}
     finally{chartBusy=false;}
@@ -234,15 +250,14 @@ function registerIpc(): void {
     const columns=['symbol','at','open','high','low','close','volume_shares'] as const;
     writeFileSync(result.filePath,'\uFEFF'+columns.join(',')+'\r\n'+dataset.points.map(p=>columns.map(k=>String(p[k])).join(',')).join('\r\n'),{mode:0o600});return '完整歷史行情已匯出';
   });
-  handle('trader:codex-login',()=>{
-    if(smoke)throw new Error('Codex 登入不在測試流程執行');if(loginTask)return 'Codex 登入仍在進行';
-    const profile=join(dataRoot,'codex-login');mkdirSync(profile,{recursive:true,mode:0o700});
-    loginAbort=new AbortController();loginStatus='已啟動官方 Codex 登入，請在瀏覽器完成；有效期限五分鐘';
-    loginTask=promisify(execFile)(bundledCodexPath(),['-c','cli_auth_credentials_store="file"','login'],{
-      env:codexEnvironment(process.env,profile),timeout:300000,windowsHide:true,signal:loginAbort.signal})
-      .then(()=>{loginStatus='Codex 登入完成，可儲存設定並開始分析。';})
-      .catch(()=>{loginStatus='Codex 登入未完成。請確認瀏覽器、網路與帳戶權限；也可依 README 使用官方 CLI 登入。';})
-      .finally(()=>{loginTask=undefined;});return loginStatus;
+  handle('trader:codex-login',value=>{
+    if(smoke)throw new Error('Codex 登入不在測試流程執行');
+    return codexLogin.start(value==='device');
+  });
+  handle('trader:codex-open',()=>{if(smoke)throw new Error('Codex 登入不在測試流程執行');return codexLogin.reopen();});
+  handle('trader:codex-test',()=>{
+    if(smoke||!service)throw new Error('Codex 連線測試不在隔離流程執行');
+    return codexLogin.test(service.engine.settings);
   });
   handle('trader:backtest-export',async value=>{
     if(!backtest.report||!['json','csv'].includes(String(value)))throw new Error('回測沒有可匯出的報表');
@@ -254,12 +269,12 @@ function registerIpc(): void {
   });
   handle('trader:exit',() => exit());
 }
-function connected():boolean{return !!service?.engine.connected&&(smoke||nativeConnection.connected);}
+function connected():boolean{return smoke?!!service?.engine.connected:nativeConnection.connected;}
 async function enableLive(startAutomation:boolean,afterAuthorization?:(selected:TradingService)=>Promise<string>):Promise<string>{
   return operations.run(async()=>{
     const selected=service,epoch=liveActionEpoch;
     if(!selected||mode!=='live'||!nativeConnection.connected)throw new Error('請先連接實盤帳戶');
-    if(startAutomation&&!selected.engine.settings.codex_enabled)throw new Error('請先儲存 Codex 設定並登入');
+    if(startAutomation&&!await codexLogin.check())throw new CodexError('Codex 尚未登入，請先按登入');
     const live=await selected.prepareLive(),s=selected.engine.settings;
     if(!(startAutomation?selected.liveAuthorized:selected.liveCancelAuthorized)){
       const percent=(v:string):string=>(Number(v)*100).toLocaleString('zh-TW')+'%';
@@ -291,6 +306,12 @@ async function smokeTest(): Promise<void> {
   if (process.platform === 'win32' && !tray) throw new Error('Windows 系統匣未啟動');
   const version = await promisify(execFile)(bundledCodexPath(),['--version'],{timeout:20000,windowsHide:true});
   if (!version.stdout.includes('codex')) throw new Error('Codex 打包執行檔無法啟動');
+  const isolatedAuth=join(dataRoot,'smoke-auth');prepareCodexProfile(isolatedAuth,join(dataRoot,'empty-auth'));
+  const isolatedEnv=codexEnvironment(process.env,isolatedAuth);delete isolatedEnv.OPENAI_API_KEY;delete isolatedEnv.CODEX_API_KEY;
+  let signedOut=false;
+  try{await promisify(execFile)(bundledCodexPath(),['-c','cli_auth_credentials_store="file"','login','status'],{env:isolatedEnv,timeout:20000,windowsHide:true});}
+  catch(error){const result=error as {code?:number;stdout?:string;stderr?:string};signedOut=result.code===1&&/not logged in/i.test((result.stdout??'')+(result.stderr??''));}
+  if(!signedOut)throw new Error('打包後 Codex 隔離登入狀態未通過');
   if(!process.argv.includes('--ui-only')||app.isPackaged){const binary=await brokerPath();
     const native=await promisify(execFile)(binary,['--version'],{timeout:20000,windowsHide:true,env:{...process.env,PATH:''}});
     if(!native.stdout.includes('1.7.7'))throw new Error('內建 Shioaji 版本未通過');
@@ -368,12 +389,12 @@ async function smokeTest(): Promise<void> {
       const visible=selector=>{const node=document.querySelector(selector),box=node.getBoundingClientRect();return box.width>0&&box.height>0&&box.top>=0&&box.bottom<=innerHeight&&box.right<=innerWidth;};
       return {mode:document.body.dataset.workspace,watchRows:document.querySelectorAll('#overview-watch tbody tr').length,
         watchPrices:[...document.querySelectorAll('#overview-watch tbody tr td:nth-child(3)')].some(cell=>cell.textContent!=='—'),pnl:document.querySelector('#bt-pnl').textContent,
-        panels:['.watch-panel','.positions-panel','.chart-panel','.codex-panel','.execution-panel'].every(visible),
+        panels:['.watch-panel','.positions-panel','.chart-panel','.codex-panel','.execution-panel'].every(visible),auth:['#codex-login','#codex-test','#codex-device'].every(visible),
         simulation:visible('.simulation-controls'),equity:visible('.equity-panel'),orders:visible('#orders'),
         pages:document.querySelectorAll('[data-page],[data-tab]').length,width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,
         viewport:innerWidth,viewportHeight:innerHeight,times:document.querySelector('#s-times').value,
         settings:document.querySelector('#settings-dialog').open};})()`);
-    if(result.mode!==expected||!result.panels||result.pages||result.width>result.viewport||result.height>result.viewportHeight||result.settings
+    if(result.mode!==expected||!result.panels||!result.auth||result.pages||result.width>result.viewport||result.height>result.viewportHeight||result.settings
       ||expected==='paper'&&(!result.simulation||!result.equity||result.watchRows<5||!result.watchPrices||result.pnl==='—')
       ||expected==='live'&&(!result.orders||result.simulation||result.equity))throw new Error('單一工作台版面未通過：'+JSON.stringify(result));
   }
@@ -397,7 +418,7 @@ async function exit(): Promise<void> {
     if (answer.response !== 1) return;
   }
   quitting = true;liveActionEpoch++;chartAbort.abort();
-  loginAbort?.abort();await loginTask;
+  codexLogin?.close();await codexLogin?.wait();
   backtest?.cancel();await backtest?.wait();
   await service?.close(); service = undefined;await nativeConnection?.close();
   if (blocker !== undefined) powerSaveBlocker.stop(blocker);

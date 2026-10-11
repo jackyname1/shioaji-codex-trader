@@ -33,7 +33,7 @@ export class BacktestController {
   }
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
-      if(['0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
+      if(['0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
       else this.progress.message='上一版報表仍保留在本機；新版請重新執行測試';
     }catch{/* New profile. */}
     await this.loadHistory();
@@ -44,7 +44,7 @@ export class BacktestController {
       const result:BacktestSummary[]=[];
       for(const f of files.sort((a,b)=>b.time-a.time).slice(0,30))try {
         const r=JSON.parse(await readFile(join(this.root,f.name),'utf8')) as BacktestReport;
-        if(['0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
+        if(['0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
       }catch{/* A damaged report cannot affect trading. */}
       this.history=result;
     }catch{this.history=[];}
@@ -53,7 +53,7 @@ export class BacktestController {
     if(this.task)throw new Error('回測執行中不能切換報表');
     if(!/^[a-f0-9-]{36}$/.test(id)||!this.history.some(r=>r.id===id))throw new Error('回測報表識別不合法');
     const r=JSON.parse(await readFile(join(this.root,`report-${id}.json`),'utf8')) as BacktestReport;
-    if(r.id!==id||!['0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
+    if(r.id!==id||!['0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
     this.useReport(r);this.dataset=undefined;return '已載入測試結果';
   }
   private async save(report:BacktestReport):Promise<void>{
@@ -94,7 +94,7 @@ export class BacktestController {
         this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':exhausted?'PARTIAL':this.report?.status??'FAILED',codex_calls:consumed,
           message:exhausted?'呼叫上限為整批共用；尚未執行所有比較。已完成結果可查看與匯出':'結果已保存，可比較排程、查看成交與匯出'};
       }catch(e){this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':'FAILED',
-        message:signal.aborted?'已停止測試；已完成結果保留':e instanceof Error&&/^(回測|歷史|Shioaji HTTP|Codex|證交所|日期|股票)/.test(e.message)?e.message:'回測資料或分析未通過驗證，請核對歷史日期、暖機資料、官方服務與 Codex 登入'};}
+        message:signal.aborted?'已停止測試；已完成結果保留':e instanceof Error&&/^(回測|歷史|Shioaji|Codex|證交所|日期|股票)/.test(e.message)?e.message:'回測資料或分析未通過驗證，請核對歷史日期、暖機資料、官方服務與 Codex 登入'};}
     })().finally(()=>{this.task=undefined;});
     return intervals.length>1?`已啟動 ${intervals.length} 組自動比較；Codex 呼叫上限為整批共用`:'已啟動全自動歷史測試，交易監控持續';
   }

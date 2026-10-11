@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { ExperienceSchema, ReviewSchema, type Experience, type ExperienceReview } from './experience.js';
 import { AccountSchema, OrderSchema, PlanSchema, ProtectionSchema, SessionSchema, SettingsSchema,
-  active, type Account, type Order, type Plan, type Protection, type SessionDay, type Settings } from './models.js';
+  active, storedSettings, type Account, type Order, type Plan, type Protection, type SessionDay, type Settings } from './models.js';
 
 export class Store {
   readonly db: DatabaseSync;
@@ -65,7 +65,7 @@ export class Store {
     this.db.prepare('INSERT INTO kv VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value));
   }
   delete(key: string): void { this.db.prepare('DELETE FROM kv WHERE key=?').run(key); }
-  settings(): Settings { return SettingsSchema.parse(this.get('settings') ?? {}); }
+  settings(): Settings { return storedSettings(this.get('settings') ?? {}); }
   saveSettings(s: Settings): void { this.set('settings', SettingsSchema.parse(s)); }
   orders(activeOnly = false): Order[] {
     const values = (this.db.prepare('SELECT value FROM orders ORDER BY rowid').all() as { value: string }[])

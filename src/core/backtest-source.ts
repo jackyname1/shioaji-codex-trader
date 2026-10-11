@@ -6,6 +6,7 @@ import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { addDays, SettingsSchema, twDay, type Settings } from './models.js';
 import { validateDataset, type HistoryDataset, type HistoryPoint } from './backtest-data.js';
+import { BrokerHealthSchema, marketReady } from '../broker/health.js';
 import type { BacktestRequest, BacktestProgress } from './backtest.js';
 
 export async function shioajiDataset(request:BacktestRequest,settings:Settings,cacheRoot:string,signal:AbortSignal,
@@ -18,8 +19,8 @@ export async function shioajiDataset(request:BacktestRequest,settings:Settings,c
   const report=(phase:string,message:string):void=>progress({running:true,phase,day:request.start,points:0,total_points:0,codex_calls:0,message});
   try {
     z.object({simulation:z.literal(false)}).parse(await broker.request('/info'));
-    const health=z.object({status:z.literal('healthy'),token_stale:z.boolean().optional()}).parse(await broker.request('/health'));
-    if(health.token_stale)throw new Error('回測資料服務登入已過期');
+    const health=BrokerHealthSchema.parse(await broker.request('/health'));
+    if(!marketReady(health))throw new Error('回測行情登入尚未就緒，請稍候或重新連線');
     for(let year=Number(request.start.slice(0,4));year<=Number(request.end.slice(0,4));year++) {
       if(year<2020)continue;
       if(!store.session(`${year}-01-01`)){report('CALENDAR',`讀取 ${year} 官方交易日曆`);await calendar.refresh(year,signal);}

@@ -67,7 +67,7 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
     assert.equal(env.SJ_PRODUCTION, 'true'); assert.equal(env.OPENAI_API_KEY, undefined); assert.equal(env.LIVE_TRADING, undefined);
     const commands: string[][] = []; let probes = 0;const binary=async()=>join(root,'shioaji');const origin=async()=>'http://127.0.0.1:9081';
     const native = new NativeConnection(root,binary,{origin,run: async (_binary, args, opts) => { commands.push(args); if (args.includes('--help')) return { stdout: '--no-open' };
-      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; },fetcher: async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false }); },launch:((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
+      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; },fetcher: async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false, status:'degraded', token_stale:false }); },launch:((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
       assert.deepEqual(args,['server','start','--no-open']);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_API_KEY,'TEST_KEY');
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as typeof spawn});
     await native.start(input);assert.equal(native.connected,true);assert.equal(native.baseUrl,'http://127.0.0.1:9081');
@@ -75,7 +75,7 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
     const failure = new NativeConnection(root,binary,{origin,run:async()=>{throw new Error('TEST_SECRET');},fetcher:async()=>{throw new Error('offline');}});
     await assert.rejects(failure.start(input), e => e instanceof Error && !e.message.includes('TEST_SECRET'));
     let failedProbes=0,killed=false;
-    const rejected = new NativeConnection(root,binary,{origin,run:async()=>({stdout:'--no-open'}),fetcher:async()=>{if(++failedProbes===1)throw new Error('offline');return Response.json({simulation:true});},launch:(()=>{
+    const rejected = new NativeConnection(root,binary,{origin,run:async()=>({stdout:'--no-open'}),fetcher:async()=>{if(++failedProbes===1)throw new Error('offline');return Response.json({simulation:true,status:'healthy'});},launch:(()=>{
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{killed=true;child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;
     }) as unknown as typeof spawn});
     await assert.rejects(rejected.start(input),/連線未完成/);assert.equal(killed,true);
@@ -86,7 +86,8 @@ test('a historical cache retains the complete API window when an earlier replay 
   const broker=new ShioajiHttpBroker(store,SettingsSchema.parse({}),false,async()=>{calls++;return Response.json({datetime:['2026-01-05T09:10:00','2026-01-05T09:11:00'],Open:[30,31],High:[31,32],Low:[29,30],Close:[30,31],Volume:[1,2]});});
   try {
     const load=(time:string)=>cachedHistory(broker,root,'9001','TSE','2026-01-05','2026-01-05',`2026-01-05T${time}+08:00`,new AbortController().signal);
-    assert.equal((await load('09:10:00')).length,1);assert.equal((await load('09:11:00')).length,2);assert.equal(calls,1);
+    assert.equal((await load('09:10:00')).length,1);broker.settings={...broker.settings,base_url:'http://127.0.0.1:19000'};
+    assert.equal((await load('09:11:00')).length,2);assert.equal(calls,1);
   }finally{await broker.close();store.close();rmSync(root,{recursive:true,force:true});}
 });
 test('the internal broker automatically avoids an occupied port without changing another service', async(t)=>{
@@ -146,7 +147,7 @@ test('live strategy history divides its warmup into non-overlapping API windows 
 test('paper rejects a simulated service before account reads, subscriptions or orders', async () => {
   const store = new Store(':memory:'), calls: string[] = [];
   const broker = new ShioajiHttpBroker(store, SettingsSchema.parse({ mode: 'paper' }), false, async input => { calls.push(String(input)); return Response.json({ simulation: true, version: '1.7.6' }); });
-  try { await assert.rejects(broker.connect(), /真實行情/); assert.equal(calls.length, 1); } finally { await broker.close(); store.close(); }
+  try { await assert.rejects(broker.connect(), /真實.*行情/); assert.equal(calls.length, 1); } finally { await broker.close(); store.close(); }
 });
 test('Codex activity emits lifecycle and decisions without exposing private reasoning items', async () => {
   const input = snapshot(), analysis = demoAnalysis(input, settings(), now), events: AnalystEvent[] = [];

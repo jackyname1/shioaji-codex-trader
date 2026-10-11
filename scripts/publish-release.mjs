@@ -11,12 +11,12 @@ const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 if (process.env.GH_REPO !== repository || process.env.GITHUB_REF !== 'refs/heads/main' || !/^[a-f0-9]{40}$/.test(commit ?? '')) {
   throw new Error('Release publication requires the verified repository main commit.');
 }
-if (packageJson.version !== '0.1.0') throw new Error('This workflow replaces the existing v0.1.0 pre-release.');
+if (packageJson.version !== '0.2.0') throw new Error('This workflow publishes the verified v0.2.0 pre-release.');
 if (api('git/ref/heads/main').object.sha !== commit) throw new Error('A newer main commit exists; publish its verified build instead.');
 
-const tag = 'v0.1.0';
+const tag = 'v0.2.0';
 const directory = resolve('release');
-const executable = 'Shioaji-Codex-Trader-0.1.0-Windows-x64.exe';
+const executable = 'Shioaji-Codex-Trader-0.2.0-Windows-x64.exe';
 const names = (await readdir(directory)).filter(name => name === executable || /^(?:README|RELEASE_NOTES)\.md$/.test(name) || /^SYNTHETIC-[\w.-]+\.(?:png|json|csv)$/.test(name)).sort();
 const required = [executable, 'README.md', 'RELEASE_NOTES.md', 'SYNTHETIC-demo-backtest.json', 'SYNTHETIC-historical-sample.csv', 'SYNTHETIC-ui-paper-1366.png', 'SYNTHETIC-ui-paper-1600.png', 'SYNTHETIC-ui-paper-1920.png', 'SYNTHETIC-ui-live.png', 'SYNTHETIC-ui-connection.png'];
 if (required.some(name => !names.includes(name))) throw new Error('A verified release asset is missing.');
@@ -35,7 +35,7 @@ if (existing?.immutable) throw new Error('The existing release is immutable and 
 if (!existing) {
   gh('release', 'create', tag, '--target', commit, '--prerelease', '--draft', '--title', `Shioaji Codex Trader ${tag} · Pre-release`, '--notes-file', resolve(directory, 'RELEASE_NOTES.md'));
 }
-// Keep the release identity and URL. Upload only after both Windows smoke tests pass.
+// Publish the version requested by the user; retain older releases. Upload only after both Windows smoke tests pass.
 gh('release', 'upload', tag, ...names.map(name => resolve(directory, name)), '--clobber');
 const updated = api(`releases/tags/${tag}`);
 for (const name of names) {
@@ -50,6 +50,9 @@ for (const asset of updated.assets) {
     gh('api', `repos/${repository}/releases/assets/${asset.id}`, '--method', 'DELETE');
   }
 }
-api(`git/refs/tags/${tag}`, '--method', 'PATCH', '-f', `sha=${commit}`, '-F', 'force=true');
+let tagExists = false;
+try { tagExists = !!api(`git/ref/tags/${tag}`).object; } catch { /* A new draft release has no Git tag yet. */ }
+if (tagExists) api(`git/refs/tags/${tag}`, '--method', 'PATCH', '-f', `sha=${commit}`, '-F', 'force=true');
+else api('git/refs', '--method', 'POST', '-f', `ref=refs/tags/${tag}`, '-f', `sha=${commit}`);
 gh('release', 'edit', tag, '--draft=false', '--prerelease=true', '--title', `Shioaji Codex Trader ${tag} · Pre-release`, '--notes-file', resolve(directory, 'RELEASE_NOTES.md'));
 console.log(gh('release', 'view', tag, '--json', 'url,tagName,assets'));

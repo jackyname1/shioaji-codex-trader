@@ -34,6 +34,7 @@ async function run(operation:()=>Promise<unknown>):Promise<void>{try{message(Str
   catch(e){message(e instanceof Error?e.message.replace(/^Error invoking remote method '[^']+': Error: /,''):'操作未完成');}}
 let codexDirty=false;let latestState:DesktopState|undefined;
 let settingsDirty=false,polling=false,latestSettings:Settings|undefined,renderedReport='';
+let replayPreferencesLoaded=false;
 let currentWorkspace='';
 function updateWorkspace(state:DesktopState):void {
   const mode=simulationView(state)?'paper':'live';document.body.dataset.workspace=mode;
@@ -58,9 +59,9 @@ const guided:Record<string,keyof Settings>={
   's-schedule':'strategy_schedule','s-interval':'decision_interval_minutes','s-monitor':'monitor_interval_seconds','s-watch':'watch_refresh_minutes',
   's-review':'postmarket_time','s-count':'watch_max_symbols','s-misses':'watch_remove_after_scans','s-amount':'watch_min_amount',
   's-url':'base_url','s-account':'stock_account_index','s-cash':'demo_cash',
-  's-fee':'fee_rate','s-min-fee':'minimum_fee','s-settlement':'settlement_debit_sign',
+  's-fee':'fee_rate','s-min-fee':'minimum_fee',
   's-quotes':'manage_quote_subscriptions','s-min-cash':'min_cash_fraction','s-order-limit':'max_order_fraction','s-symbol-limit':'max_symbol_fraction','s-loss-limit':'daily_loss_fraction',
-  's-watch-auto':'auto_watchlist','s-whole':'whole_lots','s-codex':'codex_enabled','s-fee-verified':'fee_verified','s-awake':'keep_awake','s-minimized':'start_minimized',
+  's-watch-auto':'auto_watchlist','s-whole':'whole_lots','s-awake':'keep_awake','s-minimized':'start_minimized',
 };
 function schedulingFields(prefix:'s'|'bt'):void {
   const fixed=value(prefix+'-schedule')==='fixed';el<HTMLInputElement>(prefix+'-times').disabled=!fixed;el<HTMLInputElement>(prefix+'-interval').disabled=fixed;
@@ -69,6 +70,11 @@ function loadSettings(s:Settings):void {
   for(const [id,key] of Object.entries(guided)){const node=el<HTMLInputElement>(id),v=s[key];
     if(typeof v==='boolean')node.checked=v;else node.value=String(v);}
   if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;el<HTMLTextAreaElement>('codex-instruction-control').value=s.codex_instruction;}
+  if(!replayPreferencesLoaded){replayPreferencesLoaded=true;
+    for(const [id,v] of Object.entries({'bt-schedule':s.strategy_schedule,'bt-times':s.strategy_times.join(','),'bt-interval':s.decision_interval_minutes,
+      'bt-monitor':s.monitor_interval_seconds,'bt-watch':s.watch_refresh_minutes,'bt-cash':s.demo_cash}))el<HTMLInputElement>(id).value=String(v);
+    el<HTMLInputElement>('bt-whole').checked=s.whole_lots;schedulingFields('bt');
+  }
   el<HTMLInputElement>('s-times').value=s.strategy_times.join(',');el<HTMLSelectElement>('mode').value=s.mode==='live'?'live':'paper';
   el<HTMLTextAreaElement>('settings').value=JSON.stringify(s,null,2);text('settings-state','已儲存');schedulingFields('s');
 }
@@ -92,7 +98,7 @@ function renderRuntime(state:DesktopState):void {
       .reduce((sum,o)=>sum+Number(o.limit_price)*(o.shares-o.filled)+Math.max(Number(s.minimum_fee),Math.ceil(Number(o.limit_price)*(o.shares-o.filled)*Number(s.fee_rate))),0);
     text('cash',fmt(Math.max(0,Number(a.cash)-Number(a.settlement_debits)-reserves)));
     text('cash-detail',`股票市值 ${fmt(stocks)} · 今日買進 ${a.daily_buy_count} 筆`);
-    text('settlement-detail',`待付 ${fmt(a.settlement_debits)} · 待收 ${fmt(a.settlement_credits)}`);
+    text('settlement-detail',`交割預留 ${fmt(a.settlement_debits)} · 待收 ${fmt(a.settlement_credits)}`);
     text('data-status',`${paper?'模擬時間':a.complete?'帳戶已核對':'帳戶未確認'} · ${stamp(a.asof)}`);
   }else{text('equity',paper?fmt(value('bt-cash')):'—');text('cash',paper?fmt(value('bt-cash')):'—');text('cash-detail',paper?'設定的初始本金':'等待帳戶資料');text('settlement-detail',paper?'開始模擬後顯示交割款':'等待交割資料');text('data-status',paper?'等待開始模擬':'等待帳戶核對');}
   text('watch-count',r.watch.entries.filter(w=>w.state==='OBSERVE').length);text('watch-detail',r.watch.issue||`保留監控 ${r.watch.entries.filter(w=>w.state==='RETAINED').length} 檔`);
@@ -107,7 +113,7 @@ function renderRuntime(state:DesktopState):void {
   text('live-state',r.auto&&live.authorized?'實盤交易已啟動':live.authorized?'本次實盤已授權':'實盤尚未授權');
   text('live-account',live.account);text('live-issues',live.issues[0]??(live.authorized?'每筆送單仍核對帳戶與風控':'按啟動後確認一次，本次有效'));
   el('live-issues').title=live.issues.join('；');
-  text('live-settings-status',live.issues.length?live.issues.join('；'):'CA、帳戶、交割與費率已核對；確認一次即可啟動');
+  text('live-settings-status',live.issues.length?live.issues.join('；'):'CA 與帳戶資料已就緒；確認一次即可啟動');
   text('start-live',r.auto&&live.authorized?'▶ 執行中':live.authorized?'▶ 恢復實盤':'▶ 啟動實盤');
   el<HTMLButtonElement>('start-live').disabled=state.connection.busy||live.authorized&&r.auto&&!r.paused&&!r.killed;
   el<HTMLButtonElement>('authorize').disabled=state.connection.busy||live.authorized&&r.auto&&!r.paused&&!r.killed;
@@ -189,6 +195,9 @@ el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefa
 el('bt-compare').addEventListener('click',()=>void run(()=>beginReplay(true)));
 el('bt-cancel').addEventListener('click',()=>void run(()=>window.trader.cancelBacktest()));el('bt-json').addEventListener('click',()=>void run(()=>window.trader.exportBacktest('json')));el('bt-csv').addEventListener('click',()=>void run(()=>window.trader.exportBacktest('csv')));
 el('codex-login').addEventListener('click',()=>void run(()=>window.trader.loginCodex()));
+el('codex-device').addEventListener('click',()=>void run(()=>window.trader.loginCodex('device')));
+el('codex-open').addEventListener('click',()=>void run(()=>window.trader.openCodexLogin()));
+el('codex-test').addEventListener('click',()=>void run(async()=>{await saveCodex();return window.trader.testCodex();}));
 schedulingFields('bt');void refresh().catch(()=>message('工作台連線未完成'));setInterval(()=>void refresh().catch(()=>undefined),1000);
 
 let chartData:ChartData|undefined,chartLoading=false,chartQueued=false,chartReportId='';
@@ -246,7 +255,15 @@ function conditionList(id:string,rows:[string,string][],note=''):void {
 function renderExtras(state:DesktopState):void {
   text('native-status',state.connection.status);el<HTMLButtonElement>('connect-api').disabled=state.connection.busy;text('credential-state',state.connection.remembered?'已使用系統加密記住設定':'未記住金鑰');
   el<HTMLInputElement>('remember-keys').disabled=!state.connection.encrypted;
+  if(!state.connection.encrypted)el<HTMLInputElement>('remember-keys').checked=false;
   el<HTMLButtonElement>('connect-saved').disabled=!state.connection.remembered;
+  const auth=state.codex_auth;
+  text('codex-auth-state',auth.testing?'測試中':auth.state==='ready'?'已登入':auth.state==='pending'?'登入中':auth.state==='checking'?'檢查中':'未登入');
+  text('codex-login',auth.state==='ready'?'重新登入':'登入');
+  el<HTMLButtonElement>('codex-login').disabled=auth.state==='pending'||auth.state==='checking'||auth.testing;
+  el('codex-open').hidden=!auth.can_open;el('codex-device').hidden=auth.state==='ready'||auth.state==='pending'||auth.testing;
+  el<HTMLButtonElement>('codex-test').disabled=auth.testing||auth.state==='pending'||auth.state==='checking';
+  text('codex-device-code',auth.device_code?'裝置代碼：'+auth.device_code:'');el('codex-device-code').hidden=!auth.device_code;
   const scoped=workspaceRuntime(state);let events=workspaceEvents(state);
   if(simulationView(state)&&!events.length){const logs=state.backtest_result?.strategy_log??[];
     events=logs.filter(log=>log.at<=workspaceCutoff(state)).slice(-25).map(log=>({at:log.at,asof:log.at,stage:log.review?'REVIEW':'DECISION',message:log.summary,model:state.backtest_result!.model,reasoning:'程式策略',context:'replay' as const}));
@@ -303,19 +320,24 @@ el('replay-step').addEventListener('click',()=>void run(()=>window.trader.replay
 el('replay-speed').addEventListener('change',()=>void run(()=>window.trader.replaySpeed(Number(value('replay-speed')))));
 el('bt-market').addEventListener('click',()=>void run(()=>window.trader.exportMarket()));
 for(const id of ['codex-model-control','codex-reasoning-control','codex-instruction-control'])el(id).addEventListener('input',()=>{codexDirty=true;});
-el('codex-save').addEventListener('click',()=>void run(async()=>{if(!latestSettings)throw new Error('設定尚未載入');
-  const result=await window.trader.saveSettings(JSON.stringify({...latestSettings,codex_model:value('codex-model-control'),codex_reasoning:value('codex-reasoning-control'),codex_instruction:value('codex-instruction-control'),codex_enabled:true}));codexDirty=false;return result;}));
+async function saveCodex():Promise<string>{
+  if(!latestSettings)throw new Error('設定尚未載入');
+  const next:Settings={...latestSettings,codex_model:value('codex-model-control'),codex_reasoning:value('codex-reasoning-control') as Settings['codex_reasoning'],codex_instruction:value('codex-instruction-control'),codex_enabled:true};
+  const result=await window.trader.saveSettings(JSON.stringify(next));latestSettings=next;codexDirty=false;return result;
+}
+el('codex-save').addEventListener('click',()=>void run(saveCodex));
 el('choose-ca').addEventListener('click',()=>void run(async()=>{const path=await window.trader.selectFile('ca');if(path)el<HTMLInputElement>('ca-path').value=path;return path?'已選取 CA 憑證':'已取消選檔';}));
 el<HTMLFormElement>('connection-form').addEventListener('submit',e=>{e.preventDefault();void run(async()=>{
   if(!latestSettings)throw new Error('連線設定尚未載入');el<HTMLButtonElement>('connect-api').disabled=true;
   try{const result=await window.trader.connectApi({api_key:value('api-key'),secret_key:value('secret-key'),ca_path:value('ca-path'),ca_password:value('ca-password'),remember:checked('remember-keys')});
     if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;
-  }finally{for(const id of ['api-key','secret-key','ca-password'])el<HTMLInputElement>(id).value='';settingsDirty=false;el<HTMLButtonElement>('connect-api').disabled=false;}
+  }finally{for(const id of ['api-key','secret-key','ca-password'])el<HTMLInputElement>(id).value='';el<HTMLButtonElement>('connect-api').disabled=false;}
 });});
 el('connect-saved').addEventListener('click',()=>void run(()=>window.trader.connectSaved()));el('forget-keys').addEventListener('click',()=>void run(()=>window.trader.forgetCredentials()));
 
 async function beginReplay(compare=false):Promise<string>{
   const form=el<HTMLFormElement>('backtest-form');if(!form.reportValidity())throw new Error('請核對模擬日期、本金與排程');
+  if(value('bt-strategy')==='codex')await saveCodex();
   const result=await window.trader.backtest(request(compare));runningEquity.length=0;chartData=undefined;chartSignature='';chartGeneration++;
   el<HTMLInputElement>('chart-start').value=value('bt-start');el<HTMLInputElement>('chart-end').value=value('bt-end');
   text('market-chart','正在準備歷史行情');el('market-chart').classList.add('chart-empty');
@@ -330,5 +352,6 @@ async function workspaceCommand(command:string):Promise<string>{
     }
     if(command==='watch')return '監測清單會隨模擬時間與歷史策略自動更新';
   }
+  if(command==='decide'||command==='start-auto')await saveCodex();
   return window.trader.command(command);
 }
