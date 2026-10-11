@@ -39,6 +39,7 @@ export class Engine {
   private lastReconcile?: Date;
   private generation = -1;
   private metadataDay = '';
+  private inspectedSymbol='';
   private recent: string[] = [];
   constructor(readonly store: Store, readonly broker: Broker, public settings: Settings, readonly calendar: TradingCalendar) {
     this.risk = new Risk(settings,calendar); this.plan = store.plan();
@@ -142,11 +143,19 @@ export class Engine {
   baseline(now: Date): string | undefined { return this.store.get<{equity:string}>('baseline_' + twDay(now))?.equity; }
   async updateSubscriptions(now: Date): Promise<void> {
     const symbols = new Set(this.store.protections().map(p => p.symbol));
+    if(this.inspectedSymbol)symbols.add(this.inspectedSymbol);
     this.account?.positions.forEach(p => symbols.add(p.symbol)); this.store.orders(true).forEach(o => symbols.add(o.symbol));
     this.plan?.analysis.candidates.forEach(s => symbols.add(s)); this.plan?.analysis.decisions.forEach(d => symbols.add(d.symbol));
     this.watch.entries.forEach(w=>symbols.add(w.symbol));
     const list = [...symbols]; await this.broker.subscribe(list,this.settings.whole_lots);
     this.metadata = await this.broker.instruments(list,now); this.metadataDay = twDay(now);
+  }
+  /** Viewing an extra stock subscribes quotes without changing watch eligibility or strategy. */
+  async inspectSymbol(symbol:string,now:Date):Promise<void>{
+    if(!/^[1-9]\d{3}$/.test(symbol))throw new Error('圖表股票代碼不合法');
+    if(this.inspectedSymbol===symbol&&this.metadata[symbol])return;
+    const old=this.inspectedSymbol;this.inspectedSymbol=symbol;
+    try{await this.updateSubscriptions(now);}catch(error){this.inspectedSymbol=old;this.metadataDay='';throw error;}
   }
   async collectBundle(now: Date): Promise<Bundle> {
     const pool = await this.broker.discover(this.settings.candidate_pool_size,now);

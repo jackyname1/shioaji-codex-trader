@@ -166,3 +166,13 @@ test('realtime paper panes keep current account, conditions and Codex events eve
     analyst_events:[{context:'live',asof:now.toISOString(),stage:'MODEL'},{context:'replay',asof:'2026-01-05T01:00:00Z',stage:'MODEL'}]} as unknown as DesktopState;
   assert.equal(workspaceRuntime(state),live);assert.equal(workspaceEvents(state).length,1);assert.equal(workspaceEvents(state)[0]!.context,'live');
 });
+test('inspecting a stock outside the watchlist subscribes its quotes without authorizing a trade or accumulating old inspections',async()=>{
+  const r=await enabled();try{
+    const subscribed:string[][]=[],read=r.broker.subscribe.bind(r.broker);
+    r.broker.subscribe=async(symbols,whole)=>{subscribed.push([...symbols]);await read(symbols,whole);};
+    const watch=structuredClone(r.engine.watch),plan=structuredClone(r.engine.plan);
+    await r.engine.inspectSymbol('9008',now);assert.ok(subscribed.at(-1)!.includes('9008'));assert.ok(r.engine.metadata['9008']);
+    await r.engine.inspectSymbol('9009',now);assert.ok(subscribed.at(-1)!.includes('9009'));assert.equal(subscribed.at(-1)!.includes('9008'),false);
+    assert.deepEqual(r.engine.watch,watch);assert.deepEqual(r.engine.plan,plan);assert.equal(r.engine.pendingExecutions.size,0);assert.equal(r.store.orders().length,0);
+  }finally{await dispose(r);}
+});

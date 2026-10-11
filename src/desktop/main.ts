@@ -297,7 +297,8 @@ function registerIpc(): void {
     const request=ChartRequestSchema.parse(value);if(request.source==='replay'||smoke)return backtest.chart({...request,source:'replay'});
     if(!nativeConnection.connected&&!smoke)throw new Error('圖表需要先連接 Shioaji 真實行情');
     if(chartBusy)throw new Error('圖表資料正在載入');chartBusy=true;
-    try{return await liveChart(request,service!.engine.settings,join(dataRoot,'backtests','cache'),chartAbort.signal);}
+    try{const selected=service!;await selected.enqueue(()=>selected.engine.inspectSymbol(request.symbol,new Date()));
+      return await liveChart(request,selected.engine.settings,join(dataRoot,'backtests','cache'),chartAbort.signal);}
     finally{chartBusy=false;}
   });
   handle('trader:replay-control',value=>backtest.control(z.enum(['pause','resume','step']).parse(value)));
