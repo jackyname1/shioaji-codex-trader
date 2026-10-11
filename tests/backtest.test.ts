@@ -13,7 +13,7 @@ import { experienceContext } from '../src/core/experience.js';
 import { analysisPrompt } from '../src/core/codex.js';
 import { BacktestController } from '../src/core/backtest-controller.js';
 import { shioajiDataset } from '../src/core/backtest-source.js';
-import { rig,now } from './helpers.js';
+import { rig,now,testSize } from './helpers.js';
 
 const start='2026-01-05',end='2026-01-09';
 const options=(whole_lots=false)=>({start,end,source:'sample',strategy:'demo',initial_cash:whole_lots?'1000000':'100000',whole_lots});
@@ -84,7 +84,7 @@ test('Codex replay receives bounded experience, no current facts, and fills afte
   const r=await runBacktest({...options(),strategy:'codex'},dataset,SettingsSchema.parse({codex_enabled:true}),async s=>{
     snapshots.push(structuredClone(s));const position=s.account.positions.find(x=>x.symbol==='9001');
     return response(s,s.review_only?'HOLD':!position?'BUY':position.sellable?'SELL':'HOLD');
-  },new AbortController().signal);
+  },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
   assert.ok(r.metrics.codex_calls>0);assert.ok(r.fills.some(f=>f.action==='SELL'));assert.ok(d(r.metrics.taxes).gt(0));
   assert.ok(d(r.metrics.net_pnl).eq(d(r.metrics.realized_pnl).plus(r.metrics.unrealized_pnl)));
   for(const f of r.fills){const o=r.orders.find(o=>o.local_id===f.order_id)!;assert.ok(Date.parse(f.at)>Date.parse(o.created_at));}
@@ -100,7 +100,7 @@ test('whole-lot entries and protective exits use common lots instead of splittin
   const dataset=flatDataset();for(const p of dataset.points)if(twDay(new Date(p.at))==='2026-01-06')p.open=p.close=p.low=p.high='28.5';
   const r=await runBacktest({...options(true),strategy:'codex'},dataset,SettingsSchema.parse({codex_enabled:true}),async s=>{
     return response(s,!s.review_only&&twDay(new Date(s.asof))===start&&!s.account.positions.length?'BUY':'HOLD',2000);
-  },new AbortController().signal);
+  },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
   assert.ok(r.fills.some(f=>f.action==='BUY'&&f.lot==='COMMON'&&f.shares===2000));
   assert.ok(r.fills.some(f=>f.purpose==='PROTECTION'&&f.lot==='COMMON'&&f.shares===2000));
   assert.ok(r.metrics.max_drawdown_pct!=='0.0000');
@@ -167,7 +167,7 @@ test('replayed sell proceeds remain reserved until T+2 rather than funding new b
   const r=await runBacktest({...options(),strategy:'codex'},flatDataset(),SettingsSchema.parse({codex_enabled:true}),async s=>{
     const day=twDay(new Date(s.asof));return response(s,s.review_only?'HOLD':day===start&&!s.account.positions.length?'BUY':
       day==='2026-01-06'&&s.account.positions[0]?.sellable?'SELL':'HOLD');
-  },new AbortController().signal);
+  },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
   const saleDay=r.daily_equity.find(x=>x.day==='2026-01-06')!,settled=r.daily_equity.find(x=>x.day==='2026-01-08')!;
   assert.ok(d(saleDay.settlement_credits).gt(0));assert.equal(settled.settlement_credits,'0');
   assert.ok(d(settled.cash).gt(saleDay.cash));assert.ok(d(r.metrics.net_pnl).eq(d(r.metrics.realized_pnl).plus(r.metrics.unrealized_pnl)));

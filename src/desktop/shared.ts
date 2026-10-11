@@ -12,6 +12,8 @@ export interface RuntimeView {
   mode:Settings['mode'];auto:boolean;paused:boolean;killed:boolean;blocked:boolean;connected:boolean;session:boolean;
   account:Account|null;plan:Plan|null;protections:Protection[];orders:Order[];quotes:Quote[];watch:WatchState;
   next_strategy_at:string|null;analyzing:boolean;scanning:boolean;analysis_status:string;last_monitor_at:string;
+  sizing?:boolean;execution_queue?:{symbol:string;action:string;state:string;trigger:string}[];
+  fills?:import('../broker/paper.js').SimulatedFill[];
   decisions:{symbol:string;state:string;reason:string;source:string}[];
   features:Record<string,import('../core/models.js').Features>;metadata:Record<string,import('../core/models.js').Instrument>;
 }
@@ -23,7 +25,7 @@ export interface DesktopState { status: string; logs: string[]; settings: string
   connection:{status:string;remembered:boolean;credential_state?:string;credential_message?:string;encrypted:boolean;busy:boolean;has_ca:boolean};analyst_events:(AnalystEvent&{context:'live'|'replay'})[];
   live:LiveReadiness;
   replay:ReplayFrame|null;replay_paused:boolean;replay_speed:number;replay_symbols:{symbol:string;name:string}[];
-  codex_models:string[] }
+  codex_models:string[];simulation_scope?:'realtime'|'replay';codex_selection?:{model:string;reasoning:string}|null }
 export interface TraderBridge {
   state(): Promise<DesktopState>;
   command(input: string): Promise<string>;
@@ -41,6 +43,11 @@ export interface TraderBridge {
   connectApi(input:ConnectionInput):Promise<string>;
   connectSaved():Promise<string>;
   forgetCredentials():Promise<string>;
+  savedConnection():Promise<ConnectionInput|null>;
+  simulationScope(scope:'realtime'|'replay'):Promise<string>;
+  analystHistory(scope:'runtime'|'replay'):Promise<AnalystEvent[]>;
+  analystDetail(scope:'runtime'|'replay',id:string):Promise<unknown>;
+  exportAnalystHistory(scope:'runtime'|'replay'):Promise<string>;
   chart(request:ChartRequest):Promise<ChartData>;
   replayControl(command:'pause'|'resume'|'step'):Promise<string>;
   replaySpeed(speed:number):Promise<string>;

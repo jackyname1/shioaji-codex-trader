@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { bundledCodexPath, codexEnvironment, prepareCodexProfile, codexThread, codexIssue, CodexError } from '../core/codex.js';
 import type { Settings } from '../core/models.js';
 import type { ThreadEvent } from '@openai/codex-sdk';
+import { resolveCodexSelection,clearCodexModels,codexModels,type CodexModel,type CodexSelection } from '../core/codex-models.js';
 
 export interface CodexLoginState {
   state:'checking'|'signed_out'|'pending'|'ready'|'error'; message:string; can_open:boolean; device_code:string; testing:boolean;
   test_state:'untested'|'connected'|'failed';
+  model?:string;reasoning?:string;
 }
 type Run = (binary:string,args:string[],options:{env:NodeJS.ProcessEnv;windowsHide:boolean;timeout:number}) => Promise<unknown>;
 type Launch = (binary:string,args:string[],options:SpawnOptions) => ChildProcess;
@@ -20,6 +22,7 @@ export function loginUrl(raw:string): string | undefined {
   } catch { /* Never open an arbitrary URL printed by a child process. */ }
 }
 export class CodexLogin {
+  catalog:CodexModel[]=[];
   readonly status:CodexLoginState={state:'checking',message:'正在檢查 Codex 登入',can_open:false,device_code:'',testing:false,test_state:'untested'};
   private task?:Promise<void>; private child?:ChildProcess; private url?:string; private closed=false; private testAbort?:AbortController;
   private readonly run:Run; private readonly launch:Launch; private readonly binary:()=>string;
@@ -58,6 +61,7 @@ export class CodexLogin {
     if(this.task)return this.status.message;
     const force=device||this.status.state==='ready'||this.status.state==='error';
     this.status.test_state='untested';
+    clearCodexModels(this.profile);this.catalog=[];delete this.status.model;delete this.status.reasoning;
     this.status.state='checking';this.status.message='正在檢查 Codex 登入';
     this.task=(async()=>{
       if(!force && await this.verify())return;
@@ -107,8 +111,12 @@ export class CodexLogin {
     try{
       if(!await this.verify())throw new CodexError('Codex 尚未登入，請先按登入');
       this.status.message='正在測試 Codex 模型連線';
+      const selection:CodexSelection=this.dependencies.probe?{model:settings.codex_model||'注入測試模型',reasoning:settings.codex_reasoning,automatic:!settings.codex_model}:
+        await resolveCodexSelection(settings,this.profile,controller.signal);
+      this.status.model=selection.model;this.status.reasoning=selection.reasoning;
+      if(!this.dependencies.probe)this.catalog=await codexModels(settings,this.profile,controller.signal);
       const events=this.dependencies.probe?await this.dependencies.probe(settings,controller.signal):
-        (await codexThread(settings,this.profile,join(this.profile,'connection-test')).runStreamed('This is a connection test. Use no tools. Return {"ok":true}.',{
+        (await codexThread(settings,this.profile,join(this.profile,'connection-test'),selection).runStreamed('This is a connection test. Use no tools. Return {"ok":true}.',{
         signal:controller.signal,outputSchema:{type:'object',properties:{ok:{type:'boolean'}},required:['ok'],additionalProperties:false}})).events;
       let response='',complete=false;
       for await(const event of events){
@@ -119,7 +127,7 @@ export class CodexLogin {
         if(event.type==='turn.completed')complete=true;
       }
       if(!complete||JSON.parse(response).ok!==true)throw new Error('invalid output');
-      this.status.test_state='connected';this.status.message='Codex 連線測試成功 · '+(settings.codex_model||'帳戶預設模型');return this.status.message;
+      this.status.test_state='connected';this.status.message='Codex 連線測試成功 · '+selection.model+' · '+selection.reasoning;return this.status.message;
     }catch(error){this.status.test_state='failed';this.status.message=controller.signal.aborted?'Codex 連線測試逾時，請檢查網路後重試':codexIssue(error);
       if(/尚未登入|登入已過期/.test(this.status.message))this.status.state='error';throw new CodexError(this.status.message);}
     finally{clearTimeout(timer);this.status.testing=false;this.testAbort=undefined;}

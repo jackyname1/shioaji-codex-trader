@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Engine, type Bundle } from './engine.js';
-import { CodexAnalyst, CodexError, codexIssue, type AnalystEvent } from './codex.js';
+import { CodexAnalyst, CodexError, codexIssue, appendAnalystEvent, type AnalystEvent } from './codex.js';
+import type { ExecutionAdvice, ExecutionRequest } from './execution.js';
 import { BrokerError, brokerIssue } from '../broker/health.js';
 import { collectFacts } from './facts.js';
 import { SettingsSchema, ageSeconds, twDay, type Settings } from './models.js';
@@ -29,6 +30,11 @@ export class TradingService {
   private stopping = false;
   private stop = new AbortController();
   private decisionTask?: Promise<void>;
+  private executionTask?:Promise<void>;
+  private executionAnalyst?:CodexAnalyst;
+  private executionAbort?:AbortController;
+  private readonly now:()=>Date;
+  private readonly executionAdvisor?: (request:ExecutionRequest,signal:AbortSignal)=>Promise<ExecutionAdvice>;
   private analyst?: CodexAnalyst;
   private watchTask?:Promise<void>;
   private calendarTask?:Promise<void>;
@@ -40,10 +46,12 @@ export class TradingService {
   analystEvents:AnalystEvent[]=[];
   private decisionAbort?:AbortController;
   get analyzing():boolean{return !!this.decisionTask;}
+  get sizing():boolean{return !!this.executionTask;}
   get scanning():boolean{return !!this.watchTask;}
   private closeTask?: Promise<void>;
   constructor(path: string, mode?: Settings['mode'], createMarket?: (store: Store, settings: Settings, session: LiveSession) => Broker,
-    options:{automaticLive?:boolean}={}) {
+    options:{automaticLive?:boolean;now?:()=>Date;executionAdvisor?:(request:ExecutionRequest,signal:AbortSignal)=>Promise<ExecutionAdvice>}={}) {
+    this.now=options.now??(()=>new Date());this.executionAdvisor=options.executionAdvisor;
     this.automaticLive=options.automaticLive??false;
     this.store = new Store(path);
     const stored = this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {}),auto_execute:false});
@@ -54,8 +62,9 @@ export class TradingService {
     this.calendar = new TradingCalendar(this.store,settings.mode === 'demo');
     const market = createMarket?.(this.store,settings,this.liveSession) ?? (settings.mode === 'demo' ? new SyntheticMarket()
       : new ShioajiHttpBroker(this.store,settings,settings.mode === 'live',undefined,this.liveSession));
-    this.broker = ['demo','paper'].includes(settings.mode) ? new PaperBroker(this.store,market,settings,this.calendar) : market;
+    this.broker = ['demo','paper'].includes(settings.mode) ? new PaperBroker(this.store,market,settings,this.calendar,settings.mode==='paper') : market;
     this.engine = new Engine(this.store,this.broker,settings,this.calendar);
+    this.analystEvents=this.store.analystEvents();
   }
   enqueue<T>(operation: () => Promise<T> | T): Promise<T> {
     const task = this.queue.then(() => { if (this.stopping) throw new Error('程式正在停止'); return operation(); });
@@ -63,31 +72,32 @@ export class TradingService {
   }
   async start(runTimer = true): Promise<void> {
     this.lastConnectAttempt=Date.now();
-    try { await this.enqueue(() => this.engine.start(new Date())); }
-    catch(error) { this.engine.dataUnavailable(error,new Date()); if(!runTimer)throw error; }
+    try { await this.enqueue(() => this.engine.start(this.now())); }
+    catch(error) { this.engine.dataUnavailable(error,this.now()); if(!runTimer)throw error; }
     await this.syncLiveSession();
     if(runTimer){void this.refreshObservations().catch(()=>undefined);void this.ensureCalendar();}
     if (runTimer) this.timer = setInterval(() => {
       if (this.tickPending || this.stopping) return;
       this.tickPending = true;
       void this.enqueue(async () => {
-        const now=new Date();
+        const now=this.now();
         try { if(!this.engine.connected && now.getTime()-this.lastConnectAttempt>=10000){
           this.lastConnectAttempt=now.getTime();await this.engine.start(now);
         } else if(this.engine.connected && (!this.lastMonitorAt||now.getTime()-Date.parse(this.lastMonitorAt)>=this.engine.settings.monitor_interval_seconds*1000)) {
           await this.engine.tick(now);this.lastMonitorAt=now.toISOString();
         } }
         catch (error) { this.engine.dataUnavailable(error, now); }
-        if(this.engine.connected)this.schedule(new Date());
+        if(this.engine.connected)this.schedule(this.now());
         if(!this.calendarTask)void this.ensureCalendar();
-        if(this.engine.settings.auto_watchlist&&!this.watchTask&&this.calendar.inSession(new Date(),'COMMON')
+        if(this.engine.settings.auto_watchlist&&!this.watchTask&&this.calendar.inSession(this.now(),'COMMON')
           &&Date.now()-this.lastWatchAttempt>=this.engine.settings.watch_refresh_minutes*60000)void this.refreshObservations().catch(()=>undefined);
-      }).then(()=>this.syncLiveSession()).finally(() => { this.tickPending = false; }).catch(() => undefined);
+      }).then(()=>{void this.processExecutions().catch(()=>undefined);return this.syncLiveSession();}).finally(() => { this.tickPending = false; }).catch(() => undefined);
     },1000);
   }
   private schedule(now: Date): void {
     if (!this.calendar.isOpen(twDay(now))) return;
     const s = this.engine.settings;
+    if(!s.auto_execute)return;
     if (!s.codex_enabled && s.mode !== 'demo') return;
     if(this.decisionTask)return;
     const slot=dueStrategy(now,s,this.calendar,key=>!!this.store.get('schedule_'+key));
@@ -95,14 +105,51 @@ export class TradingService {
     const run:ScheduleRun={...slot,state:'RUNNING',started_at:now.toISOString()};
     this.store.set('schedule_'+slot.key,run);this.store.set('last_schedule_run',run);
     void this.decide(slot.review).then(()=>{run.state='SUCCESS';},()=>{run.state='FAILED';}).finally(()=>{
-      if(this.stopping)return;run.finished_at=new Date().toISOString();this.store.set('schedule_'+slot.key,run);this.store.set('last_schedule_run',run);
+      if(this.stopping)return;run.finished_at=this.now().toISOString();this.store.set('schedule_'+slot.key,run);this.store.set('last_schedule_run',run);
     });
   }
-  nextStrategyAt(now=new Date()):string|null{return nextStrategy(now,this.engine.settings,this.calendar,key=>!!this.store.get('schedule_'+key))?.at??null;}
+  nextStrategyAt(now=this.now()):string|null{return nextStrategy(now,this.engine.settings,this.calendar,key=>!!this.store.get('schedule_'+key))?.at??null;}
+  private analystEvent=(event:AnalystEvent):void=>{
+    this.store.recordAnalystEvent(event);appendAnalystEvent(this.analystEvents,event);
+    this.analystEvents=this.analystEvents.slice(-200);
+  };
+  /** The model waits outside the engine queue, allowing ticks, fills and emergency commands to continue. */
+  processExecutions():Promise<void>{
+    if(this.stopping)return Promise.resolve();if(this.executionTask)return this.executionTask;
+    this.executionTask=(async()=>{
+      for(;;){if(this.stopping)return;
+        const id=await this.enqueue(()=>this.engine.nextExecutionId());if(!id)return;
+        let request:ExecutionRequest|undefined;
+        try {
+          request=await this.enqueue(()=>this.engine.executionRequest(id,this.now()));if(!request)continue;
+          this.executionAbort=new AbortController();const signal=AbortSignal.any([this.stop.signal,this.executionAbort.signal]);
+          const settings=structuredClone(this.engine.settings),profile=join(dirname(this.store.path),'codex-execution-profile');
+          this.executionAnalyst=new CodexAnalyst(settings,profile,undefined,join(dirname(this.store.path),'codex-login'),this.analystEvent);
+          const advice=this.executionAdvisor?await this.executionAdvisor(request,signal):await this.executionAnalyst.size(request,signal);
+          signal.throwIfAborted();
+          await this.enqueue(async()=>{
+            signal.throwIfAborted();const sent=await this.engine.confirmExecution(id,advice,this.now());
+            const status=this.engine.decisionStates.get(request!.symbol);
+            this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:this.now().toISOString(),stage:sent?'SUBMISSION':'EXECUTION_RESULT',
+              message:`${request!.symbol}：${status?.reason??'條件已更新，未送單'}`,model:this.executionAnalyst?.selection?.model||settings.codex_model||'Codex 數量確認',
+              reasoning:this.executionAnalyst?.selection?.reasoning||settings.codex_reasoning,purpose:'EXECUTION',details:{sent,status,advice}});
+          });
+        }catch(error){
+          if(!this.stopping){const issue=this.executionAbort?.signal.aborted?'Codex 數量確認已停止'
+            :error instanceof BrokerError?brokerIssue(error):codexIssue(error);
+            await this.enqueue(()=>this.engine.finishExecution(id,'SIZE_FAILED',issue+'；未送單',this.now()));
+            this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:request?.asof??this.now().toISOString(),stage:'FAILED',
+              message:issue+'；本次未送單',model:this.executionAnalyst?.selection?.model||this.engine.settings.codex_model||'Codex 數量確認',
+              reasoning:this.engine.settings.codex_reasoning,purpose:'EXECUTION'});
+          }
+        }finally{this.executionAnalyst=undefined;this.executionAbort=undefined;}
+      }
+    })().finally(()=>{this.executionTask=undefined;});return this.executionTask;
+  }
   private ensureCalendar():Promise<void>{
     if(this.stopping||this.engine.settings.mode==='demo')return Promise.resolve();
     if(this.calendarTask)return this.calendarTask;
-    const day=twDay(new Date()),year=Number(day.slice(0,4)),key='calendar_attempt_'+year;
+    const day=twDay(this.now()),year=Number(day.slice(0,4)),key='calendar_attempt_'+year;
     if(this.store.session(year+'-01-01')||this.store.get(key)===day)return Promise.resolve();
     this.store.set(key,day);
     this.calendarTask=(async()=>{try{await this.calendar.refresh(year,this.stop.signal);
@@ -111,7 +158,7 @@ export class TradingService {
     })().finally(()=>{this.calendarTask=undefined;});return this.calendarTask;
   }
   private collect():Promise<Bundle> {
-    if(!this.bundleTask)this.bundleTask=this.engine.collectBundle(new Date()).finally(()=>{this.bundleTask=undefined;});
+    if(!this.bundleTask)this.bundleTask=this.engine.collectBundle(this.now()).finally(()=>{this.bundleTask=undefined;});
     return this.bundleTask;
   }
   refreshObservations():Promise<void> {
@@ -120,9 +167,9 @@ export class TradingService {
     this.lastWatchAttempt=Date.now();
     this.watchTask=(async()=>{
       try {const bundle=await this.collect();if(this.stopping)return;
-        await this.enqueue(()=>this.engine.refreshWatch(bundle,new Date()));
+        await this.enqueue(()=>this.engine.refreshWatch(bundle,this.now()));
       }catch {if(!this.stopping)await this.enqueue(async()=>{
-        this.engine.watchFailed();if(this.engine.canExecute())for(const o of this.store.orders(true))if(o.purpose==='ENTRY')await this.engine.cancel(o.local_id,new Date());
+        this.engine.watchFailed();if(this.engine.canExecute())for(const o of this.store.orders(true))if(o.purpose==='ENTRY')await this.engine.cancel(o.local_id,this.now());
       });}
     })().finally(()=>{this.watchTask=undefined;});return this.watchTask;
   }
@@ -143,42 +190,50 @@ export class TradingService {
     try {
       const bundle = await this.collect();
       if (s.mode !== 'demo' && s.official_facts_enabled) Object.assign(bundle,
-        await collectFacts(this.store,new Set([...bundle.pool.map(p => p.symbol),...(this.engine.account?.positions.map(p => p.symbol) ?? [])]),new Date(),this.stop.signal));
+        await collectFacts(this.store,new Set([...bundle.pool.map(p => p.symbol),...(this.engine.account?.positions.map(p => p.symbol) ?? [])]),this.now(),this.stop.signal));
       const snapshot = await this.enqueue(async () => {
-        const now = new Date(); await this.engine.reconcile(now); await this.engine.refreshAccount(now);
+        const now = this.now(); await this.engine.reconcile(now); await this.engine.refreshAccount(now);
         return this.engine.snapshotFromBundle(bundle,now,review);
       });
       let analysis;
-      if (s.mode === 'demo'&&!s.codex_enabled) analysis = demoAnalysis(snapshot,s,new Date());
+      if (s.mode === 'demo'&&!s.codex_enabled) analysis = demoAnalysis(snapshot,s,this.now());
       else {
         const profile = join(dirname(this.store.path),'codex-analysis-profile');
-        this.analyst = new CodexAnalyst(s,profile,undefined,join(dirname(this.store.path),'codex-login'),event=>{this.analystEvents.push(event);this.analystEvents=this.analystEvents.slice(-80);});
+        this.analyst = new CodexAnalyst(s,profile,undefined,join(dirname(this.store.path),'codex-login'),this.analystEvent);
         signal.throwIfAborted();
         analysis = await this.analyst.analyze(snapshot,signal);
       }
-      await this.enqueue(() => { signal.throwIfAborted(); return this.engine.activate(analysis,snapshot,new Date()); });
+      await this.enqueue(() => { signal.throwIfAborted(); return this.engine.activate(analysis,snapshot,this.now()); });
       this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
     } catch (error) {
       const issue=signal.aborted?'Codex 分析已停止':error instanceof CodexError?codexIssue(error):
         error instanceof BrokerError?brokerIssue(error):error instanceof Error&&/^(帳戶快照|Codex 使用|Codex 決策|計畫有效|候選|買進標的|盤後檢討|策略|行情|歷史|觀測)/.test(error.message)?error.message:'策略資料或分析結果尚未通過核對';
       this.analysisStatus=issue;
-      if(!this.analystEvents.some(e=>e.stage==='FAILED'&&Date.parse(e.at)>=Date.now()-2000))this.analystEvents.push({at:new Date().toISOString(),asof:new Date().toISOString(),stage:'FAILED',message:issue,model:s.codex_model||'Codex 預設模型',reasoning:s.codex_reasoning});
+      if(!this.analystEvents.some(e=>e.stage==='FAILED'&&Date.parse(e.at)>=this.now().getTime()-2000))this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:this.now().toISOString(),stage:'FAILED',message:issue,model:this.analyst?.selection?.model||s.codex_model||'Codex 預設模型',reasoning:s.codex_reasoning,purpose:'STRATEGY'});
       if (!this.stopping) await this.enqueue(async () => {
         if(!review)this.engine.entryBlocked = true;
-        this.store.recordExperience({id:'analysis-failure:'+randomUUID(),at:new Date().toISOString(),mode:this.engine.settings.mode,
+        this.store.recordExperience({id:'analysis-failure:'+randomUUID(),at:this.now().toISOString(),mode:this.engine.settings.mode,
           kind:'ANALYSIS_FAILURE',symbol:'',action:'NONE',shares:0,price:null,fee:null,tax:null,realized_pnl:null,
           note:'分析逾時、資料不足或 schema／快照核對失敗；未採用該輪結果'});
         this.engine.log('ANALYSIS_FAIL',issue+'；停止新買進，既有保護持續');
         // A failed analysis must also cancel owned outstanding entry orders when execution is enabled.
-        if (!review&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,new Date());
+        if (!review&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,this.now());
       });
       throw new Error('本輪決策未啟用：'+issue);
     }
   }
   async command(input: string): Promise<string> {
     const [name,...args] = input.trim().split(/\s+/);
+    if(name==='pause'){
+      const activeBuy=[...this.engine.pendingExecutions.values()].some(t=>t.state==='RUNNING'&&t.order.action==='BUY');
+      this.engine.pauseEntries();
+      if(activeBuy){this.executionAbort?.abort();this.executionAnalyst?.cancel();}
+    }
+    if(name==='auto'&&args[0]==='off'){this.executionAbort?.abort();this.executionAnalyst?.cancel();this.engine.clearExecutions('自動交易已停止');}
     if(name==='stop'||name==='lock-live'){
       this.decisionAbort?.abort();this.analyst?.cancel();
+      this.executionAbort?.abort();this.executionAnalyst?.cancel();this.engine.clearExecutions('使用者已停止交易');
+      if(name==='stop')this.engine.kill(true);
       if(this.engine.settings.mode==='live'){this.liveEpoch++;this.liveSession.revoke();}
     }
     if (name === 'decide' || name === 'review') {
@@ -186,7 +241,8 @@ export class TradingService {
       if(!this.engine.settings.codex_enabled&&this.engine.settings.mode!=='demo')throw new Error('請先啟用 Codex 並在本機登入');
       void this.decide(name === 'review').catch(() => undefined); return '分析已排程，可繼續監控';
     }
-    if(name==='cancel-analysis'){this.decisionAbort?.abort();this.analyst?.cancel();return '已要求停止本輪分析';}
+    if(name==='cancel-analysis'){this.decisionAbort?.abort();this.analyst?.cancel();this.executionAbort?.abort();this.executionAnalyst?.cancel();
+      for(const id of [...this.engine.pendingExecutions.keys()])this.engine.finishExecution(id,'WAIT','本輪 Codex 已停止',this.now());return '已要求停止本輪分析與數量確認';}
     if(name==='watch'){void this.refreshObservations().catch(()=>undefined);return '已排程觀測更新，無需呼叫 Codex';}
     if(name==='start-auto') {
       // One queued transition: a competing emergency stop cannot be undone by later resume steps.
@@ -198,14 +254,14 @@ export class TradingService {
         this.engine.setSettings({...this.engine.settings,auto_execute:true});this.engine.kill(false);this.engine.pauseEntries(false);
       });
       if(this.engine.killed||!this.engine.settings.auto_execute)return '自動啟動已停止';
-      if(!this.engine.plan||Date.parse(this.engine.plan.analysis.expires_at)<=Date.now()) {
+      if(!this.engine.plan||Date.parse(this.engine.plan.analysis.expires_at)<=this.now().getTime()) {
         if(!this.decisionTask)await this.command('decide');
         return '已啟動自動模式；等待有效策略後依條件執行';
       }
       return '已啟動自動模式；程式依現有策略持續監測';
     }
     return this.enqueue(async () => {
-      const now = new Date();
+      const now = this.now();
       switch (name) {
         case 'status': return this.engine.status(now);
         case 'experience': return experienceStatus(this.store,this.engine.settings,now.toISOString());
@@ -252,15 +308,16 @@ export class TradingService {
       if(['codex_model','codex_reasoning','codex_instruction','codex_enabled'].some(k=>s[k as keyof Settings]!==this.engine.settings[k as keyof Settings])) {
         this.decisionAbort?.abort();this.analyst?.cancel();
       }
+      this.executionAbort?.abort();this.executionAnalyst?.cancel();
       const changedLots = s.whole_lots !== this.engine.settings.whole_lots;
       this.engine.setSettings(s);
-      if (changedLots && this.engine.connected) { this.engine.quotes.clear(); await this.engine.updateSubscriptions(new Date()); }
+      if (changedLots && this.engine.connected) { this.engine.quotes.clear(); await this.engine.updateSubscriptions(this.now()); }
     });
     if(s.auto_watchlist&&!this.engine.watch.healthy)void this.refreshObservations().catch(()=>undefined);
   }
   get liveAuthorized(): boolean { return this.liveSession.authorized(this.store.get('account_fingerprint')); }
   get liveCancelAuthorized(): boolean { return this.liveSession.authorized(this.store.get('account_fingerprint'),'cancel'); }
-  liveReadiness(now = new Date()): LiveReadiness {
+  liveReadiness(now = this.now()): LiveReadiness {
     const s=this.engine.settings,broker=this.broker instanceof ShioajiHttpBroker?this.broker.liveStatus():{account:'尚未連接實盤帳戶',issues:['請切換至實盤模式']};
     const issues=[...broker.issues];
     if(!this.engine.connected)issues.push('請先連接 Shioaji');
@@ -274,7 +331,7 @@ export class TradingService {
     return this.enqueue(async()=>{
       if(!(this.broker instanceof ShioajiHttpBroker)||this.engine.settings.mode!=='live'||!this.engine.connected)
         throw new Error('請先連接實盤帳戶');
-      await this.broker.verifyLiveConnection();const now=new Date();
+      await this.broker.verifyLiveConnection();const now=this.now();
       await this.engine.reconcile(now,true);await this.engine.refreshAccount(now);
       const state=this.liveReadiness();if(!state.ready)throw new Error('實盤尚未就緒：'+state.issues.join('；'));
       return state;
@@ -303,11 +360,11 @@ export class TradingService {
   }
   close(): Promise<void> {
     if (this.closeTask) return this.closeTask;
-    this.stopping = true;this.liveEpoch++;this.liveSession.revoke();clearInterval(this.timer); this.stop.abort(); this.analyst?.cancel();
+    this.stopping = true;this.liveEpoch++;this.liveSession.revoke();clearInterval(this.timer); this.stop.abort(); this.analyst?.cancel();this.executionAnalyst?.cancel();
     // Abort native HTTP/SSE immediately, then wait for queued operations and the analyst before closing SQLite.
     this.closeTask = (async () => {
       const closingBroker = this.broker.close();
-      await Promise.allSettled([this.queue,this.decisionTask ?? Promise.resolve(),this.watchTask??Promise.resolve(),this.bundleTask??Promise.resolve(),this.calendarTask??Promise.resolve(),closingBroker]);
+      await Promise.allSettled([this.queue,this.decisionTask ?? Promise.resolve(),this.executionTask??Promise.resolve(),this.watchTask??Promise.resolve(),this.bundleTask??Promise.resolve(),this.calendarTask??Promise.resolve(),closingBroker]);
       this.engine.connected = false; this.store.close();
     })();
     return this.closeTask;

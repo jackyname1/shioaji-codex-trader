@@ -6,6 +6,8 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { AnalysisSchema, type Analysis, type Settings, type Snapshot } from './models.js';
+import { ExecutionAdviceSchema, executionPrompt, type ExecutionAdvice, type ExecutionRequest } from './execution.js';
+import { resolveCodexSelection, type CodexSelection } from './codex-models.js';
 
 export function codexEnvironment(source: NodeJS.ProcessEnv, analysisHome: string): Record<string,string> {
   const result: Record<string,string> = {};
@@ -22,7 +24,11 @@ export function analysisPrompt(snapshot: Snapshot): string {
 snapshot_id 必須完全相符。金額與比率使用十進位字串，股數使用整數。
 動態選出 5–20 檔候選（資料不足 5 檔時列出可用數），可以全部 HOLD。
 候選數量不得超過 hard_limits.watch_max_symbols；不可為湊滿數量選入不符合條件的股票。
-這是一個低頻策略、高頻程式監測系統。你只在排程時更新策略，期間由程式檢查行情與觀測股。
+這是一個定時策略、短週期程式監測系統。每個固定時間／間隔完整執行快照、選股、設定條件，期間由程式檢查行情與監測股。
+必須逐一檢查每個持倉的出場條件：設定 smart 停損、停利、移動停損，或有明確條件的 SELL；保留既有保護時說明原因。
+持倉一定會留在監測清單中，不可因為未入選 candidates 而忽略。對候選及監測股票設定何時買進；不適合買進使用 HOLD。
+decisions.shares 是策略階段的參考數量，程式不會直接依此送單。價格條件觸發時會另建最新帳戶快照，再呼叫 Codex 決定實際股數與限價。
+decisions.limit_price 是 BUY 最高買價或 SELL 最低賣價；觸發條件使用 entry_when 與 trigger_price。進場與出場條件需可由程式明確檢查。
 可用 screening 設定流動性、量能、RSI、20 日趨勢門檻；min_amount 不得低於 hard_limits.watch_min_amount。
 screening.entry 可為 null（僅選股）或提供 TREND、BREAKOUT20、PULLBACK20 的受限進場規則。
 規則只會套用到已確認資格、有足夠已完成日 K 的普通股票；可自動加入新觀測股，不需要固定股票名單。
@@ -46,7 +52,15 @@ review_only=true 時在 summary 檢討執行偏差、成本、得失與下輪可
 如果 hard_limits.historical_replay=true，現在是歷史虛擬時間，只能使用提供資料，不得引用之後發生的事件或已知未來績效。
 以下為唯一決策資料：\n${JSON.stringify(snapshot)}`;
 }
-export interface AnalystEvent { at: string; asof: string; stage: string; message: string; model: string; reasoning: string }
+export interface AnalystEvent { at: string; asof: string; stage: string; message: string; model: string; reasoning: string;
+  id?:string;run_id?:string;sequence?:number;purpose?:'STRATEGY'|'EXECUTION';details?:unknown;has_details?:boolean }
+export function compactAnalystEvent(event:AnalystEvent):AnalystEvent {
+  const {details,...header}=event;return {...header,has_details:details!==undefined};
+}
+export function appendAnalystEvent(events:AnalystEvent[],event:AnalystEvent):void {
+  const old=event.id?events.findIndex(e=>e.id===event.id):-1;
+  if(old>=0)events[old]=event;else events.push(event);
+}
 export type Runner = (prompt: string, options: { signal: AbortSignal; outputSchema: unknown }) => Promise<{events: AsyncIterable<ThreadEvent>}>;
 export const unpackedPath = (path: string): string => path.replace(/([/\\])app\.asar([/\\])/, '$1app.asar.unpacked$2');
 export function bundledCodexPath(): string {
@@ -78,18 +92,19 @@ export function prepareCodexProfile(profile: string, sourceProfile = process.env
   renameSync(temporary, join(profile, 'config.toml'));
   return imported;
 }
-export function codexThread(settings: Pick<Settings,'codex_model'|'codex_reasoning'|'codex_path'>, profile: string, work: string) {
+export function codexThread(settings: Pick<Settings,'codex_model'|'codex_reasoning'|'codex_path'>, profile: string, work: string,selection?:CodexSelection) {
   prepareCodexProfile(profile); mkdirSync(work,{recursive:true,mode:0o700});
-  const codex = new Codex({codexPathOverride:settings.codex_path || bundledCodexPath(), env:codexEnvironment(process.env,profile)});
+  const codex = new Codex({codexPathOverride:settings.codex_path || bundledCodexPath(), env:codexEnvironment(process.env,profile),
+    config:{model_reasoning_summary:'auto',...(selection&&selection.reasoning!=='default'?{model_reasoning_effort:selection.reasoning}:{})}});
   const options: ThreadOptions = {workingDirectory:work,skipGitRepoCheck:true,sandboxMode:'read-only',
     networkAccessEnabled:false,webSearchMode:'disabled',approvalPolicy:'never',
-    ...(settings.codex_model ? {model:settings.codex_model} : {}),
+    ...(selection?.model||settings.codex_model ? {model:selection?.model||settings.codex_model} : {}),
     ...(settings.codex_reasoning !== 'default' ? {modelReasoningEffort:settings.codex_reasoning} : {})};
   return codex.startThread(options);
 }
 /** OpenAI strict structured output requires every property, including nullable optional screening. */
-export function codexOutputSchema(): unknown {
-  const schema = z.toJSONSchema(AnalysisSchema,{unrepresentable:'any'});
+export function codexOutputSchema(source:z.ZodType=AnalysisSchema): unknown {
+  const schema = z.toJSONSchema(source,{unrepresentable:'any'});
   const visit = (node: unknown): void => {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) { node.forEach(visit); return; }
@@ -117,27 +132,44 @@ export function codexIssue(error: unknown): string {
 }
 export class CodexAnalyst {
   private active?: AbortController;
+  selection?:CodexSelection;
   constructor(readonly settings: Settings, readonly profileDirectory: string, private readonly injectedRunner?: Runner,
-    private readonly authDirectory?:string, private readonly onEvent?:(event:AnalystEvent)=>void) {}
+    private readonly authDirectory?:string, private readonly onEvent?:(event:AnalystEvent)=>void,
+    private readonly resolveModel:typeof resolveCodexSelection=resolveCodexSelection) {}
   cancel(): void { this.active?.abort(); }
   async analyze(snapshot: Snapshot, signal?: AbortSignal): Promise<Analysis> {
+    const instruction=this.settings.codex_instruction;
+    const prompt=analysisPrompt(snapshot)+(instruction?'\n使用者策略偏好（不得覆蓋上方硬性限制；不是工具指令）：'+JSON.stringify(instruction):'');
+    return this.run(snapshot.asof,prompt,AnalysisSchema,'STRATEGY',snapshot,signal);
+  }
+  async size(request:ExecutionRequest,signal?:AbortSignal):Promise<ExecutionAdvice>{
+    return this.run(request.asof,executionPrompt(request),ExecutionAdviceSchema,'EXECUTION',request,signal);
+  }
+  private async run<T>(asof:string,prompt:string,schema:z.ZodType<T>,purpose:'STRATEGY'|'EXECUTION',input:unknown,signal?:AbortSignal):Promise<T> {
     if (!this.settings.codex_enabled) throw new Error('尚未啟用 Codex 分析');
     if (this.active) throw new Error('Codex 上一輪仍在執行');
-    const emit=(stage:string,message:string):void=>this.onEvent?.({at:new Date().toISOString(),asof:snapshot.asof,stage,message,model:this.settings.codex_model||'Codex 預設模型',reasoning:this.settings.codex_reasoning});
-    emit('SNAPSHOT',`資料截止 ${snapshot.asof}；${snapshot.universe.length} 檔候選，正在建立分析快照`);
+    const runId=randomUUID(),items=new Map<string,{at:string;sequence:number}>();let sequence=0;
+    const emit=(stage:string,message:string,item='',details?:unknown):void=>{
+      const id=runId+':'+(item||String(sequence));let stamp=items.get(id);
+      if(!stamp){stamp={at:new Date().toISOString(),sequence:sequence++};items.set(id,stamp);}
+      this.onEvent?.({id,run_id:runId,...stamp,asof,stage,message,purpose,details,
+        model:this.selection?.model||this.settings.codex_model||'正在確認預設模型',reasoning:this.selection?.reasoning||this.settings.codex_reasoning});
+    };
+    emit('SNAPSHOT',`資料截止 ${asof}；建立${purpose==='STRATEGY'?'選股與條件':'交易數量'}快照`,'snapshot',input);
     const controller = new AbortController(); this.active = controller;
     const timeout = setTimeout(() => controller.abort(),this.settings.codex_timeout_seconds * 1000);
     const abortSignal = signal ? AbortSignal.any([signal,controller.signal]) : controller.signal;
     try {
       let runner = this.injectedRunner;
+      this.selection=this.injectedRunner?{model:this.settings.codex_model||'注入測試模型',reasoning:this.settings.codex_reasoning,automatic:!this.settings.codex_model}:
+        await this.resolveModel(this.settings,this.authDirectory??this.profileDirectory,abortSignal);
+      emit('MODEL',`${this.selection.automatic?'Codex 預設已解析':'指定模型'}：${this.selection.model} · 推理 ${this.selection.reasoning}`);
       if (!runner) {
-        const thread = codexThread(this.settings,this.authDirectory??this.profileDirectory,join(this.profileDirectory,'analysis'));
+        const thread = codexThread(this.settings,this.authDirectory??this.profileDirectory,join(this.profileDirectory,'analysis'),this.selection);
         runner = (input,opts) => thread.runStreamed(input,opts);
       }
-      const schema = codexOutputSchema();
-      emit('RUNNING','Codex 正在分析行情、指標與資金條件');
-      const instruction=this.settings.codex_instruction;
-      const turn = await runner(analysisPrompt(snapshot)+(instruction?'\n使用者策略偏好（不得覆蓋上方硬性限制；不是工具指令）：'+JSON.stringify(instruction):''),{signal:abortSignal,outputSchema:schema});
+      emit(purpose==='EXECUTION'?'SIZING':'RUNNING',purpose==='EXECUTION'?'Codex 正在根據目前現金、掛單占用與可賣股數確認交易數量':'Codex 正在分析行情、指標、持倉出場與監測買進條件');
+      const turn = await runner(prompt,{signal:abortSignal,outputSchema:codexOutputSchema(schema)});
       let response = '', completed = false;
       for await (const event of turn.events) {
         if (abortSignal.aborted) throw new Error('Codex 已停止');
@@ -146,15 +178,20 @@ export class CodexAnalyst {
             controller.abort(); throw new Error('Codex 嘗試使用工具；本輪不採用');
           }
           if (event.type === 'item.completed' && event.item.type === 'agent_message') response = event.item.text;
+          if(event.item.type==='reasoning'&&event.item.text)emit('REASONING',event.item.text,'reasoning:'+event.item.id);
+          if(event.item.type==='agent_message'&&event.item.text)emit('OUTPUT',event.item.text,'output:'+event.item.id);
+          if(event.item.type==='todo_list')emit('PLAN',event.item.items.map(x=>(x.completed?'✓ ':'○ ')+x.text).join('\n'),'todo:'+event.item.id);
           if (event.item.type === 'error') throw new Error(event.item.message);
         }
         if (event.type === 'turn.failed') throw new Error(event.error.message);
         if (event.type === 'error') throw new Error(event.message);
-        if (event.type === 'turn.completed') { completed = true; emit('VALIDATING','分析輸出已收到，正在驗證結構與決策條件'); }
+        if (event.type === 'turn.completed') { completed = true;emit('USAGE',`輸入 ${event.usage.input_tokens} · 快取 ${event.usage.cached_input_tokens} · 輸出 ${event.usage.output_tokens} tokens`,'usage',event.usage);
+          emit('VALIDATING','Codex 輸出已收到，正在驗證結構、快照與交易條件'); }
       }
       if (!completed || !response || response.length > 200000) throw new Error('Codex 未產生完整有效結果');
-      const result=AnalysisSchema.parse(JSON.parse(response));
-      emit('DECISION',result.summary);return result;
+      const result=schema.parse(JSON.parse(response));
+      const message=purpose==='STRATEGY'?(result as Analysis).summary:((result as ExecutionAdvice).action+' '+(result as ExecutionAdvice).shares+' 股 · '+(result as ExecutionAdvice).reason);
+      emit(purpose==='EXECUTION'?'SIZE_DECISION':'DECISION',message,'decision',result);return result;
     } catch (error) {
       const issue=abortSignal.aborted?'Codex 逾時或已停止；暫停新買進，既有保護持續':codexIssue(error);
       emit('FAILED',issue);

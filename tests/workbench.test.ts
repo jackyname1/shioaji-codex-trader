@@ -149,16 +149,19 @@ test('paper rejects a simulated service before account reads, subscriptions or o
   const broker = new ShioajiHttpBroker(store, SettingsSchema.parse({ mode: 'paper' }), false, async input => { calls.push(String(input)); return Response.json({ simulation: true, version: '1.7.6' }); });
   try { await assert.rejects(broker.connect(), /真實.*行情/); assert.equal(calls.length, 1); } finally { await broker.close(); store.close(); }
 });
-test('Codex activity emits lifecycle and decisions without exposing private reasoning items', async () => {
+test('Codex activity shows the actual model, official reasoning summary, complete output and token usage', async () => {
   const input = snapshot(), analysis = demoAnalysis(input, settings(), now), events: AnalystEvent[] = [];
   const runner: Runner = async () => ({ events: (async function* () {
-    yield { type: 'item.completed' as const, item: { id: 'r', type: 'reasoning' as const, text: 'PRIVATE_REASONING' } };
+    yield { type: 'item.completed' as const, item: { id: 'r', type: 'reasoning' as const, text: 'OFFICIAL_REASONING_SUMMARY' } };
     yield { type: 'item.completed' as const, item: { id: 'm', type: 'agent_message' as const, text: JSON.stringify(analysis) } };
     yield { type: 'turn.completed' as const, usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1, cache_write_input_tokens: 0, reasoning_output_tokens: 0 } };
   })() });
   await new CodexAnalyst(SettingsSchema.parse({ codex_enabled: true }), '/unused', runner, undefined, e => events.push(e)).analyze(input);
-  assert.deepEqual(events.map(e => e.stage), ['SNAPSHOT', 'RUNNING', 'VALIDATING', 'DECISION']);
-  assert.ok(events.every(e => e.asof === input.asof)); assert.equal(JSON.stringify(events).includes('PRIVATE_REASONING'), false);
+  assert.deepEqual(events.map(e => e.stage), ['SNAPSHOT', 'MODEL', 'RUNNING', 'REASONING', 'OUTPUT', 'USAGE', 'VALIDATING', 'DECISION']);
+  assert.ok(events.every(e => e.asof === input.asof)); assert.equal(events.find(e=>e.stage==='REASONING')!.message,'OFFICIAL_REASONING_SUMMARY');
+  assert.equal(events.find(e=>e.stage==='MODEL')!.message.includes('注入測試模型'),true);
+  assert.deepEqual(events.find(e=>e.stage==='SNAPSHOT')!.details,input);
+  assert.deepEqual(events.find(e=>e.stage==='DECISION')!.details,analysis);
 });
 test('fast program replay requires no Codex calls, respects exact end time, and retains its full chart data after restore', async () => {
   const data = syntheticDataset('2026-01-05', '2026-01-06'), input = { start: '2026-01-05', end: '2026-01-06', source: 'sample', strategy: 'rules', end_time: '11:00' };

@@ -36,6 +36,11 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
   if(a.screening?.entry&&d(a.screening.entry.allocation_fraction).gt(settings.max_order_fraction))throw new Error('策略配置超過硬性單筆上限');
   if(a.screening&&d(a.screening.min_amount).lt(settings.watch_min_amount))throw new Error('策略流動性低於本機觀測門檻');
   if(snapshot.review_only&&a.screening?.entry)throw new Error('盤後檢討不能啟用進場規則');
+  if(settings.codex_enabled&&!snapshot.review_only)for(const position of snapshot.account.positions.filter(p=>p.shares>0)){
+    const decision=a.decisions.find(d=>d.symbol===position.symbol);
+    if(!decision?.smart&&decision?.action!=='SELL'&&!snapshot.existing_protection[position.symbol])
+      throw new Error(`策略缺少持倉 ${position.symbol} 的出場條件；既有委託不會因此改變`);
+  }
   for (const decision of a.decisions) {
     if (!candidates.has(decision.symbol) && !held.has(decision.symbol)) throw new Error('決策標的不在候選或持倉內');
     if (decision.action === 'BUY' && (!candidates.has(decision.symbol) || !snapshot.features[decision.symbol]?.sufficient))
