@@ -55,9 +55,8 @@ export class NativeConnection {
   } = {}) { this.run = dependencies.run ?? execute; this.fetcher = dependencies.fetcher ?? fetch;
     this.launch = dependencies.launch ?? spawn; this.origin = dependencies.origin ?? brokerOrigin; }
   get connected(): boolean { return this.healthy && !!this.owned && this.owned.exitCode === null; }
-  async start(raw: unknown, live: boolean): Promise<ConnectionInput> {
+  async start(raw: unknown): Promise<ConnectionInput> {
     const input = ConnectionInputSchema.parse(raw);
-    if (live && !input.ca_path) throw new Error('實盤需要選取 CA 憑證並填寫密碼');
     if (input.ca_path) {
       const file = await stat(input.ca_path).catch(() => undefined);
       if (!file?.isFile() || !/\.(pfx|p12)$/i.test(input.ca_path) || file.size > 10000000) throw new Error('CA 憑證需為有效的 .pfx 或 .p12 檔案');
@@ -74,7 +73,7 @@ export class NativeConnection {
       this.stop=new AbortController();
       const child=this.launch(binary,['server','start','--no-open'],{cwd:this.root,env,windowsHide:true,stdio:'ignore'});
       this.owned=child;let failed=false;child.on('error',()=>{failed=true;});
-      child.on('exit',()=>{failed=true;this.healthy=false;this.status='Shioaji 已斷線，請重新連線';});
+      child.on('exit',()=>{failed=true;if(this.owned===child){this.healthy=false;this.status='Shioaji 已斷線，請重新連線';}});
       const deadline=Date.now()+90000;
       while(Date.now()<deadline) { this.stop.signal.throwIfAborted();if(failed)throw new Error('啟動失敗');if (await this.available(this.baseUrl)) break; await delay(300,undefined,{signal:this.stop.signal}); }
       this.stop.signal.throwIfAborted(); if(failed)throw new Error('啟動失敗');

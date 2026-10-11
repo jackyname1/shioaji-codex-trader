@@ -6,6 +6,7 @@ import type { AnalystEvent } from '../core/codex.js';
 import type { ConnectionInput } from './credentials.js';
 import type { ChartData,ChartRequest } from '../core/chart.js';
 import type { ReplayFrame } from '../core/backtest.js';
+import type { LiveReadiness } from '../core/live-session.js';
 export interface RuntimeView {
   mode:Settings['mode'];auto:boolean;paused:boolean;killed:boolean;blocked:boolean;connected:boolean;session:boolean;
   account:Account|null;plan:Plan|null;protections:Protection[];orders:Order[];quotes:Quote[];watch:WatchState;
@@ -18,6 +19,7 @@ export interface DesktopState { status: string; logs: string[]; settings: string
   runtime:RuntimeView|null;backtest_progress:BacktestProgress;backtest_result:BacktestReport|null;
   backtest_history:BacktestSummary[];backtest_comparisons:BacktestSummary[];
   connection:{status:string;remembered:boolean;encrypted:boolean;busy:boolean;has_ca:boolean};analyst_events:(AnalystEvent&{context:'live'|'replay'})[];
+  live:LiveReadiness;
   replay:ReplayFrame|null;replay_paused:boolean;replay_speed:number;replay_symbols:{symbol:string;name:string}[];
   codex_models:string[] }
 export interface TraderBridge {
@@ -25,7 +27,7 @@ export interface TraderBridge {
   command(input: string): Promise<string>;
   saveSettings(text: string): Promise<string>;
   configure(mode: string): Promise<string>;
-  authorizeLive(ack: string): Promise<string>;
+  authorizeLive(): Promise<string>;
   backtest(request:BacktestRequest):Promise<string>;
   cancelBacktest():Promise<string>;
   exportBacktest(format:'json'|'csv'):Promise<string>;

@@ -70,15 +70,15 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
       assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; },fetcher: async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false }); },launch:((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
       assert.deepEqual(args,['server','start','--no-open']);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_API_KEY,'TEST_KEY');
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as typeof spawn});
-    await native.start(input,false);assert.equal(native.connected,true);assert.equal(native.baseUrl,'http://127.0.0.1:9081');
+    await native.start(input);assert.equal(native.connected,true);assert.equal(native.baseUrl,'http://127.0.0.1:9081');
     assert.ok(commands.every(args => !args.join(' ').includes('TEST_'))); await native.close();
     const failure = new NativeConnection(root,binary,{origin,run:async()=>{throw new Error('TEST_SECRET');},fetcher:async()=>{throw new Error('offline');}});
-    await assert.rejects(failure.start(input,false), e => e instanceof Error && !e.message.includes('TEST_SECRET'));
+    await assert.rejects(failure.start(input), e => e instanceof Error && !e.message.includes('TEST_SECRET'));
     let failedProbes=0,killed=false;
     const rejected = new NativeConnection(root,binary,{origin,run:async()=>({stdout:'--no-open'}),fetcher:async()=>{if(++failedProbes===1)throw new Error('offline');return Response.json({simulation:true});},launch:(()=>{
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{killed=true;child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;
     }) as unknown as typeof spawn});
-    await assert.rejects(rejected.start(input,false),/連線未完成/);assert.equal(killed,true);
+    await assert.rejects(rejected.start(input),/連線未完成/);assert.equal(killed,true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test('a historical cache retains the complete API window when an earlier replay ends intraday', async()=>{
@@ -167,6 +167,8 @@ test('fast program replay requires no Codex calls, respects exact end time, and 
   const root = mkdtempSync(join(tmpdir(), 'chart-report-'));
   try { const controller = new BacktestController(root); controller.start(input, SettingsSchema.parse({})); await controller.wait();
     const next = new BacktestController(root); await next.restore();
+    assert.equal(next.progress.phase,next.report!.status);assert.equal(next.progress.total_runs,undefined);
+    assert.equal(next.progress.codex_calls,next.report!.metrics.codex_calls);
     const chart = await next.chart({ source: 'replay', symbol: '9001', start: input.start, end: input.end, interval: '1m' });
     assert.ok(chart.bars.length); assert.ok(chart.bars.every(b => b.at <= next.report!.asof));
   } finally { rmSync(root, { recursive: true, force: true }); }
