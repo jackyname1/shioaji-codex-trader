@@ -426,6 +426,10 @@ async function smokeTest(): Promise<void> {
     if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('不截斷')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源與完整摘要未通過');
     await capture(`SYNTHETIC-ui-realtime-${width}.png`,width,height);
   }
+  await window.webContents.executeJavaScript(`document.querySelector('#analyst-stream [data-event-id="smoke-event-257"] details').open=true`);await new Promise(resolve=>setTimeout(resolve,400));
+  const tail=service.store.analystEvent('smoke-event-259')!;service.store.recordAnalystEvent({...tail,message:tail.message+' · 串流持續更新'});service.analystEvents=service.store.analystEvents();
+  await new Promise(resolve=>setTimeout(resolve,1300));
+  if(!await window.webContents.executeJavaScript(`(()=>{const detail=document.querySelector('#analyst-stream [data-event-id="smoke-event-257"] details');return detail.open&&detail.textContent.includes('COMPLETE_SNAPSHOT')})()`))throw new Error('Codex 串流更新收起正在檢視的完整快照');
   await window.webContents.executeJavaScript(`document.querySelector('#analyst-history-open').click()`);await new Promise(resolve=>setTimeout(resolve,500));
   const journal=await window.webContents.executeJavaScript(`(async()=>{const full=await window.trader.analystHistory('runtime'),detail=await window.trader.analystDetail('runtime','smoke-event-257');
     const view=document.querySelector('#analyst-history-records');return {open:document.querySelector('#analyst-history-dialog').open,count:view.querySelectorAll('.analyst-event').length,

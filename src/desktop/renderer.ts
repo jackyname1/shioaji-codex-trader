@@ -315,8 +315,20 @@ function renderExtras(state:DesktopState):void {
     events=logs.filter(log=>log.at<=workspaceCutoff(state)).slice(-25).map(log=>({at:log.at,asof:log.at,stage:log.review?'REVIEW':'DECISION',message:log.summary,model:state.backtest_result!.model,reasoning:'程式策略',context:'replay' as const}));
     if(!events.length&&scoped?.plan)events=[{at:scoped.plan.created_at,asof:state.replay!.at,stage:'DECISION',message:scoped.plan.analysis.summary,model:'快速程式策略',reasoning:'程式策略',context:'replay' as const}];}
   const stream=el('analyst-stream'),signature=JSON.stringify(events);
-  if(stream.dataset.signature!==signature){stream.dataset.signature=signature;stream.replaceChildren();
-    for(const event of events.slice(-100).reverse())stream.append(analystCard(event));
+  if(stream.dataset.signature!==signature){stream.dataset.signature=signature;
+    const before=new Map([...stream.children].map(n=>[(n as HTMLElement).dataset.eventId,n as HTMLElement]));
+    const top=stream.getBoundingClientRect().top,anchor=stream.scrollTop>4?[...stream.children].find(n=>n.getBoundingClientRect().bottom>top):undefined;
+    const anchorTop=anchor?.getBoundingClientRect().top;
+    const cards=events.slice(-100).reverse().map(event=>{
+      const key=event.id??JSON.stringify([event.asof,event.stage,event.message]),stamp=JSON.stringify(event),old=before.get(key);
+      if(old?.dataset.eventSignature===stamp)return old;
+      const row=analystCard(event);row.dataset.eventId=key;row.dataset.eventSignature=stamp;
+      const opened=[...(old?.querySelectorAll('details')??[])].map(d=>d.open);
+      row.querySelectorAll('details').forEach((d,i)=>{d.open=opened[i]??false;});return row;
+    });
+    const keep=new Set<Node>(cards);for(const node of [...stream.childNodes])if(!keep.has(node))node.remove();
+    let cursor=stream.firstChild;for(const row of cards){if(cursor!==row)stream.insertBefore(row,cursor);cursor=row.nextSibling;}
+    if(anchor&&stream.contains(anchor)&&anchorTop!==undefined)stream.scrollTop+=anchor.getBoundingClientRect().top-anchorTop;
     if(!events.length)stream.textContent=replayView(state)?'選擇 Codex 逐輪判斷並開始模擬，即可在此查看當時的分析與決策':'等待 Codex 開始分析';}
   const selected=events.filter(e=>e.stage==='MODEL').at(-1);
   const model=selected?.model??(!replayView(state)?state.codex_selection?.model:state.backtest_result?.request.strategy==='codex'?state.backtest_result.model:undefined);
@@ -442,7 +454,7 @@ async function saveCodex():Promise<string>{
 }
 el('codex-save').addEventListener('click',()=>void run(saveCodex));
 let connectionDirty=false;
-el('connection-form').addEventListener('input',()=>{connectionDirty=true;});
+el('connection-form').addEventListener('input',event=>{connectionDirty=true;if(event.target instanceof HTMLInputElement)event.target.dataset.saved='false';});
 async function loadSavedConnection(force=false):Promise<void>{
   if(connectionDirty&&!force)return;
   const saved=await window.trader.savedConnection();if(connectionDirty&&!force)return;
