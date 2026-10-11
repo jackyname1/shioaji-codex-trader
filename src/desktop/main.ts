@@ -412,8 +412,9 @@ async function smokeTest(): Promise<void> {
   await service.command('auto off');
   const recordedAt=new Date().toISOString();
   for(let n=0;n<260;n++)service.store.recordAnalystEvent({id:'smoke-event-'+n,at:recordedAt,asof:recordedAt,
-    stage:n===258?'MODEL':n===257?'SNAPSHOT':'REASONING',message:n===258?'隔離測試模型：isolated-smoke-model':n===257?'隔離測試：完整快照':`隔離測試推理摘要 ${n}：行情、現金、持倉與買賣條件已核對。完整內容保留，不截斷。`,
-    model:'isolated-smoke-model',reasoning:'high',purpose:'STRATEGY',...(n===257?{details:{cash:'100000',symbol:'9001',marker:'COMPLETE_SNAPSHOT'}}:{})});
+    stage:n===258?'MODEL':n===257?'SNAPSHOT':n===256?'DATA':'REASONING',message:n===258?'隔離測試模型：isolated-smoke-model':n===257?'隔離測試：完整快照':n===256?'股票池 20 檔 · 歷史已就緒 18 檔 · 基本資格與流動性合格 1 檔':`隔離測試推理摘要 ${n}：行情、現金、持倉與買賣條件已核對。完整內容保留，不截斷。`,
+    model:'isolated-smoke-model',reasoning:'high',purpose:'STRATEGY',...(n===257?{details:{cash:'100000',symbol:'9001',marker:'COMPLETE_SNAPSHOT'}}:
+      n===256?{details:{pool_count:20,history_ready:18,eligible_symbols:['9001'],history_issues:[{symbol:'9002',issue:'隔離歷史測試 HTTP 503'}]}}:{})});
   service.analystEvents=service.store.analystEvents();
   await window.webContents.executeJavaScript(`window.trader.simulationScope('realtime')`);
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
@@ -424,7 +425,7 @@ async function smokeTest(): Promise<void> {
       model:document.querySelector('#codex-effective-model').textContent,summary:document.querySelector('#analyst-stream').textContent,
       compact:state.analyst_events.filter(e=>e.context==='live').every(e=>e.details===undefined)};})()`);
     const expectedCash=Number(spendableCash(service.engine.account!,service.engine.settings).available);
-    if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('不截斷')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源與完整摘要未通過');
+    if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('不截斷')||!realtime.summary.includes('資料就緒')||!realtime.summary.includes('歷史已就緒 18 檔')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源、資料就緒與完整摘要未通過');
     await capture(`SYNTHETIC-ui-realtime-${width}.png`,width,height);
   }
   await window.webContents.executeJavaScript(`document.querySelector('#analyst-stream [data-event-id="smoke-event-257"] details').open=true`);await new Promise(resolve=>setTimeout(resolve,400));
