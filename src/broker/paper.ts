@@ -144,7 +144,8 @@ export class PaperBroker implements Broker {
     this.ledger.cash = due.reduce((sum,x) => sum.plus(x.amount),d(this.ledger.cash)).toFixed();
     this.ledger.credits = this.ledger.credits!.filter(x => x.due > today);
   }
-  fills(): SimulatedFill[] { return structuredClone(this.ledger.fills!); }
+  fillCount():number{return this.ledger.fills!.length;}
+  fills(start=0): SimulatedFill[] { return structuredClone(this.ledger.fills!.slice(start)); }
   remainingCost(): string { return this.ledger.lots.reduce((sum,l) => sum.plus(l.cost ?? d(l.price).times(l.shares)),d(0)).toFixed(); }
   private sellable(symbol: string, today: string): number {
     return this.ledger.lots.filter(l => l.symbol === symbol && l.acquired < today).reduce((sum,l) => sum + l.shares,0);

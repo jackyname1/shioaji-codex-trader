@@ -1,6 +1,7 @@
 import type { DesktopState,TraderBridge } from './shared.js';
 import type { Settings } from '../core/models.js';
 import { candles,equityChart } from './charts.js';
+import { ChartViewport } from './chart-viewport.js';
 import type { ChartData,ChartRequest } from '../core/chart.js';
 import type { BacktestRequest } from '../core/backtest.js';
 import { simulationView,workspaceCutoff,workspaceRuntime,workspaceEvents } from './workspace.js';
@@ -13,7 +14,7 @@ const fmt=(v:string|number|undefined):string=>v===undefined||!Number.isFinite(Nu
 const pct=(v:string):string=>fmt(Number(v)*100)+'%';
 const time=(v:string|null|undefined):string=>v?new Date(v).toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,hour:'2-digit',minute:'2-digit'}):'—';
 const stamp=(v:string|null|undefined):string=>v?new Date(v).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
-const phase:Record<string,string>={IDLE:'尚未執行',LOADING:'準備行情',ANALYSIS:'策略分析',REVIEW:'執行檢討',REPLAY:'模擬執行',COMPLETED:'已完成',PARTIAL:'部分完成',CANCELLED:'已停止',FAILED:'未通過'};
+const phase:Record<string,string>={IDLE:'尚未執行',LOADING:'準備行情',CALENDAR:'交易日曆',UNIVERSE:'股票資料池',HISTORY:'歷史行情',SNAPSHOT:'當時快照',ANALYSIS:'Codex 選股',ACTIVATION:'設定條件',MONITOR:'偵測與送單',RECONCILE:'成交核對',SUBMISSION:'模擬委託',FILL:'模擬成交',RISK:'風控阻擋',CLOSE:'收盤核對',LIMIT:'呼叫上限',REVIEW:'盤後檢討',REPLAY:'事件已完成',COMPLETED:'已完成',PARTIAL:'部分完成',CANCELLED:'已停止',FAILED:'執行失敗'};
 const action:Record<string,string>={BUY:'買進',SELL:'賣出',HOLD:'觀望',ADD:'加入',REMOVE:'移除',RETAIN:'保留監控',OBSERVE:'觀測',RETAINED:'保留監控',WAIT:'等待',BLOCKED:'風控／資格阻擋',SUBMITTED:'已送出',FILLED:'已成交',PARTIAL:'部分成交',PENDING:'委託中',CANCEL_PENDING:'撤單核對中',CANCELLED:'已撤單',REJECTED:'已拒絕',UNKNOWN:'結果待核對'};
 type Cell=string|number|{label:string;command?:string;report?:string;chartSymbol?:string};
 function table(id:string,headers:string[],rows:Cell[][],empty='目前沒有資料'):void {
@@ -149,7 +150,12 @@ function renderBacktest(state:DesktopState):void {
   text('bt-progress-title',phase[p.phase]??p.phase);text('bt-progress-detail',`${p.total_runs&&p.total_runs>1?`第 ${p.run} / ${p.total_runs} 組 · `:''}${p.day} · Codex ${p.codex_calls}`);
   text('bt-progress-message',p.message);el<HTMLProgressElement>('bt-progress').value=p.total_points?Math.round(p.points/p.total_points*100):p.phase==='COMPLETED'?100:0;
   el<HTMLButtonElement>('bt-run').disabled=p.running;el<HTMLButtonElement>('bt-compare').disabled=p.running;el<HTMLButtonElement>('bt-cancel').disabled=!p.running;
+  for(const node of document.querySelectorAll<HTMLInputElement|HTMLSelectElement>('#backtest-form input,#backtest-form select,[form="backtest-form"]')){
+    node.disabled=p.running;
+  }
+  if(!p.running)schedulingFields('bt');
   el('bt-result').hidden=!r;el<HTMLButtonElement>('bt-json').disabled=!r;el<HTMLButtonElement>('bt-csv').disabled=!r;
+  el<HTMLButtonElement>('bt-market').disabled=p.running||!r?.dataset_id;
   if(!r){renderedReport='';table('bt-history',['日期區間','策略排程','淨損益','報酬','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,fmt(h.net_pnl),fmt(h.return_pct)+'%',phase[h.status]??h.status,{label:'檢視',report:h.id}]));return;}
   table('bt-history',['日期區間','策略排程','偵測','淨損益','報酬','回撤','呼叫','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,`${h.monitor_seconds} 秒`,fmt(h.net_pnl),fmt(h.return_pct)+'%',fmt(h.drawdown_pct)+'%',h.calls,
     (h.synthetic?'虛構 · ':'')+(phase[h.status]??h.status),{label:h.id===r.id?'檢視中':'檢視',report:h.id}]));
@@ -163,6 +169,9 @@ function renderBacktest(state:DesktopState):void {
   table('bt-daily',['日期','淨值','現金','待收交割'],r.daily_equity.map(d=>[d.day,fmt(d.equity),fmt(d.cash),fmt(d.settlement_credits)]));
   text('bt-strategy-log',r.strategy_log.map(s=>`${stamp(s.at)} ${s.review?'檢討':'策略'} ${s.stance}\n${s.summary}`).join('\n\n'));
   text('bt-limitations',[`暖機不足股票：${r.quality.insufficient_symbols.join('、')||'無'}`,`缺行情交易日：${r.quality.missing_sessions.join('、')||'無'}`,...r.limitations].join('\n'));
+  table('bt-workflow',['台北時間','步驟','股票','條件與結果'],(r.workflow??[]).slice(-400).map(e=>[stamp(e.at),phase[e.stage]??e.stage,e.symbols?.join('、')??'—',e.message+
+    (e.screening?`\n成交額 ≥ ${fmt(e.screening.min_amount)} · 量比 ≥ ${e.screening.min_volume_ratio} · RSI ${e.screening.rsi_min}–${e.screening.rsi_max}`+(e.screening.entry?` · ${e.screening.entry.signal} · 每檔 ${pct(e.screening.entry.allocation_fraction)} · 停損 ${pct(e.screening.entry.stop_fraction)} · 停利 ${pct(e.screening.entry.take_profit_fraction)}`:' · 僅觀測'):'')]),'此舊版報表沒有流程明細，重新執行模擬後會保存');
+  if(r.failures?.length)text('bt-strategy-log',r.strategy_log.map(s=>`${stamp(s.at)} ${s.review?'檢討':'策略'} ${s.stance}\n${s.summary}`).join('\n\n')+'\n\n'+r.failures.map(f=>`${stamp(f.at)} ${phase[f.stage]??f.stage}：${f.issue}`).join('\n'));
   text('backtest',state.backtest);
   equityChart(el('equity-chart'),r.timeline??r.daily_equity.map(d=>({at:d.asof,equity:d.equity})),Number(r.metrics.initial_cash));
 }
@@ -200,31 +209,41 @@ el('codex-test').addEventListener('click',()=>void run(async()=>{await saveCodex
 schedulingFields('bt');void refresh().catch(()=>message('工作台連線未完成'));setInterval(()=>void refresh().catch(()=>undefined),1000);
 
 let chartData:ChartData|undefined,chartLoading=false,chartQueued=false,chartReportId='';
-let selectedSymbol='2330',chartSignature='',chartGeneration=0;
+let selectedSymbol='2330',chartSignature='',chartGeneration=0,chartScope='';
+const chartViewport=new ChartViewport();let chartAnimation=0;
 const runningEquity:{at:string;equity:string}[]=[];
 function renderChart():void {
   if(!chartData)return;
+  chartViewport.sync(chartData.bars.map(b=>b.at),chartScope);
+  const range=el<HTMLInputElement>('chart-pan');range.max=String(chartViewport.maximum);range.value=String(chartViewport.offset);range.disabled=!chartViewport.maximum;
+  range.title=range.disabled?'已顯示全部行情；可用滾輪放大後平移':'拖曳時間軸平移，更新行情時會保留目前位置';
+  const count=el<HTMLSelectElement>('chart-window');count.querySelector('[data-custom]')?.remove();
+  if(![...count.options].some(o=>o.value===String(chartViewport.count))){const option=document.createElement('option');option.value=String(chartViewport.count);option.textContent=chartViewport.count+' 根';option.dataset.custom='true';count.append(option);}
+  count.value=String(chartViewport.count);
+  el('chart-latest').classList.toggle('active',chartViewport.following);el('chart-latest').setAttribute('aria-pressed',String(chartViewport.following));
   const protections=latestState?workspaceRuntime(latestState)?.protections:[];
   const spec=protections?.find(p=>p.symbol===chartData!.symbol)?.spec;
   const levels=spec?[{price:Number(spec.stop_price),label:'停損',color:'#ff7d86'},...(spec.take_profit?[{price:Number(spec.take_profit),label:'停利',color:'#44d6aa'}]:[])]:[];
   const fills=(latestState?.replay?.fills??latestState?.backtest_result?.fills??[]).filter(f=>f.symbol===chartData!.symbol&&Date.parse(f.at)<=Date.parse(chartData!.asof));
   candles(el('market-chart'),chartData,{ma:checked('chart-ma'),bands:checked('chart-bands'),rsi:checked('chart-rsi'),
-    offset:Number(value('chart-pan')),count:Number(value('chart-window')),levels,fills:value('chart-source')==='replay'?fills:[]});
+    offset:chartViewport.offset,count:chartViewport.count,priceScale:chartViewport.priceScale,levels,fills:value('chart-source')==='replay'?fills:[]});
   text('chart-name',chartData.name===chartData.symbol?chartData.symbol:chartData.name+' '+chartData.symbol);text('chart-price',fmt(chartData.bars.at(-1)?.close));
-  text('chart-cutoff','資料截至 '+stamp(chartData.asof));text('chart-data-note',`${chartData.interval} · ${fmt(chartData.total_points)} 筆原始行情 / ${fmt(chartData.bars.length)} 根 K 線`);
+  text('chart-cutoff','資料截至 '+stamp(chartData.asof));text('chart-data-note',chartData.bars.length?`${chartViewport.offset+1}–${chartViewport.offset+chartViewport.visible} / ${fmt(chartData.bars.length)} 根`:'此範圍尚無行情');
+  el('chart-data-note').title=`${chartData.interval} · ${fmt(chartData.total_points)} 筆原始行情 · 拖曳平移／滾輪縮放／拖曳右側價格軸縮放／雙擊重設`;
 }
+function scheduleChart():void {if(!chartAnimation)chartAnimation=requestAnimationFrame(()=>{chartAnimation=0;renderChart();});}
 function chartRequest(source:ChartRequest['source']=value('chart-source') as ChartRequest['source'],symbol=value('chart-symbol')):ChartRequest {
   return {source,symbol,start:value('chart-start'),end:value('chart-end'),interval:value('chart-interval') as ChartRequest['interval']};
 }
 async function loadChart(source?:ChartRequest['source']):Promise<string>{
   if(chartLoading){chartQueued=true;return '正在載入最新選取的股票';}chartLoading=true;const generation=chartGeneration,reportId=latestState?.backtest_result?.id;
   try {if(source)el<HTMLSelectElement>('chart-source').value=source;const request=chartRequest();
-    text('chart-hover','正在讀取真實歷史行情…');const loaded=await window.trader.chart(request);
-    if(generation!==chartGeneration||request.source!==value('chart-source')||request.symbol!==value('chart-symbol')||reportId!==latestState?.backtest_result?.id)return '行情時間已更新';
-    if(request.source==='replay'&&latestState){const cutoff=workspaceCutoff(latestState);loaded.bars=loaded.bars.filter(b=>Date.parse(b.at)<=Date.parse(cutoff));loaded.asof=cutoff;}
-    chartData=loaded;selectedSymbol=request.symbol;
-    const range=el<HTMLInputElement>('chart-pan');range.max=String(Math.max(0,chartData.bars.length-Number(value('chart-window'))));range.value=range.max;
+    text('chart-hover',request.source==='replay'?'正在讀取模擬時間以前的行情…':'正在讀取真實歷史行情…');const loaded=await window.trader.chart(request);
+    if(generation!==chartGeneration||JSON.stringify(request)!==JSON.stringify(chartRequest())||reportId!==latestState?.backtest_result?.id)return '行情選取已更新';
+    if(request.source==='replay'&&latestState){const cutoff=workspaceCutoff(latestState);loaded.bars=loaded.bars.filter(b=>Date.parse(b.at)<=Date.parse(cutoff));loaded.asof=new Date(Math.min(Date.parse(loaded.asof),Date.parse(cutoff))).toISOString();}
+    chartData=loaded;selectedSymbol=request.symbol;chartScope=JSON.stringify(request);
     renderChart();renderStockDetails();text('chart-hover',chartData.issue||chartData.source);return chartData.issue||'行情圖表已載入';
+  }catch(error){text('chart-hover',error instanceof Error?error.message:'圖表資料未載入');throw error;
   }finally{chartLoading=false;if(chartQueued){chartQueued=false;void loadChart().catch(()=>undefined);}}
 }
 async function showStock(symbol:string):Promise<string>{selectedSymbol=symbol;el<HTMLInputElement>('chart-symbol').value=symbol;return loadChart();}
@@ -268,7 +287,7 @@ function renderExtras(state:DesktopState):void {
   el<HTMLButtonElement>('codex-test').disabled=auth.testing||auth.state==='pending'||auth.state==='checking';
   text('codex-device-code',auth.device_code?'裝置代碼：'+auth.device_code:'');el('codex-device-code').hidden=!auth.device_code;
   const scoped=workspaceRuntime(state);let events=workspaceEvents(state);
-  const failure=simulationView(state)&&state.backtest_progress.phase==='FAILED'?state.backtest_progress.message:
+  const failure=simulationView(state)?state.backtest_progress.last_error??(state.backtest_progress.phase==='FAILED'?state.backtest_progress.message:''):
     !scoped?.analyzing&&events.at(-1)?.stage==='FAILED'?events.at(-1)!.message:'';
   text('analysis-issue',failure);el('analysis-issue').hidden=!failure;el('analysis-status').title=failure;
   if(failure)text('analysis-status',/Codex/.test(failure)?'Codex 連線或分析失敗':'資料讀取未完成');
@@ -278,7 +297,7 @@ function renderExtras(state:DesktopState):void {
   const stream=el('analyst-stream'),signature=JSON.stringify(events);
   if(stream.dataset.signature!==signature){stream.dataset.signature=signature;stream.replaceChildren();
     for(const event of events.slice(-25).reverse()){const row=document.createElement('div');row.className='analyst-event';
-      const at=document.createElement('small'),title=document.createElement('strong'),p=document.createElement('p');at.textContent='資料截至 '+stamp(event.asof);title.textContent=event.stage+' · '+event.model+' / '+event.reasoning;p.textContent=event.message;row.append(at,title,p);stream.append(row);}
+      const at=document.createElement('small'),title=document.createElement('strong'),p=document.createElement('p');row.classList.toggle('failed',event.stage==='FAILED');at.textContent='資料截至 '+stamp(event.asof);title.textContent=(phase[event.stage]??event.stage)+' · '+event.model+' / '+event.reasoning;p.textContent=event.message;row.append(at,title,p);stream.append(row);}
     if(!events.length)stream.textContent=simulationView(state)?'選擇 Codex 逐輪判斷並開始模擬，即可在此查看當時的分析與決策':'等待 Codex 開始分析';}
   const datalist=el('codex-model-options');if(datalist.dataset.signature!==JSON.stringify(state.codex_models)){datalist.dataset.signature=JSON.stringify(state.codex_models);datalist.replaceChildren(...state.codex_models.map(model=>{const o=document.createElement('option');o.value=model;return o;}));}
   const screening=scoped?.plan?.analysis.screening;
@@ -289,6 +308,12 @@ function renderReplay(state:DesktopState):void {
   text('replay-time',frame?new Date(frame.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):r?stamp(r.asof):'尚未開始模擬');
   text('replay-pnl',frame?'損益 NT$ '+fmt(frame.net_pnl):r?'損益 NT$ '+fmt(r.metrics.net_pnl):'—');
   text('replay-pause',state.replay_paused?'▶ 繼續':'Ⅱ 暫停');el<HTMLButtonElement>('replay-pause').disabled=!p.running;el<HTMLButtonElement>('replay-step').disabled=!p.running;
+  text('replay-next',p.running?(state.replay_paused?'步驟完成後暫停 · ':'')+(['ANALYSIS','REVIEW'].includes(p.phase)?'等待 Codex 完成':p.next_event_at?'下個觸發 '+stamp(p.next_event_at):p.message):'每一步完成後才前進');
+  el('replay-next').title=p.message;
+  const stages=['SNAPSHOT','ANALYSIS','ACTIVATION','MONITOR','RECONCILE'],index=stages.indexOf(p.phase);
+  for(const node of document.querySelectorAll<HTMLElement>('[data-replay-stage]')){const n=stages.indexOf(node.dataset.replayStage!);node.classList.toggle('active',p.running&&n===index);node.classList.toggle('done',p.phase==='COMPLETED'||p.running&&(p.phase==='REPLAY'||n<index));}
+  if(!frame&&!r)table('bt-fills',['時間','股票','方向','股數','價格'],[],p.running?'正在準備歷史行情與獨立模擬帳戶':'開始模擬後顯示成交；Codex 選股與條件會依排程完整執行');
+  if(p.running&&frame)table('bt-fills',['台北時間','股票','方向','股數','價格','手續費 / 稅'],frame.fills.slice(-40).reverse().map(f=>[stamp(f.at),f.symbol,action[f.action]??f.action,f.shares,fmt(f.price),`${fmt(f.fee)} / ${fmt(f.tax)}`]),'等待條件觸發與下一筆價格事件成交');
   if(frame&&p.running){if(!runningEquity.length||Date.parse(frame.at)<Date.parse(runningEquity.at(-1)!.at))runningEquity.length=0;
     if(runningEquity.at(-1)?.at!==frame.at){const a=frame.account;runningEquity.push({at:frame.at,equity:String(Number(a.cash)-Number(a.settlement_debits)+Number(a.settlement_credits)+a.positions.reduce((sum,x)=>sum+Number(x.last_price)*x.shares,0))});}
     equityChart(el('equity-chart'),runningEquity,Number(value('bt-cash')));}
@@ -319,8 +344,37 @@ const dateAt=(n:number):string=>new Date(Date.now()+8*3600000+n*86400000).toISOS
 for(const id of ['bt-end','chart-end']){el<HTMLInputElement>(id).value=today;el<HTMLInputElement>(id).max=today;}
 el<HTMLInputElement>('bt-start').value=dateAt(-30);el<HTMLInputElement>('bt-start').max=today;el<HTMLInputElement>('chart-start').value=dateAt(-120);el<HTMLInputElement>('chart-start').max=today;
 el<HTMLFormElement>('chart-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>loadChart());});
-for(const id of ['chart-ma','chart-bands','chart-rsi','chart-pan'])el(id).addEventListener('input',renderChart);
-el('chart-window').addEventListener('change',()=>{if(chartData){el<HTMLInputElement>('chart-pan').max=String(Math.max(0,chartData.bars.length-Number(value('chart-window'))));el<HTMLInputElement>('chart-pan').value=el<HTMLInputElement>('chart-pan').max;}renderChart();});
+for(const id of ['chart-ma','chart-bands','chart-rsi'])el(id).addEventListener('input',renderChart);
+el('chart-pan').addEventListener('input',()=>{chartViewport.move(Number(value('chart-pan')));renderChart();});
+el('chart-window').addEventListener('change',()=>{chartViewport.setCount(Number(value('chart-window')));renderChart();});
+el('chart-latest').addEventListener('click',()=>{chartViewport.latest();renderChart();});
+el('chart-fit').addEventListener('click',()=>{chartViewport.fit();renderChart();});
+el('chart-interval').addEventListener('change',()=>void run(()=>loadChart()));
+const chartHost=el('market-chart');
+let chartDrag:{id:number;x:number;y:number;offset:number;count:number;priceScale:number;axis:boolean}|undefined;
+chartHost.addEventListener('pointerdown',event=>{if(event.button!==0||!chartData?.bars.length)return;const box=chartHost.getBoundingClientRect();
+  chartDrag={id:event.pointerId,x:event.clientX,y:event.clientY,offset:chartViewport.offset,count:chartViewport.visible,priceScale:chartViewport.priceScale,axis:event.clientX>box.right-60};
+  chartHost.setPointerCapture(event.pointerId);chartHost.focus({preventScroll:true});chartHost.classList.add('dragging');event.preventDefault();});
+chartHost.addEventListener('pointermove',event=>{if(!chartDrag||event.pointerId!==chartDrag.id)return;
+  if(chartDrag.axis){chartViewport.priceScale=chartDrag.priceScale;chartViewport.scalePrice(Math.exp((event.clientY-chartDrag.y)/140));}
+  else chartViewport.move(chartDrag.offset-(event.clientX-chartDrag.x)/Math.max(1,chartHost.clientWidth-70)*chartDrag.count);
+  scheduleChart();});
+const endDrag=():void=>{chartDrag=undefined;chartHost.classList.remove('dragging');};
+for(const event of ['pointerup','pointercancel','lostpointercapture'])chartHost.addEventListener(event,endDrag);
+chartHost.addEventListener('wheel',event=>{if(!chartData?.bars.length)return;event.preventDefault();const box=chartHost.getBoundingClientRect();
+  if(event.shiftKey||Math.abs(event.deltaX)>Math.abs(event.deltaY))chartViewport.pan((event.deltaX||event.deltaY)/Math.max(1,box.width-70)*chartViewport.visible);
+  else if(event.clientX>box.right-60)chartViewport.scalePrice(Math.exp(-Math.max(-200,Math.min(200,event.deltaY))/400));
+  else chartViewport.zoom(Math.exp(Math.max(-200,Math.min(200,event.deltaY))/400),(event.clientX-box.left-10)/Math.max(1,box.width-70));
+  scheduleChart();},{passive:false});
+chartHost.addEventListener('dblclick',()=>{chartViewport.reset();renderChart();});
+chartHost.addEventListener('keydown',event=>{if(!chartData)return;
+  if(event.key==='ArrowLeft')chartViewport.pan(-Math.max(1,Math.round(chartViewport.visible/10)));
+  else if(event.key==='ArrowRight')chartViewport.pan(Math.max(1,Math.round(chartViewport.visible/10)));
+  else if(event.key==='+'||event.key==='=')chartViewport.zoom(.8);
+  else if(event.key==='-')chartViewport.zoom(1.25);
+  else if(event.key==='End')chartViewport.latest();else if(event.key==='Home')chartViewport.move(0);else return;
+  event.preventDefault();renderChart();});
+new ResizeObserver(scheduleChart).observe(chartHost);
 el('market-chart').addEventListener('pointermove',()=>text('chart-hover',el('market-chart').dataset.hover??''));
 el('replay-pause').addEventListener('click',()=>void run(()=>window.trader.replayControl(latestState?.replay_paused?'resume':'pause')));
 el('replay-step').addEventListener('click',()=>void run(()=>window.trader.replayControl('step')));
@@ -346,8 +400,11 @@ async function beginReplay(compare=false):Promise<string>{
   const form=el<HTMLFormElement>('backtest-form');if(!form.reportValidity())throw new Error('請核對模擬日期、本金與排程');
   if(value('bt-strategy')==='codex')await saveCodex();
   const result=await window.trader.backtest(request(compare));runningEquity.length=0;chartData=undefined;chartSignature='';chartGeneration++;
+  chartViewport.reset();chartReportId='';
   el<HTMLInputElement>('chart-start').value=value('bt-start');el<HTMLInputElement>('chart-end').value=value('bt-end');
   text('market-chart','正在準備歷史行情');el('market-chart').classList.add('chart-empty');
+  for(const id of ['bt-json','bt-csv','bt-market'])el<HTMLButtonElement>(id).disabled=true;
+  el<HTMLInputElement>('chart-pan').disabled=true;
   el<HTMLDialogElement>('replay-settings-dialog').close();return result;
 }
 async function workspaceCommand(command:string):Promise<string>{

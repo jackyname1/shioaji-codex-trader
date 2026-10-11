@@ -37,10 +37,11 @@ test('historical request validates real dates, chronological ranges and separate
   assert.throws(()=>BacktestRequestSchema.parse({...options(),initial_cash:'NaN'}));
   assert.equal(BacktestRequestSchema.parse(options()).participation,'0.01');
 });
-test('CSV rejects ambiguous timestamps, duplicate bars, wrong OHLC and unsupported securities',()=>{
+test('CSV removes equivalent duplicate bars and rejects conflicting bars, ambiguous time, wrong OHLC and unsupported securities',()=>{
   const header='symbol,at,open,high,low,close,volume_shares\n',row='9001,2026-01-05T09:10:00+08:00,30,31,29,30,1000\n';
   assert.equal(csvDataset(header+row).points[0]!.volume_shares,1000);
-  assert.throws(()=>csvDataset(header+row+row));
+  assert.equal(csvDataset(header+row+row).points.length,1);assert.equal(csvDataset(header+row+row).normalization!.duplicates,1);
+  assert.throws(()=>csvDataset(header+row+row.replace(',1000',',2000')),/價格或成交量不一致/);
   assert.throws(()=>csvDataset(header+row.replace('+08:00','')));
   assert.throws(()=>csvDataset(header+row.replace(',31,29,',',28,29,')));
   assert.throws(()=>csvDataset(header+row.replace('9001','0050')));
@@ -145,7 +146,7 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
     calls.push({path,body});let result:unknown;
     if(path==='/api/v1/info')result={simulation:false};
     else if(path.endsWith('/health'))result={status:'healthy',token_stale:false};
-    else if(path.endsWith('/data/scanner'))result=Array.from({length:5},(_,n)=>({code:String(9001+n),name:'test'}));
+    else if(path.endsWith('/data/scanner'))result=Array.from({length:10},(_,n)=>({code:String(9001+Math.floor(n/2)),name:'test'}));
     else if(path.includes('/data/contracts/'))result={security_type:'STK',code:path.split('/')[5],exchange:'TSE'};
     else if(path.endsWith('/data/kbars'))result={datetime:[String(body.start)+'T09:10:00'],Open:['30'],High:['31'],Low:['29'],Close:['30'],Volume:[1000]};
     else throw new Error('Unexpected endpoint');return new Response(JSON.stringify(result));
@@ -153,7 +154,7 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
   try {const request=BacktestRequestSchema.parse({start:'2026-07-01',end:'2026-07-03',source:'shioaji',strategy:'codex'});
     const load=()=>shioajiDataset(request,SettingsSchema.parse({}),dir,new AbortController().signal,()=>undefined,fetcher);
     const first=await load(),historyCount=calls.filter(x=>x.path.endsWith('/data/kbars')).length;assert.ok(first.points.length>0);
-    assert.equal(calls.find(x=>x.path.endsWith('/data/scanner'))!.body.date,'2026-06-30');
+    assert.equal(calls.find(x=>x.path.endsWith('/data/scanner'))!.body.date,'2026-06-30');assert.equal(Object.keys(first.names).length,5);assert.equal(new Set(first.points.map(p=>p.symbol+':'+p.at)).size,first.points.length);
     await load();assert.equal(calls.filter(x=>x.path.endsWith('/data/kbars')).length,historyCount);
     const scannerCount=calls.filter(x=>x.path.endsWith('/data/scanner')).length;
     const selected=await shioajiDataset(BacktestRequestSchema.parse({...request,symbols:['9001']}),SettingsSchema.parse({}),dir,new AbortController().signal,()=>undefined,fetcher);
