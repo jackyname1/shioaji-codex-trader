@@ -15,7 +15,7 @@ import {CodexLogin} from '../src/desktop/codex-login.js';
 
 // No external account, auth, network or mutation is used. Non-display endpoints are deliberately unavailable.
 class StartupFixture {
-  paths:string[]=[];balanceFails=false;reportsFail=false;ca=true;mutations=0;
+  paths:string[]=[];balanceFails=false;balanceDay?:string;reportsFail=false;ca=true;mutations=0;
   positions=[{id:0,code:'9001',direction:'Buy',cond:'Cash',quantity:1050,yd_quantity:1050,price:30,last_price:31}];
   trades:unknown[]=[];
   fetch:typeof fetch=async(input,init)=>{
@@ -27,7 +27,7 @@ class StartupFixture {
     if(path.endsWith('/auth/subscribe_trade'))return Response.json({subscribe_trade:true});
     if(path.endsWith('/order/trades'))return this.reportsFail?Response.json({error:'PRIVATE_ACCOUNT_VALUE'},{status:503}):Response.json(this.trades);
     if(path.endsWith('/order/trade_cache_health'))return Response.json({state:'Healthy',reasons:[]});
-    if(path.endsWith('/portfolio/account_balance'))return this.balanceFails?Response.json({error:'PRIVATE_ACCOUNT_VALUE'},{status:503}):Response.json({acc_balance:100000,date:twDay(new Date())+' 10:05:00.123456',errmsg:''});
+    if(path.endsWith('/portfolio/account_balance'))return this.balanceFails?Response.json({error:'PRIVATE_ACCOUNT_VALUE'},{status:503}):Response.json({acc_balance:100000,date:(this.balanceDay??twDay(new Date()))+' 10:05:00.123456',errmsg:''});
     if(path.endsWith('/portfolio/settlements'))return Response.json([{date:twDay(new Date()),T:1,amount:1200}]);
     if(path.endsWith('/portfolio/position_unit')){assert.equal(JSON.parse(String(init?.body)).unit,'Share');return Response.json(this.positions);}
     if(path.endsWith('/portfolio/position_detail'))throw new Error('Display must not require detail IDs, Common units or acquisition dates');
@@ -57,6 +57,13 @@ test('failed trade reports still show bank balance and positions but never make 
   try{await service.start(false);const a=service.engine.account!;
     assert.equal(a.cash,'100000');assert.equal(a.available!.positions,true);assert.equal(a.positions[0]!.sellable,0);
     assert.match(a.issue,/委託核對.*503/);assert.equal(a.complete,false);assert.equal(service.liveAuthorized,false);assert.equal(f.mutations,0);
+  }finally{await service.close();}
+});
+test('a balance with an older broker date is visible on first load while freshness continues to block live execution',async()=>{
+  const f=new StartupFixture();f.balanceDay='2020-01-02';const service=serviceFor(f,true);
+  try{await service.start(false);const a=service.engine.account!;
+    assert.equal(a.cash,'100000');assert.equal(a.available!.cash,true);assert.equal(a.available!.positions,true);
+    assert.equal(a.complete,false);assert.match(a.issue,/餘額日期尚未更新/);assert.equal(service.liveAuthorized,false);assert.equal(f.mutations,0);
   }finally{await service.close();}
 });
 test('selling old holdings then buying today cannot make the newly purchased shares day-tradable',async()=>{
@@ -106,7 +113,7 @@ test('Codex verifies the selected model once after login and keeps a failed prob
   const root=mkdtempSync(join(tmpdir(),'model-probe-'));let calls=0,reject=true;
   const settings=SettingsSchema.parse({codex_model:'isolated-model'});
   const login=new CodexLogin(root,async()=>undefined,async()=>undefined,{sourceProfile:join(root,'empty'),run:async()=>({}),settings:()=>settings,
-    probe:async(s:Settings)=>{assert.equal(s.codex_model,'isolated-model');calls++;return (async function*(){
+    probe:async(s:Settings)=>{assert.equal(s.codex_model,settings.codex_model);calls++;return (async function*(){
       if(reject){yield {type:'item.completed',item:{id:'error',type:'error',message:'The model is not supported PRIVATE_SECRET'}} as ThreadEvent;return;}
       yield {type:'item.completed',item:{id:'answer',type:'agent_message',text:'{"ok":true}'}} as ThreadEvent;
       yield {type:'turn.completed',usage:{input_tokens:1,output_tokens:1,cached_input_tokens:0}} as ThreadEvent;
@@ -115,6 +122,8 @@ test('Codex verifies the selected model once after login and keeps a failed prob
     assert.match(login.status.message,/模型不可用/);assert.ok(!login.status.message.includes('PRIVATE_SECRET'));
     await login.check();assert.equal(calls,1);assert.equal(login.status.test_state,'failed');assert.match(login.status.message,/模型不可用/);
     reject=false;await login.test(settings);assert.equal(login.status.test_state,'connected');assert.equal(calls,2);
+    settings.codex_model='another-isolated-model';await login.check();await until(()=>calls===3&&!login.status.testing);
+    assert.equal(login.status.test_state,'connected');assert.match(login.status.message,/another-isolated-model/);
   }finally{login.close();rmSync(root,{recursive:true,force:true});}
 });
 test('data failure before model invocation is identified beside Codex instead of being reported as an unexplained strategy failure',async()=>{

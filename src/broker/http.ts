@@ -390,9 +390,10 @@ export class ShioajiHttpBroker implements Broker {
     const readBalance=async():Promise<void>=>{try {
       const balance=await this.read('/portfolio/account_balance',z.object({acc_balance:number,date:z.string(),errmsg:z.string()}),this.selectors());
       if(balance.errmsg.trim())throw new BrokerError('Shioaji 交割戶餘額查詢未成功，帳務稍後自動重試；歷史模擬仍可使用');
+      // A valid balance remains visible even when its broker date needs refreshing. Freshness still gates trading.
+      cash=balance.acc_balance;available.cash=true;
       if(!/^\d{4}-\d{2}-\d{2}/.test(balance.date)||balance.date.slice(0,10)!==twDay(now))
         throw new BrokerError('Shioaji 交割戶餘額日期尚未更新，帳務稍後自動重試；歷史模擬仍可使用');
-      cash=balance.acc_balance;available.cash=true;
     } catch(error){failed('交割戶餘額',error);}};
     const readSettlements=async():Promise<void>=>{try {
       const rows=await this.read('/portfolio/settlements',z.array(z.object({amount:number,date:z.string(),T:z.number().int()})),this.selectors());
