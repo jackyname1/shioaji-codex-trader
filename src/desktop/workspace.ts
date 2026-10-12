@@ -1,6 +1,6 @@
 import type { DesktopState, RuntimeView } from './shared.js';
 
-export function simulationView(state: DesktopState): boolean { return state.runtime?.mode !== 'live'; }
+export function simulationView(state: DesktopState): boolean { return (state.workspace_mode??state.runtime?.mode) !== 'live'; }
 export function replayView(state:DesktopState):boolean{return simulationView(state)&&state.simulation_scope!=='realtime';}
 export function workspaceCutoff(state: DesktopState): string {
   return replayView(state) ? state.replay?.at ?? state.backtest_result?.asof ?? '' : new Date().toISOString();

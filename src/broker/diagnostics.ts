@@ -7,7 +7,20 @@ export interface EndpointDiagnostic {
 }
 export interface BrokerDiagnostics {
   version:string|null;stream_connected:boolean;generation:number;trade_cache:string|null;health?:BrokerHealth;
+  startup?:{phase:string;issue:string};
   endpoints:EndpointDiagnostic[];
+}
+export function mergeDiagnostics(native:BrokerDiagnostics,broker?:BrokerDiagnostics|null):BrokerDiagnostics {
+  if(!broker)return native;
+  const rows=new Map<string,EndpointDiagnostic>();
+  for(const row of [...native.endpoints,...broker.endpoints]){
+    const old=rows.get(row.endpoint);
+    if(!old){rows.set(row.endpoint,row);continue;}
+    const latest=(row.last_attempt_at??'')>=(old.last_attempt_at??'')?row:old;
+    rows.set(row.endpoint,{...latest,attempts:old.attempts+row.attempts,successes:old.successes+row.successes,failures:old.failures+row.failures,
+      last_success_at:[old.last_success_at,row.last_success_at].filter((s):s is string=>!!s).sort().at(-1)??null});
+  }
+  return {...native,...broker,version:broker.version??native.version,health:broker.health??native.health,endpoints:[...rows.values()]};
 }
 /** Metadata only: never retain a response, request body, account selector, URL query or native exception text. */
 export class RequestDiagnostics {

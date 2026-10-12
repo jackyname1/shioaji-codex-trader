@@ -68,7 +68,7 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
     const commands: string[][] = []; let probes = 0;const binary=async()=>join(root,'shioaji');const origin=async()=>'http://127.0.0.1:9081';
     const native = new NativeConnection(root,binary,{origin,run: async (_binary, args, opts) => { commands.push(args); if (args.includes('--help')) return { stdout: '--no-open' };
       assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; },fetcher: async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false, status:'degraded', token_stale:false }); },launch:((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
-      assert.deepEqual(args,['server','start','--no-open']);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_API_KEY,'TEST_KEY');
+      assert.deepEqual(args,['server','start','--no-open','--production']);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_API_KEY,'TEST_KEY');
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as typeof spawn});
     await native.start(input);assert.equal(native.connected,true);assert.equal(native.baseUrl,'http://127.0.0.1:9081');
     assert.ok(commands.every(args => !args.join(' ').includes('TEST_'))); await native.close();
@@ -78,7 +78,7 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
     const rejected = new NativeConnection(root,binary,{origin,run:async()=>({stdout:'--no-open'}),fetcher:async()=>{if(++failedProbes===1)throw new Error('offline');return Response.json({simulation:true,status:'healthy'});},launch:(()=>{
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{killed=true;child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;
     }) as unknown as typeof spawn});
-    await assert.rejects(rejected.start(input),/連線未完成/);assert.equal(killed,true);
+    await assert.rejects(rejected.start(input),/未取得正式行情/);assert.equal(killed,true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 test('a historical cache retains the complete API window when an earlier replay ends intraday', async()=>{

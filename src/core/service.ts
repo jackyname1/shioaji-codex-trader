@@ -55,9 +55,10 @@ export class TradingService {
     this.now=options.now??(()=>new Date());this.executionAdvisor=options.executionAdvisor;
     this.automaticLive=options.automaticLive??false;
     this.store = new Store(path);
+    try {
     const stored = this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {}),auto_execute:false});
     const priorMode = this.store.get<string>('database_mode');
-    if (priorMode && priorMode !== settings.mode) { this.store.close(); throw new Error('每種交易模式須使用獨立資料庫'); }
+    if (priorMode && priorMode !== settings.mode) { throw new Error('每種交易模式須使用獨立資料庫'); }
     this.store.set('database_mode',settings.mode); this.store.saveSettings(settings);
     this.store.delete('live_consent');
     this.calendar = new TradingCalendar(this.store,settings.mode === 'demo');
@@ -66,6 +67,7 @@ export class TradingService {
     this.broker = ['demo','paper'].includes(settings.mode) ? new PaperBroker(this.store,market,settings,this.calendar,settings.mode==='paper') : market;
     this.engine = new Engine(this.store,this.broker,settings,this.calendar);
     this.analystEvents=this.store.analystEvents();
+    } catch(error) {try{this.store.close();}catch{/* Preserve the initialization error. */}throw error;}
   }
   enqueue<T>(operation: () => Promise<T> | T): Promise<T> {
     const task = this.queue.then(() => { if (this.stopping) throw new Error('程式正在停止'); return operation(); });

@@ -34,9 +34,14 @@ function table(id:string,headers:string[],rows:Cell[][],empty='目前沒有資�
   host.replaceChildren(t);
 }
 let messageTimer:ReturnType<typeof setTimeout>|undefined;
-const message=(s:string):void=>{text('message',s);el('message').classList.add('visible');clearTimeout(messageTimer);messageTimer=setTimeout(()=>el('message').classList.remove('visible'),6000);};
-async function run(operation:()=>Promise<unknown>):Promise<void>{message('正在處理…');try{message(String(await operation()??'完成'));await refresh();}
-  catch(e){message(e instanceof Error?e.message.replace(/^Error invoking remote method '[^']+': Error: /,''):'操作未完成');}}
+const message=(s:string,failed=false):void=>{text('message',s);el('message').classList.add('visible');clearTimeout(messageTimer);messageTimer=setTimeout(()=>el('message').classList.remove('visible'),6000);
+  for(const dialog of document.querySelectorAll<HTMLDialogElement>('dialog[open]')){
+    let banner=dialog.querySelector<HTMLParagraphElement>('.dialog-message');if(!banner){banner=document.createElement('p');banner.className='dialog-message';banner.setAttribute('role','status');banner.setAttribute('aria-live','polite');dialog.prepend(banner);}
+    banner.textContent=s;banner?.classList.toggle('failed',failed);
+  }};
+async function run(operation:()=>Promise<unknown>):Promise<void>{message('正在處理…');try{message(String(await operation()??'完成'));}
+  catch(e){message(e instanceof Error?e.message.replace(/^Error invoking remote method '[^']+': Error: /,''):'操作未完成',true);}
+  finally{try{await refresh();}catch{message('工作台資料尚未載入，請查看連線診斷',true);}}}
 let codexDirty=false;let latestState:DesktopState|undefined;
 let settingsDirty=false,polling=false,latestSettings:Settings|undefined,renderedReport='';
 let replayPreferencesLoaded=false;
@@ -94,9 +99,19 @@ function loadSettings(s:Settings):void {
 }
 function renderRuntime(state:DesktopState):void {
   const r=workspaceRuntime(state),s=latestSettings,paper=replayView(state);
+  el('connection-dot').classList.toggle('connected',state.connected);el('connection-dot').classList.toggle('pending',!!state.connection.server_ready&&!state.connected||state.connection.busy);
+  text('sidebar-connection',state.connection.busy?'連線中':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
+  text('connection-status',`${state.connection.status} · ${state.connection.has_ca?'CA 已載入':'實盤委託需有效 CA'}`);
+  text('runtime-workspace-name',simulationView(state)?paper?'歷史回放 · 當時行情':'即時模擬 · 虛擬資金':'正式交易 · 真實帳戶');
+  text('runtime-orders-title',simulationView(state)?'模擬委託與成交':'未完成委託');
+  el('live-authorization').hidden=simulationView(state);text('live-account',state.live.account);text('live-settings-status',state.live.issues.join('；'));
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]'))button.disabled=state.connection.busy;
+  if(s){text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',!simulationView(state));}
   text('error',state.error);text('status',paper?state.backtest:state.status);text('logs',(paper?state.backtest_result?.logs??[]:state.logs).slice(-35).join('\n'));
   text('experience',state.experience);text('codex-login-status',state.codex_login);
-  if(!r||!s){text('headline','等待連線');return;}
+  if(!r||!s){text('headline',state.connection.busy?'連線中':state.connection.server_ready?'工作台尚未就緒':'請先登入 Shioaji');text('runtime-note',state.error||state.connection.status);
+    for(const id of ['cash','equity','next-strategy','watch-count'])text(id,'—');text('cash-detail','等待帳戶資料');text('settlement-detail','等待交割資料');text('data-status','工作台尚未就緒');
+    for(const id of ['positions','orders','overview-watch','watchlist','watch-changes','decisions'])table(id,['狀態'],[],'工作台尚未完成連線');return;}
   const labels={demo:'介面測試資料',paper:'模擬 · 真實行情',readonly:'實盤監控',live:'實盤 · 真實帳戶'};
   text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
   const valid=r.plan&&Date.parse(r.plan.analysis.expires_at)>Date.parse(workspaceCutoff(state));
@@ -133,7 +148,6 @@ function renderRuntime(state:DesktopState):void {
   el<HTMLButtonElement>('start-live').disabled=state.connection.busy||r.auto&&!r.paused&&!r.killed;
   el<HTMLButtonElement>('lock-live').disabled=!live.authorized&&!r.auto;
   for(const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]'))button.disabled=state.connection.busy;
-  el('connection-dot').classList.toggle('connected',r.connected);text('sidebar-connection',r.connected?'Shioaji 已連線':'等待連線');
   text('wall-clock',new Date().toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}));
   const rows=r.watch.entries.map(w=>{const q=r.quotes.find(q=>q.symbol===w.symbol&&q.odd),d=r.decisions.find(d=>d.symbol===w.symbol);
     const detail=d?.reason??(!w.eligible?w.reason:!valid?'等待有效策略':!r.auto?'等待啟動自動交易':'等待價格條件或下一輪個股決策');
@@ -162,7 +176,6 @@ function renderRuntime(state:DesktopState):void {
   table('decisions',['股票','方向','參考股數','限價界線','觸發','策略理由'],(r.plan?.analysis.decisions??[]).map(d=>[d.symbol,action[d.action]??d.action,d.shares,d.limit_price,
     d.entry_when==='IMMEDIATE'?'條件檢查後':`${d.entry_when==='BELOW'?'低於':'高於'} ${d.trigger_price}`,d.reason]),'本輪無個股委託；可能使用規則選股或全部觀望');
   text('watch-policy',`上限 ${s.watch_max_symbols} · 持倉必留`);el('watch-policy').title=`候選上限 ${s.watch_max_symbols}；持倉與掛單持續監測；連續 ${s.watch_remove_after_scans} 次不符才移除`;
-  text('connection-status',`${r.connected?'Shioaji 已連線':'等待連線'} · ${state.connection.has_ca?'CA 已載入':'可選取 CA 憑證用於實盤'}`);
   text('risk-summary',`現金保留 ${pct(s.min_cash_fraction)} · 單筆 ${pct(s.max_order_fraction)} · 單檔 ${pct(s.max_symbol_fraction)} · 日損失 ${pct(s.daily_loss_fraction)} 停止新買進`);
 }
 function renderBacktest(state:DesktopState):void {
@@ -292,9 +305,9 @@ function conditionList(id:string,rows:[string,string][],note=''):void {
 }
 function renderExtras(state:DesktopState):void {
   const diagnostic=state.broker_diagnostics;
-  text('diagnostic-status',diagnostic?`Shioaji ${diagnostic.version??'版本待確認'} · ${diagnostic.stream_connected?'行情串流已連線':'行情串流等待恢復'} · 回報快取 ${diagnostic.trade_cache??'待核對'}`:'目前沒有本機 Shioaji 端點紀錄');
+  text('diagnostic-status',diagnostic?.startup?`${state.connection.status}${diagnostic.startup.issue?' · '+diagnostic.startup.issue:''}`:diagnostic?`Shioaji ${diagnostic.version??'版本待確認'} · ${diagnostic.stream_connected?'行情串流已連線':'行情串流等待恢復'} · 回報快取 ${diagnostic.trade_cache??'待核對'}`:'尚未登入 Shioaji');
   text('diagnostic-count',diagnostic?.health?`服務 ${diagnostic.health.status} · ${diagnostic.health.session_recovering?'正在恢復登入':diagnostic.health.token_stale?'登入已過期':'登入狀態已讀取'} · ${diagnostic.health.ca_expired===false?'CA 有效':diagnostic.health.ca_expired?'CA 已過期':'CA 狀態待核對'}`:'登入後會保留各端點的讀取狀態');
-  table('diagnostic-endpoints',['端點','HTTP 讀取','最後成功','狀態與原因','重試時間'],(diagnostic?.endpoints??[]).map(e=>[`${e.stage}\n${e.endpoint}`,`${e.attempts} 次 / ${e.failures} 次失敗`,stamp(e.last_success_at),e.issue||'已取得回應',e.retry_at?stamp(e.retry_at):'—']),'尚未建立 Shioaji 連線；此視窗不會額外呼叫券商 API');
+  table('diagnostic-endpoints',['端點','HTTP 讀取','最後成功','狀態與原因','重試時間'],(diagnostic?.endpoints??[]).map(e=>[`${e.stage}\n${e.endpoint}`,`${e.attempts} 次 / ${e.failures} 次失敗`,stamp(e.last_success_at),e.issue||'已取得回應',e.retry_at?stamp(e.retry_at):'—']),diagnostic?.startup?.issue||'尚未呼叫本機 API；登入後會顯示啟動與健康檢查紀錄');
   text('native-status',state.connection.status+' · '+(state.connection.credential_message??''));el<HTMLButtonElement>('connect-api').disabled=state.connection.busy;
   text('credential-state',state.connection.remembered?'設定已保存':state.connection.credential_state==='unreadable'?'設定需重新保存':!state.connection.encrypted?'系統加密待恢復':'尚未保存設定');
   el('credential-state').title=state.connection.credential_message??'';
@@ -469,13 +482,13 @@ async function loadSavedConnection(force=false):Promise<void>{
 }
 el('choose-ca').addEventListener('click',()=>void run(async()=>{const path=await window.trader.selectFile('ca');if(path){el<HTMLInputElement>('ca-path').value=path;connectionDirty=true;}return path?'已選取 CA 憑證':'已取消選檔';}));
 el<HTMLFormElement>('connection-form').addEventListener('submit',e=>{e.preventDefault();void run(async()=>{
-  if(!latestSettings)throw new Error('連線設定尚未載入');el<HTMLButtonElement>('connect-api').disabled=true;
+  el<HTMLButtonElement>('connect-api').disabled=true;
   try{const result=await window.trader.connectApi({api_key:value('api-key'),secret_key:value('secret-key'),ca_path:value('ca-path'),ca_password:value('ca-password'),remember:checked('remember-keys')});
     connectionDirty=false;await loadSavedConnection(true);
     if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;
   }finally{el<HTMLButtonElement>('connect-api').disabled=false;}
 });});
-el('connect-saved').addEventListener('click',()=>void run(()=>window.trader.connectSaved()));el('forget-keys').addEventListener('click',()=>void run(async()=>{
+el('connect-saved').addEventListener('click',()=>void run(async()=>{const result=await window.trader.connectSaved();await loadSavedConnection(true);if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;}));el('forget-keys').addEventListener('click',()=>void run(async()=>{
   const result=await window.trader.forgetCredentials();connectionDirty=false;await loadSavedConnection(true);return result;
 }));
 
