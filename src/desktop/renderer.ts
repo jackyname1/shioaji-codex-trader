@@ -99,8 +99,9 @@ function loadSettings(s:Settings):void {
 }
 function renderRuntime(state:DesktopState):void {
   const r=workspaceRuntime(state),s=latestSettings,paper=replayView(state);
-  el('connection-dot').classList.toggle('connected',state.connected);el('connection-dot').classList.toggle('pending',!!state.connection.server_ready&&!state.connected||state.connection.busy);
-  text('sidebar-connection',state.connection.busy?'連線中':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
+  const accountOnly=state.connection.phase==='read_only';
+  el('connection-dot').classList.toggle('connected',state.connected&&!accountOnly);el('connection-dot').classList.toggle('pending',accountOnly||!!state.connection.server_ready&&!state.connected||state.connection.busy);
+  text('sidebar-connection',state.connection.busy?'連線中':accountOnly?'帳務可讀 · 委託暫停':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
   text('connection-status',`${state.connection.status} · ${state.connection.has_ca?'CA 已載入':'實盤委託需有效 CA'}`);
   text('runtime-workspace-name',simulationView(state)?paper?'歷史回放 · 當時行情':'即時模擬 · 虛擬資金':'正式交易 · 真實帳戶');
   text('runtime-orders-title',simulationView(state)?'模擬委託與成交':'未完成委託');
