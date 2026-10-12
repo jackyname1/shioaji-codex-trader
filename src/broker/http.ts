@@ -12,6 +12,7 @@ import { cachedHistory } from '../core/history-cache.js';
 import { largestStockScanner, type StockScanner } from './scanner.js';
 import { LiveSession } from '../core/live-session.js';
 import { BrokerHealthSchema, BrokerError, brokerStageIssue, marketReady, requestStage } from './health.js';
+import { RequestDiagnostics, type BrokerDiagnostics } from './diagnostics.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -20,6 +21,7 @@ const infoSchema = z.object({ simulation: z.boolean(), version: z.string(), agen
   enabled: z.boolean(), mode: z.enum(['off','all','production']), audience: z.string().nullable().optional(),
 }).optional() });
 const healthSchema = BrokerHealthSchema;
+const tradeHealthSchema=z.object({state:z.enum(['Unknown','Healthy','Degraded']),reasons:z.array(z.object({reason:z.string()}))});
 const stockSchema = z.object({ security_type: z.literal('STK'), code: z.string(), exchange: z.enum(['TSE','OTC']),
   name: z.string(), category: z.string(), reference: number, limit_down: number, limit_up: number,
   trading_suspended: z.boolean(), disposition_level: count, attention_flag: z.boolean(), update_date: z.string(),
@@ -131,37 +133,54 @@ export class ShioajiHttpBroker implements Broker {
   private eventSequence = 0;
   private lastAccount?: Account;
   private seenEvents = new Set<string>();
+  private diagnostics:RequestDiagnostics;
+  private readCooldowns=new Map<string,number>();
+  private healthCheckedAt=0;
+  private lastTradeCache:string|null=null;
   constructor(readonly store: Store, public settings: Settings, readonly allowLive = false,
-    private readonly fetcher: typeof fetch = fetch, private readonly liveSession = new LiveSession()) {
+    private readonly fetcher: typeof fetch = fetch, private readonly liveSession = new LiveSession(),private readonly clock=Date.now) {
     this.production = settings.mode === 'live';
     this.api = loopbackOrigin(settings.base_url) + '/api/v1';
+    this.diagnostics=new RequestDiagnostics(clock);
   }
+  diagnosticSnapshot():BrokerDiagnostics{return {version:this.info?.version&&/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(this.info.version)?this.info.version:null,stream_connected:this.streamReady,
+    generation:this.generation,trade_cache:this.lastTradeCache,health:this.health?structuredClone(this.health):undefined,endpoints:this.diagnostics.snapshot()};}
   async request(path: string, body?: unknown, options: { timeoutMs?: number } = {}): Promise<unknown> {
     const stage = requestStage(path);
+    const readOnly=/^\/(?:info|health|auth\/accounts|order\/(?:trades|trade_cache_health)|portfolio\/[a-z_]+|data\/)/.test(path);
+    const until=readOnly?this.readCooldowns.get(path):undefined;
+    if(until&&until>this.clock())throw new BrokerError(`Shioaji ${stage}暫時限流，${Math.ceil((until-this.clock())/1000)} 秒後自動重試`,true,429);
+    this.diagnostics.attempt(path);
     try {
     const response = await this.fetcher(this.api + path, { method: body === undefined ? 'GET' : 'POST',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body), redirect: 'error',
       signal: AbortSignal.any([this.stop.signal, AbortSignal.timeout(options.timeoutMs ?? (path.startsWith('/portfolio/') ? 45000 : 15000))]) });
-    if (!response.ok) { await response.body?.cancel(); throw new BrokerError(`Shioaji ${stage}讀取失敗（HTTP ${response.status}），請重試或檢查 API 權限`,response.status >= 500,response.status); }
-    return JSON.parse(await boundedText(response)) as unknown;
+    if (!response.ok) {
+      if(response.status===429&&readOnly){const header=response.headers.get('retry-after'),seconds=header&&/^\d+$/.test(header)?Number(header):header?(Date.parse(header)-this.clock())/1000:60;
+        this.readCooldowns.set(path,this.clock()+Math.max(1,Math.min(300,Number.isFinite(seconds)?seconds:60))*1000);}
+      await response.body?.cancel(); throw new BrokerError(`Shioaji ${stage}讀取失敗（HTTP ${response.status}）${response.status===429?'，已降低查詢頻率並等待重試':'，請重試或檢查 API 權限'}`,response.status >= 500||response.status===429,response.status);
+    }
+    const result=JSON.parse(await boundedText(response)) as unknown;this.readCooldowns.delete(path);this.diagnostics.success(path);return result;
     } catch (error) {
-      if (error instanceof BrokerError) throw error;
-      throw new BrokerError(`Shioaji ${stage}暫時無法取得，請檢查本機服務與網路`,!this.stop.signal.aborted);
+      const issue=error instanceof BrokerError?error:new BrokerError(`Shioaji ${stage}${error instanceof SyntaxError?'回傳不是有效 JSON':error instanceof Error&&error.name==='TimeoutError'?'讀取逾時':'暫時無法取得，請檢查本機服務與網路'}`,!this.stop.signal.aborted);
+      this.diagnostics.failure(path,issue.message,issue.status,this.readCooldowns.get(path));throw issue;
     }
   }
   private async read<T>(path:string,schema:z.ZodType<T>,body?:unknown):Promise<T> {
     try {return schema.parse(await this.request(path,body));}
-    catch(error){throw brokerStageIssue(requestStage(path),error);}
+    catch(error){const issue=brokerStageIssue(requestStage(path),error);
+      if(!(error instanceof BrokerError))this.diagnostics.failure(path,issue.message);throw issue;}
   }
   private selectors(): { account_type: string; broker_id: string; account_id: string } {
-    if (!this.selected) throw new Error('證券帳戶尚未選定');
+    if (!this.selected) throw new BrokerError('Shioaji 證券帳戶尚未選定，請先完成連線');
     return { account_type: 'S', broker_id: this.selected.broker_id, account_id: this.selected.account_id };
   }
   async connect(): Promise<void> {
     this.info = infoSchema.parse(await this.request('/info'));
     if (this.settings.mode !== 'demo' && this.info.simulation) throw new BrokerError('Shioaji 模擬服務不提供本程式需要的真實歷史行情');
     const health = this.health = healthSchema.parse(await this.request('/health'));
+    this.healthCheckedAt=this.clock();
     if (!marketReady(health)) throw new BrokerError(health.token_stale || health.token_expires_in_seconds === 0
       ? 'Shioaji 登入已過期，請重新連線' : 'Shioaji 登入正在恢復，請稍候重試');
     // Historical/local paper trading needs market access, never the user's bank balance or trade reports.
@@ -210,7 +229,15 @@ export class ShioajiHttpBroker implements Broker {
     const issues = this.liveStatus().issues;
     if (issues.length) throw new NoSubmissionError(issues.join('；'));
   }
-  private invalidate(): void { this.parts.clear(); this.changed.clear(); this.generation++; this.dirty = true; this.authoritativeRequired = true; }
+  private invalidate(): void { this.parts.clear(); this.changed.clear(); this.generation++; this.dirty = true; this.authoritativeRequired = true;this.tradeSubscribed=false; }
+  private async checkSession():Promise<void>{
+    if(!this.health||this.clock()-this.healthCheckedAt>=5000){
+      const previous=this.health;this.health=await this.read('/health',healthSchema);this.healthCheckedAt=this.clock();
+      if(previous&&marketReady(previous)!==marketReady(this.health)){this.tradeSubscribed=false;this.invalidate();}
+    }
+    if(!marketReady(this.health!))throw new BrokerError(this.health!.token_stale||this.health!.token_expires_in_seconds===0
+      ?'Shioaji API 登入已過期，等待登入恢復或重新連線':'Shioaji 券商連線正在恢復，暫停帳務查詢並保留最後成功資料',true);
+  }
   private async streamLoop(): Promise<void> {
     let attempt = 0;
     while (!this.stop.signal.aborted) {
@@ -218,9 +245,12 @@ export class ShioajiHttpBroker implements Broker {
       const touch = (): void => { clearTimeout(watchdog); watchdog = setTimeout(() => connection.abort(), 75000); };
       try {
         touch();
+        this.diagnostics.attempt('/stream/data');
         const response = await this.fetcher(this.api + '/stream/data?region=TW&security_type=STK', {
           headers: { Accept: 'text/event-stream' }, redirect: 'error', signal: AbortSignal.any([this.stop.signal, connection.signal]) });
-        if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('SSE 無法連接');
+        if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream'))
+          throw new BrokerError(`Shioaji 行情串流無法建立（HTTP ${response.status}）`,true,response.status);
+        this.diagnostics.success('/stream/data');
         this.streamReady = true; this.formatFault=false; this.invalidate(); attempt = 0;
         const reader = response.body.getReader(), decoder = new TextDecoder(), parser = new SseParser();
         try { for (;;) {
@@ -228,10 +258,11 @@ export class ShioajiHttpBroker implements Broker {
           touch();
           for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
             try { this.handleFrame(frame); }
-            catch { this.formatFault = true; this.invalidate(); throw new Error('SSE 格式異常，須重啟並核對'); }
+            catch(error) { this.formatFault = true; this.invalidate();throw brokerStageIssue('行情封包',error); }
           }
         } } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
-      } catch { /* A disconnect invalidates quotes; mutations are never retried here. */ }
+      } catch(error) {if(!this.stop.signal.aborted){const issue=error instanceof BrokerError?error:new BrokerError('Shioaji 行情串流中斷或心跳逾時，正在重新連線',true);
+        this.diagnostics.failure('/stream/data',issue.message,issue.status);}}
       finally { clearTimeout(watchdog); this.streamReady = false; this.invalidate(); }
       if (!this.stop.signal.aborted) await delay(Math.min(15000, 1000 * 2 ** Math.min(attempt++,4)), undefined, { signal: this.stop.signal }).catch(() => undefined);
     }
@@ -318,9 +349,14 @@ export class ShioajiHttpBroker implements Broker {
     return result;
   }
   private async refreshTrades(force = false): Promise<void> {
+    await this.checkSession();
     if (!this.tradeSubscribed) {
-      const subscription = await this.request('/auth/subscribe_trade', this.selectors()) as { subscribe_trade?: boolean };
-      if (subscription.subscribe_trade !== true) throw new BrokerError('Shioaji 委託回報尚未訂閱，正在重新核對');
+      const health=await this.read('/order/trade_cache_health',tradeHealthSchema,this.selectors());this.lastTradeCache=health.state;
+      // Cached native login retains subscriptions. Re-subscribing can disturb another account's relay (Pro ADR 0003).
+      if(health.reasons.some(r=>r.reason==='NotSubscribed')){
+        const subscription = await this.request('/auth/subscribe_trade', this.selectors()) as { subscribe_trade?: boolean };
+        if (subscription.subscribe_trade !== true) throw new BrokerError('Shioaji 委託回報尚未訂閱，正在重新核對');
+      }
       this.tradeSubscribed = true;
     }
     const generation = this.generation;
@@ -369,6 +405,12 @@ export class ShioajiHttpBroker implements Broker {
     });
   }
   async account(now: Date): Promise<Account> {
+    try{await this.checkSession();}catch(error){
+      const issue=brokerStageIssue('登入狀態',error).message;
+      const prior=this.lastAccount;
+      return AccountSchema.parse(prior?{...prior,complete:false,issue}:{asof:now.toISOString(),cash:'0',settlement_debits:'0',settlement_credits:'0',
+        positions:[],orders:[],daily_buy_amount:'0',daily_buy_count:0,complete:false,issue,available:{cash:false,settlements:false,positions:false,orders:false}});
+    }
     const start = new Date(), sequence = this.eventSequence, generation = this.generation;
     const previous = this.lastAccount;
     const available={cash:previous?.available?.cash??!!previous,settlements:previous?.available?.settlements??!!previous,
@@ -384,8 +426,10 @@ export class ShioajiHttpBroker implements Broker {
       await this.instruments([...new Set(relevant.filter(t=>d(t.order.price).lte(0)).map(t=>t.contract.code))],now);
       orders=relevant.map(t=>this.normalizeTrade(t));available.orders=true;
       buys=orders.filter(o=>o.action==='BUY'&&twDay(new Date(o.created_at))===twDay(now)&&(active(o)||o.filled>0));
-      const health=await this.read('/order/trade_cache_health',z.object({state:z.enum(['Unknown','Healthy','Degraded']),reasons:z.array(z.object({reason:z.string()}))}),this.selectors());
-      if(health.state!=='Healthy'||health.reasons.length){this.authoritativeRequired=true;throw new BrokerError('Shioaji 委託回報尚未完成核對，稍後自動重試');}
+      const health=await this.read('/order/trade_cache_health',tradeHealthSchema,this.selectors());this.lastTradeCache=health.state;
+      if(health.state!=='Healthy'||health.reasons.length){this.authoritativeRequired=true;
+        if(health.reasons.some(r=>r.reason==='NotSubscribed'))this.tradeSubscribed=false;
+        throw new BrokerError('Shioaji 委託回報快取尚未完整（'+health.state+'），保留持倉並等待重新核對',true);}
       tradesCurrent=true;available.orders=true;
     } catch(error){failed('委託回報',error);}
     const readBalance=async():Promise<void>=>{try {

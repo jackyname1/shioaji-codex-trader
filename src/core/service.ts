@@ -41,6 +41,7 @@ export class TradingService {
   private bundleTask?:Promise<Bundle>;
   private lastWatchAttempt=0;
   private lastConnectAttempt=0;
+  private lastLiveReadyAttempt=0;
   lastMonitorAt='';
   analysisStatus='等待策略排程';
   analystEvents:AnalystEvent[]=[];
@@ -333,7 +334,7 @@ export class TradingService {
         throw new Error('請先連接實盤帳戶');
       await this.broker.verifyLiveConnection();const now=this.now();
       await this.engine.reconcile(now,true);await this.engine.refreshAccount(now);
-      const state=this.liveReadiness();if(!state.ready)throw new Error('實盤尚未就緒：'+state.issues.join('；'));
+      const state=this.liveReadiness();if(!state.ready)throw new BrokerError('實盤尚未就緒：'+state.issues.join('；'),true);
       return state;
     });
   }
@@ -342,7 +343,7 @@ export class TradingService {
     await this.prepareLive();
     await this.enqueue(()=>{
       if(epoch!==this.liveEpoch)throw new Error('實盤啟動已停止');
-      const state=this.liveReadiness();if(!state.ready)throw new Error('實盤尚未就緒：'+state.issues.join('；'));
+      const state=this.liveReadiness();if(!state.ready)throw new BrokerError('實盤尚未就緒：'+state.issues.join('；'),true);
       this.liveSession.grant(this.store.get<string>('account_fingerprint')??'',scope);
       this.engine.log('LIVE_CONSENT',`${scope==='trade'?'本次實盤':'本次撤單'}授權已開啟；重新連線、重啟、鎖定或變更交易風控後失效`);
     });
@@ -350,7 +351,8 @@ export class TradingService {
   private async syncLiveSession():Promise<void>{
     // Desktop live-mode selection is the user's intent. Establish readiness independently of Codex/automation.
     // Never restore a running strategy or undo an explicit stop/lock; grants remain account-bound and in memory.
-    if(!this.automaticLive||this.stopping||this.liveAuthorized||this.engine.killed||!this.liveReadiness().ready)return;
+    if(!this.automaticLive||this.stopping||this.liveAuthorized||this.engine.killed||!this.liveReadiness().ready||Date.now()-this.lastLiveReadyAttempt<5000)return;
+    this.lastLiveReadyAttempt=Date.now();
     try {await this.activateLive();}
     catch(error){if(!this.stopping)this.engine.logOnce('LIVE_READY',brokerIssue(error));}
   }

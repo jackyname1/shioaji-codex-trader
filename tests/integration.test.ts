@@ -165,6 +165,7 @@ test('native trade reconciliation reads callbacks from cache and forces authorit
     if(path.endsWith('/openapi.json'))return Response.json({paths:Object.fromEntries([
       '/api/v1/order/trades','/api/v1/order/trade_cache_health','/api/v1/portfolio/position_unit','/api/v1/portfolio/position_detail',
       '/api/v1/stream/data','/api/v1/data/contracts/{code}/info'].map(p=>[p,{}]))});
+    if(path.endsWith('/order/trade_cache_health'))return Response.json({state:'Healthy',reasons:[]});
     if(path.endsWith('/order/trades')){modes.push(JSON.parse(String(init?.body)).refresh);return Response.json([]);}
     throw new Error('Unexpected mock endpoint');
   };

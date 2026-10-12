@@ -23,6 +23,21 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run prepare:broker
       - run: npm test
+      - name: Windows Authenticode report verification
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/sign-windows.ps1).Path, [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count) { throw 'Windows signing script syntax failed' }
+          $sample = Join-Path $env:RUNNER_TEMP 'SYNTHETIC-signature-fixture.exe'
+          Add-Type -TypeDefinition 'public class SignatureFixture { public static void Main() {} }' -OutputAssembly $sample -OutputType ConsoleApplication
+          $json = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/sign-windows.ps1 -FilePath $sample -Mode none
+          if ($LASTEXITCODE -ne 0) { throw 'Authenticode verification did not complete' }
+          $result = $json | ConvertFrom-Json
+          if ($result.status -ne 'NotSigned' -or $result.publisher -or $result.code_signing -or $result.timestamped) { throw 'An unsigned executable was incorrectly marked as a verified publisher' }
+          Remove-Item $sample -Force
       - run: npm run demo
       - run: npm run backtest:demo
       - name: Electron Windows workbench smoke test
@@ -52,7 +67,14 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: npm run pack:win
+      - run: npm run prepare:broker -- --platform=win32 --arch=x64
+      - run: npm run build
+      - run: node scripts/package-windows.mjs
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+          WINDOWS_SIGNING_CERTIFICATE_SHA1: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_SHA1 }}
+          WINDOWS_SIGNING_REQUIRED: ${{ vars.WINDOWS_SIGNING_REQUIRED }}
       - run: node scripts/release-assets.ts
       - name: Packaged app smoke test
         shell: pwsh
@@ -69,6 +91,7 @@ jobs:
             release/Shioaji-Codex-Trader-*-Windows-x64.exe
             release/README.md
             release/RELEASE_NOTES.md
+            release/WINDOWS-SIGNATURE.json
             release/SYNTHETIC-*
           if-no-files-found: error
           retention-days: 30

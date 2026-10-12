@@ -10,7 +10,7 @@ import { TradingService } from '../core/service.js';
 import { SettingsSchema,active, type Settings } from '../core/models.js';
 import { demoAnalysis } from '../core/strategy.js';
 import { Store } from '../core/store.js';
-import { loopbackOrigin } from '../broker/http.js';
+import { loopbackOrigin,ShioajiHttpBroker } from '../broker/http.js';
 import { brokerIssue, BrokerError } from '../broker/health.js';
 import type { DesktopState } from './shared.js';
 import { bundledCodexPath, CodexError, codexEnvironment, prepareCodexProfile,compactAnalystEvent } from '../core/codex.js';
@@ -162,7 +162,7 @@ function registerIpc(): void {
     settings:JSON.stringify(service?.engine.settings ?? SettingsSchema.parse({mode}),null,2),
     connected:connected(),error:initialError||(mode==='live'?service?.engine.dataIssue??'':''),backtest:backtest.text(),backtest_running:backtest.progress.running,
     backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:codexLogin.status.message,
-    codex_auth:{...codexLogin.status},
+    codex_auth:{...codexLogin.status},broker_diagnostics:diagnosticSnapshot(),
     runtime:service?{mode,auto:service.engine.settings.auto_execute,paused:service.engine.pausedEntries,killed:service.engine.killed,
       blocked:service.engine.entryBlocked,connected:connected(),session:service.calendar.inSession(new Date()),account:service.engine.account??null,
       plan:service.engine.plan??null,protections:service.store.protections(),orders:service.store.orders(true),quotes:[...service.engine.quotes.values()],
@@ -197,6 +197,12 @@ function registerIpc(): void {
     if(mode==='live'&&/^(?:cancel(?:\s|$)|cancel-all$)/.test(command)&&!service.liveCancelAuthorized)
       return enableLive(false,selected=>selected.command(command));
     return service.command(command);
+  });
+  handle('trader:export-diagnostics',async()=>{
+    const target=await dialog.showSaveDialog(window!,{title:'匯出連線診斷（不含帳號、金鑰及帳務內容）',defaultPath:'Shioaji-connection-diagnostics.json',filters:[{name:'JSON',extensions:['json']}]});
+    if(target.canceled||!target.filePath)return '已取消匯出';
+    writeFileSync(target.filePath,JSON.stringify({version:app.getVersion(),created_at:new Date().toISOString(),diagnostics:diagnosticSnapshot()},null,2),{mode:0o600});
+    return '連線診斷已匯出，不含帳號、金鑰及帳務內容';
   });
   handle('trader:settings',value => operations.run(async () => {
     if (typeof value !== 'string' || value.length > 20000 || !service) throw new Error('設定內容不合法');
@@ -330,6 +336,15 @@ function registerIpc(): void {
   handle('trader:exit',() => exit());
 }
 function connected():boolean{return smoke?!!service?.engine.connected:nativeConnection.connected;}
+function diagnosticSnapshot(){
+  if(smoke){const at=new Date().toISOString();return {version:'1.7.7',stream_connected:true,generation:1,trade_cache:'Healthy',
+    health:{status:'healthy' as const,token_stale:false,ca_expired:false},endpoints:[
+      {endpoint:'/health',stage:'登入狀態',attempts:1,successes:1,failures:0,last_attempt_at:at,last_success_at:at,issue:'',http_status:null,retry_at:null},
+      {endpoint:'/portfolio/account_balance',stage:'交割戶餘額',attempts:2,successes:1,failures:1,last_attempt_at:at,last_success_at:at,
+        issue:'隔離介面測試：Shioaji 交割戶餘額讀取失敗（HTTP 503）',http_status:503,retry_at:null}]};}
+  const broker=service?.broker instanceof PaperBroker?service.broker.market:service?.broker;
+  return broker instanceof ShioajiHttpBroker?broker.diagnosticSnapshot():null;
+}
 async function enableLive(startAutomation:boolean,afterAuthorization?:(selected:TradingService)=>Promise<string>):Promise<string>{
   return operations.run(async()=>{
     const selected=service,epoch=liveActionEpoch;
@@ -428,6 +443,17 @@ async function smokeTest(): Promise<void> {
     if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('不截斷')||!realtime.summary.includes('資料就緒')||!realtime.summary.includes('歷史已就緒 18 檔')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源、資料就緒與完整摘要未通過');
     await capture(`SYNTHETIC-ui-realtime-${width}.png`,width,height);
   }
+  await window.webContents.executeJavaScript(`document.querySelector('#open-diagnostics').click()`);await new Promise(resolve=>setTimeout(resolve,400));
+  const diag=await window.webContents.executeJavaScript(`(async()=>{const s=await window.trader.state();return {open:document.querySelector('#diagnostics-dialog').open,
+    text:document.querySelector('#diagnostic-endpoints').textContent,data:JSON.stringify(s.broker_diagnostics)};})()`);
+  if(!diag.open||!diag.text.includes('503')||!diag.text.includes('交割戶餘額')||/SYNTHETIC_KEY|SYNTHETIC_SECRET|SYNTHETIC_PASSWORD|account_id|ca_password/.test(diag.data))throw new Error('連線診斷端點、具體錯誤或敏感資料隔離未通過');
+  const originalSave=dialog.showSaveDialog;
+  try{dialog.showSaveDialog=async()=>({canceled:false,filePath:join(dataRoot,'diagnostics-fixture.json')});
+    await window.webContents.executeJavaScript(`window.trader.exportDiagnostics()`);
+    const saved=JSON.parse(readFileSync(join(dataRoot,'diagnostics-fixture.json'),'utf8'));
+    if(saved.version!==app.getVersion()||!saved.diagnostics.endpoints.length||/SYNTHETIC_KEY|SYNTHETIC_SECRET|SYNTHETIC_PASSWORD|account_id|ca_password/.test(JSON.stringify(saved)))throw new Error('診斷匯出包含敏感資料或版本未通過');
+  }finally{dialog.showSaveDialog=originalSave;}
+  await capture('SYNTHETIC-ui-diagnostics.png',1920,1080);await window.webContents.executeJavaScript(`document.querySelector('#diagnostics-dialog').close()`);
   await window.webContents.executeJavaScript(`document.querySelector('#analyst-stream [data-event-id="smoke-event-257"] details').open=true`);await new Promise(resolve=>setTimeout(resolve,400));
   const tail=service.store.analystEvent('smoke-event-259')!;service.store.recordAnalystEvent({...tail,message:tail.message+' · 串流持續更新'});service.analystEvents=service.store.analystEvents();
   await new Promise(resolve=>setTimeout(resolve,1300));
