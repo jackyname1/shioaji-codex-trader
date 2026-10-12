@@ -256,7 +256,7 @@ function renderChart():void {
   el('chart-latest').classList.toggle('active',chartViewport.following);el('chart-latest').setAttribute('aria-pressed',String(chartViewport.following));
   const protections=latestState?workspaceRuntime(latestState)?.protections:[];
   const spec=protections?.find(p=>p.symbol===chartData!.symbol)?.spec;
-  const levels=spec?[{price:Number(spec.stop_price),label:'停損',color:'#ff7d86'},...(spec.take_profit?[{price:Number(spec.take_profit),label:'停利',color:'#44d6aa'}]:[])]:[];
+  const levels=spec?[{price:Number(spec.stop_price),label:'停損',color:'var(--coral)'},...(spec.take_profit?[{price:Number(spec.take_profit),label:'停利',color:'var(--mint)'}]:[])]:[];
   const fills=(latestState?.replay?.fills??latestState?.backtest_result?.fills??[]).filter(f=>f.symbol===chartData!.symbol&&Date.parse(f.at)<=Date.parse(chartData!.asof));
   candles(el('market-chart'),chartData,{ma:checked('chart-ma'),bands:checked('chart-bands'),rsi:checked('chart-rsi'),
     offset:chartViewport.offset,count:chartViewport.count,priceScale:chartViewport.priceScale,levels,fills:value('chart-source')==='replay'?fills:[]});
