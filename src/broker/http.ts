@@ -207,7 +207,8 @@ export class ShioajiHttpBroker implements Broker {
   async close(): Promise<void> { this.stop.abort(); await this.streamTask; this.parts.clear(); }
   liveStatus(): { account: string; issues: string[] } {
     const issues: string[] = [], health = this.health;
-    if (!this.production || !this.allowLive) issues.push('請切換至實盤模式');
+    if (!this.production) issues.push('請切換至實盤模式');
+    else if(!this.allowLive)issues.push('本機實盤紀錄待修復，目前僅讀取帳務');
     if (!this.selected?.signed) issues.push('證券帳戶尚未核對');
     if (health?.ca_expired !== false || !health.ca_expires_in_days || health.ca_expires_in_days <= 0) issues.push('請載入有效 CA 憑證後重新連線');
     if (!health || health.token_stale || (health.token_expires_in_seconds !== undefined && health.token_expires_in_seconds <= 0)) issues.push('API 登入尚未確認或已過期');

@@ -11,14 +11,16 @@ export class Store {
   readonly db: DatabaseSync;
   private lockPath?: string;
   private nonce = randomUUID();
+  private closed = false;
   constructor(readonly path: string) {
     if (path !== ':memory:') {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
       this.lockPath = path + '.lock.pid';
       this.acquireLock();
     }
+    let opened: DatabaseSync | undefined;
     try {
-      this.db = new DatabaseSync(path);
+      this.db = opened = new DatabaseSync(path);
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
         CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS analyst_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
@@ -33,7 +35,7 @@ export class Store {
       const version = this.get<number>('schema_version');
       if (version !== undefined && version !== 2) throw new Error('資料庫版本不同，請使用獨立的 TypeScript 資料庫');
       this.set('schema_version', 2);
-    } catch (error) { this.releaseLock(); throw error; }
+    } catch (error) { try { opened?.close(); } catch { /* Keep the original failure. */ } finally { this.releaseLock(); } throw error; }
   }
   recordAnalystEvent(event:AnalystEvent):void {
     const id=event.id??randomUUID();
@@ -72,7 +74,7 @@ export class Store {
     try { const record = JSON.parse(readFileSync(this.lockPath, 'utf8')) as { nonce: string };
       if (record.nonce === this.nonce) unlinkSync(this.lockPath); } catch { /* already removed */ }
   }
-  close(): void { this.db.close(); this.releaseLock(); }
+  close(): void { if(this.closed)return;this.db.close();this.closed=true;this.releaseLock(); }
   get<T>(key: string): T | undefined {
     const row = this.db.prepare('SELECT value FROM kv WHERE key=?').get(key) as { value: string } | undefined;
     return row ? JSON.parse(row.value) as T : undefined;

@@ -29,7 +29,9 @@ export class DesktopSettings {
     for (const mode of [...new Set([lastMode, 'paper', 'live'])]) {
       const path = join(this.root, mode + suffix + '.db');
       if (!existsSync(path)) continue;
-      const store = new Store(path); try { if (store.get('settings')) choices.push(store.settings()); } finally { store.close(); }
+      // A damaged workspace must not block the other mode's settings or the login window.
+      try { const store = new Store(path); try { if (store.get('settings')) choices.push(store.settings()); } finally { store.close(); } }
+      catch { /* openWorkspace reports the selected journal's safe failure and keeps the original file. */ }
     }
     const defaults = SettingsSchema.parse({});
     const configured = (s: Settings): boolean => JSON.stringify(shared(s)) !== JSON.stringify(shared(defaults));
@@ -41,6 +43,7 @@ export class DesktopSettings {
   }
   save(settings: Settings): void {
     const values = shared(SettingsSchema.parse(settings));
+    this.values = values;
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     const temporary = this.path + '.' + randomUUID() + '.tmp';
     writeFileSync(temporary, JSON.stringify({ version: 1, settings: values }), { mode: 0o600 });

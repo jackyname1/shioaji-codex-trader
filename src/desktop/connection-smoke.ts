@@ -20,15 +20,17 @@ export class ConnectionSmoke {
     if(this.failWorkspace)throw new BrokerError('交易工作台隔離測試載入失敗');
     return new ShioajiHttpBroker(store,settings,false,this.fetch,session);
   };
+  reader:ConstructorParameters<typeof TradingService>[2]=(store,settings,session)=>new ShioajiHttpBroker(store,settings,false,this.fetch,session);
   fetch:typeof fetch=async(input,init)=>{
     const path=new URL(String(input)).pathname;
     if(/place_order|cancel_order/.test(path)){this.mutations++;throw new Error('Real mutations forbidden');}
-    if(path.endsWith('/info'))return Response.json({simulation:this.simulation,version:'1.7.7'});
-    if(path.endsWith('/health'))return Response.json({status:'healthy',token_stale:false,token_expires_in_seconds:3600,ca_expired:false,ca_expires_in_days:30});
+    if(path==='/api/v1/info')return Response.json({simulation:this.simulation,version:'1.7.7'});
+    if(path==='/api/v1/health')return Response.json({status:'healthy',token_stale:false,token_expires_in_seconds:3600,ca_expired:false,ca_expires_in_days:30});
     if(path.endsWith('/auth/accounts'))return Response.json([{account_type:'S',broker_id:'SYNTHETIC',account_id:'SYNTHETIC_ACCOUNT',signed:true}]);
     if(path.endsWith('/stream/data'))return new Response(new ReadableStream<Uint8Array>({start(c){c.enqueue(new TextEncoder().encode('event: heartbeat\ndata: {}\n\n'));init?.signal?.addEventListener('abort',()=>{try{c.close();}catch{}},{once:true});}}),{headers:{'content-type':'text/event-stream'}});
     if(path.endsWith('/order/trade_cache_health'))return Response.json({state:'Healthy',reasons:[]});
     if(path.endsWith('/order/trades'))return Response.json([]);
+    if(path.endsWith('/auth/subscribe_trade'))return Response.json({subscribe_trade:true});
     if(path.endsWith('/portfolio/account_balance'))return Response.json({acc_balance:100000,date:twDay(new Date())+' 10:00:00',errmsg:''});
     if(path.endsWith('/portfolio/settlements')||path.endsWith('/portfolio/position_unit'))return Response.json([]);
     if(path.endsWith('/stream/subscribe')||path.endsWith('/stream/unsubscribe'))return Response.json({success:true});
