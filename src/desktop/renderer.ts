@@ -101,10 +101,17 @@ function renderRuntime(state:DesktopState):void {
   const r=workspaceRuntime(state),s=latestSettings,paper=replayView(state);
   el('connection-dot').classList.toggle('connected',state.connected);el('connection-dot').classList.toggle('pending',!!state.connection.server_ready&&!state.connected||state.connection.busy);
   text('sidebar-connection',state.connection.busy?'連線中':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
+  text('connection-status',`${state.connection.status} · ${state.connection.has_ca?'CA 已載入':'實盤委託需有效 CA'}`);
+  text('runtime-workspace-name',simulationView(state)?paper?'歷史回放 · 當時行情':'即時模擬 · 虛擬資金':'正式交易 · 真實帳戶');
+  text('runtime-orders-title',simulationView(state)?'模擬委託與成交':'未完成委託');
+  el('live-authorization').hidden=simulationView(state);text('live-account',state.live.account);text('live-settings-status',state.live.issues.join('；'));
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]'))button.disabled=state.connection.busy;
+  if(s){text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',!simulationView(state));}
   text('error',state.error);text('status',paper?state.backtest:state.status);text('logs',(paper?state.backtest_result?.logs??[]:state.logs).slice(-35).join('\n'));
   text('experience',state.experience);text('codex-login-status',state.codex_login);
   if(!r||!s){text('headline',state.connection.busy?'連線中':state.connection.server_ready?'工作台尚未就緒':'請先登入 Shioaji');text('runtime-note',state.error||state.connection.status);
-    for(const id of ['cash','equity','next-strategy','watch-count'])text(id,'—');text('cash-detail','等待帳戶資料');text('settlement-detail','等待交割資料');text('data-status','工作台尚未就緒');return;}
+    for(const id of ['cash','equity','next-strategy','watch-count'])text(id,'—');text('cash-detail','等待帳戶資料');text('settlement-detail','等待交割資料');text('data-status','工作台尚未就緒');
+    for(const id of ['positions','orders','overview-watch','watchlist','watch-changes','decisions'])table(id,['狀態'],[],'工作台尚未完成連線');return;}
   const labels={demo:'介面測試資料',paper:'模擬 · 真實行情',readonly:'實盤監控',live:'實盤 · 真實帳戶'};
   text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
   const valid=r.plan&&Date.parse(r.plan.analysis.expires_at)>Date.parse(workspaceCutoff(state));
@@ -169,7 +176,6 @@ function renderRuntime(state:DesktopState):void {
   table('decisions',['股票','方向','參考股數','限價界線','觸發','策略理由'],(r.plan?.analysis.decisions??[]).map(d=>[d.symbol,action[d.action]??d.action,d.shares,d.limit_price,
     d.entry_when==='IMMEDIATE'?'條件檢查後':`${d.entry_when==='BELOW'?'低於':'高於'} ${d.trigger_price}`,d.reason]),'本輪無個股委託；可能使用規則選股或全部觀望');
   text('watch-policy',`上限 ${s.watch_max_symbols} · 持倉必留`);el('watch-policy').title=`候選上限 ${s.watch_max_symbols}；持倉與掛單持續監測；連續 ${s.watch_remove_after_scans} 次不符才移除`;
-  text('connection-status',`${r.connected?'Shioaji 已連線':'等待連線'} · ${state.connection.has_ca?'CA 已載入':'可選取 CA 憑證用於實盤'}`);
   text('risk-summary',`現金保留 ${pct(s.min_cash_fraction)} · 單筆 ${pct(s.max_order_fraction)} · 單檔 ${pct(s.max_symbol_fraction)} · 日損失 ${pct(s.daily_loss_fraction)} 停止新買進`);
 }
 function renderBacktest(state:DesktopState):void {

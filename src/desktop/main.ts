@@ -606,6 +606,7 @@ async function verifyConnectionLifecycle():Promise<void>{
   await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("交易工作台隔離測試載入失敗")');
   let current=await state();if(!current.connection.remembered||current.runtime||fixture.launches||current.connected||!current.broker_diagnostics?.startup?.issue)throw new Error('Missing-workspace save, no redundant login or startup diagnostic failed');
   if(!await js('document.querySelector("#settings-dialog").open && document.querySelector("#settings-dialog .dialog-message.failed").getBoundingClientRect().height>0'))throw new Error('Login error is hidden behind the modal');
+  if(!await js('!document.querySelector("#connection-status").textContent.includes("已連線") && document.querySelector("#runtime-workspace-name").textContent.includes("即時模擬")'))throw new Error('Modal connection text or pipeline mode retained a stale ready state');
   await captureConnection('SYNTHETIC-ui-login-failure.png');
   fixture.failWorkspace=false;fixture.simulation=true;
   await js('document.querySelector("#connect-saved").click()');
@@ -622,7 +623,7 @@ async function verifyConnectionLifecycle():Promise<void>{
   await wait('document.body.dataset.workspace==="live" && document.querySelector("[data-mode=live]").classList.contains("active")');
   current=await state();if(current.workspace_mode!=='live'||!current.connected)throw new Error('A paper order blocked live-workspace switching');
   fixture.failWorkspace=true;await js('window.trader.configure("paper")');await new Promise(resolve=>setTimeout(resolve,1200));
-  current=await state();if(!current.connection.server_ready||current.connected||current.runtime||!await js('document.querySelector("#sidebar-connection").textContent==="工作台待恢復" && document.querySelector("#headline").textContent==="工作台尚未就緒"'))throw new Error('Native/workspace availability still contradicts the GUI');
+  current=await state();if(!current.connection.server_ready||current.connected||current.runtime||!await js('document.querySelector("#sidebar-connection").textContent==="工作台待恢復" && document.querySelector("#headline").textContent==="工作台尚未就緒" && document.querySelector("#runtime-workspace-name").textContent.includes("即時模擬") && !document.querySelector("#connection-status").textContent.includes("已連線")'))throw new Error('Native/workspace availability still contradicts the GUI');
   await captureConnection('SYNTHETIC-ui-workspace-failure.png');
   fixture.failWorkspace=false;const launches=fixture.launches;
   await js('document.querySelector("#open-settings").click()');await new Promise(resolve=>setTimeout(resolve,400));
