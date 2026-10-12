@@ -1,26 +1,52 @@
 import { DatabaseSync } from 'node:sqlite';
-import { chmodSync, mkdirSync, openSync, readFileSync, closeSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, openSync, readFileSync, closeSync, unlinkSync, writeFileSync, fstatSync, statSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { ExperienceSchema, ReviewSchema, type Experience, type ExperienceReview } from './experience.js';
 import { AccountSchema, OrderSchema, PlanSchema, ProtectionSchema, SessionSchema, SettingsSchema,
   active, storedSettings, type Account, type Order, type Plan, type Protection, type SessionDay, type Settings } from './models.js';
 import type { AnalystEvent } from './codex.js';
+import {processState,type ProcessState} from './store-process.js';
+
+// A transient Windows unlink denial may outlive SQLite.close(). Only a nonce
+// released by this process is eligible for a retry while its PID still exists.
+const releasedLocks=new Map<string,string>();
+
+export type StoreOperation='directory'|'lock_create'|'lock_read'|'lock_owner'|'lock_remove'|'database_open'|'permissions'|'schema'|'write';
+export class StoreOpenError extends Error {
+  readonly code?:string;readonly errcode?:number;
+  constructor(readonly operation:StoreOperation,error:unknown){
+    const value=error&&typeof error==='object'?error as {message?:unknown;code?:unknown;errcode?:unknown}:{};
+    const safeMessages=['資料庫版本不同，請使用獨立的 TypeScript 資料庫','這個資料庫已有執行中的程式'];
+    super(typeof value.message==='string'&&safeMessages.includes(value.message)?value.message:'本機紀錄初始化未完成');
+    this.name='StoreOpenError';
+    if(typeof value.code==='string')this.code=value.code;
+    if(typeof value.errcode==='number')this.errcode=value.errcode;
+  }
+}
 
 export class Store {
   readonly db: DatabaseSync;
   private lockPath?: string;
   private nonce = randomUUID();
   private closed = false;
-  constructor(readonly path: string) {
-    if (path !== ':memory:') {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-      this.lockPath = path + '.lock.pid';
-      this.acquireLock();
-    }
+  private ownsLock=false;
+  private operation:StoreOperation='directory';
+  constructor(readonly path: string,private readonly options:{platform?:NodeJS.Platform;probeProcess?:(pid:number)=>ProcessState}={}) {
     let opened: DatabaseSync | undefined;
     try {
+      if (path !== ':memory:') {
+        mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+        this.lockPath = path + '.lock.pid';
+        this.acquireLock();
+      }
+      this.operation='database_open';
       this.db = opened = new DatabaseSync(path);
+      // Tighten POSIX permissions before writing tables. On Windows chmod only
+      // changes the read-only attribute; the user's directory ACL already protects it.
+      this.operation='permissions';
+      if(path!==':memory:'&&(this.options.platform??process.platform)!=='win32')chmodSync(path,0o600);
+      this.operation='schema';
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
         CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS analyst_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
@@ -31,11 +57,13 @@ export class Store {
         CREATE TABLE IF NOT EXISTS experiences (id TEXT PRIMARY KEY, at TEXT NOT NULL, mode TEXT NOT NULL, value TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS experiences_scope_time ON experiences(mode,at);
         CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, at TEXT NOT NULL, mode TEXT NOT NULL, value TEXT NOT NULL);`);
-      if (path !== ':memory:') chmodSync(path, 0o600);
       const version = this.get<number>('schema_version');
       if (version !== undefined && version !== 2) throw new Error('資料庫版本不同，請使用獨立的 TypeScript 資料庫');
+      this.operation='write';
       this.set('schema_version', 2);
-    } catch (error) { try { opened?.close(); } catch { /* Keep the original failure. */ } finally { this.releaseLock(); } throw error; }
+    } catch (error) { let safelyClosed=!opened;try { opened?.close();safelyClosed=true; } catch { /* Keep the original failure and its lock. */ }
+      if(safelyClosed)this.releaseLock();
+      throw error instanceof StoreOpenError?error:new StoreOpenError(this.operation,error); }
   }
   recordAnalystEvent(event:AnalystEvent):void {
     const id=event.id??randomUUID();
@@ -53,26 +81,50 @@ export class Store {
   }
   private acquireLock(): void {
     const path = this.lockPath!;
-    try { const fd = openSync(path, 'wx', 0o600); writeFileSync(fd, JSON.stringify({ pid: process.pid, nonce: this.nonce })); closeSync(fd); }
+    this.operation='lock_create';
+    let fd:number;
+    try {fd=openSync(path,'wx',0o600);}
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const platform=this.options.platform??process.platform,code=(error as NodeJS.ErrnoException).code;
+      // Windows reports EPERM rather than EEXIST for an existing hidden file
+      // opened with 'w'. Read and verify that lock before attempting any cleanup.
+      if(code!=='EEXIST'&&!(platform==='win32'&&code==='EPERM'&&existsSync(path)))throw error;
+      this.operation='lock_read';
       let record: { pid: number; nonce: string };
-      try { record = JSON.parse(readFileSync(path, 'utf8')) as typeof record; }
-      catch { throw new Error('程式鎖無法辨識，請確認沒有執行中的程式後人工移除 .lock.pid'); }
-      if (!Number.isSafeInteger(record.pid) || record.pid <= 0) throw new Error('程式鎖資料不完整');
-      try { process.kill(record.pid, 0); throw new Error('這個資料庫已有執行中的程式'); }
-      catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== 'ESRCH') throw e;
-        // Compare before removing a stale lock. A competing process's lock is never removed.
-        if (readFileSync(path, 'utf8') !== JSON.stringify(record)) throw new Error('程式鎖已更新');
-        unlinkSync(path); this.acquireLock();
-      }
+      const contents=readFileSync(path,'utf8'),identity=statSync(path);
+      try { record = JSON.parse(contents) as typeof record; }
+      catch { throw Object.assign(new Error('程式鎖無法辨識'),{code:'LOCK_INVALID'}); }
+      if (!record||!Number.isSafeInteger(record.pid)||record.pid<=0||typeof record.nonce!=='string'||!record.nonce)
+        throw Object.assign(new Error('程式鎖資料不完整'),{code:'LOCK_INVALID'});
+      this.operation='lock_owner';
+      const releasedHere=record.pid===process.pid&&releasedLocks.get(path)===record.nonce;
+      const owner=releasedHere?{state:'absent' as const}:this.options.probeProcess?.(record.pid)??processState(record.pid,platform);
+      // Legacy locks contain only a PID. A later process start proves the PID was
+      // reused; leave a generous margin for legacy filesystem timestamp precision.
+      const reused=platform==='win32'&&owner.state==='running'&&owner.startedAt!==undefined&&owner.startedAt>identity.mtimeMs+5000;
+      if(owner.state==='unknown')throw Object.assign(new Error('無法確認程式鎖擁有者'),{code:'LOCK_OWNER_UNKNOWN'});
+      if(owner.state==='running'&&!reused)throw new Error('這個資料庫已有執行中的程式');
+      this.operation='lock_remove';
+      const current=statSync(path);
+      if(current.dev!==identity.dev||current.ino!==identity.ino||readFileSync(path,'utf8')!==contents)
+        throw Object.assign(new Error('程式鎖已更新'),{code:'LOCK_CHANGED'});
+      unlinkSync(path);releasedLocks.delete(path);this.acquireLock();return;
     }
+    this.ownsLock=true;
+    let identity:ReturnType<typeof fstatSync>|undefined;
+    try {identity=fstatSync(fd);writeFileSync(fd,JSON.stringify({pid:process.pid,nonce:this.nonce}));}
+    catch(error){
+      // A failed write can leave an empty lock. Remove only the file we created.
+      try {const current=statSync(path);if(identity&&current.dev===identity.dev&&current.ino===identity.ino){closeSync(fd);fd=-1;unlinkSync(path);}}
+      catch{/* Keep the original storage error and never remove a replacement lock. */}
+      this.ownsLock=false;throw error;
+    }finally{if(fd!==-1)closeSync(fd);}
   }
   private releaseLock(): void {
-    if (!this.lockPath) return;
+    if (!this.lockPath||!this.ownsLock) return;
+    releasedLocks.set(this.lockPath,this.nonce);
     try { const record = JSON.parse(readFileSync(this.lockPath, 'utf8')) as { nonce: string };
-      if (record.nonce === this.nonce) unlinkSync(this.lockPath); } catch { /* already removed */ }
+      if (record.nonce === this.nonce) {unlinkSync(this.lockPath);releasedLocks.delete(this.lockPath);this.ownsLock=false;} } catch { /* Leave unverified or inaccessible locks intact. */ }
   }
   close(): void { if(this.closed)return;this.db.close();this.closed=true;this.releaseLock(); }
   get<T>(key: string): T | undefined {
