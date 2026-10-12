@@ -1,6 +1,8 @@
 param([Parameter(Mandatory=$true)][string]$FilePath,[ValidateSet('none','pfx','store')][string]$Mode='none')
 $ErrorActionPreference='Stop'
+[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
 $certificate=$null;$imported=$false;$temporary=$null
+$stage='certificate';$status='not_checked'
 try {
   if ($Mode -eq 'pfx') {
     if (!$env:WINDOWS_SIGNING_PFX_BASE64 -or !$env:WINDOWS_SIGNING_PFX_PASSWORD) { throw 'Code-signing certificate or password is missing.' }
@@ -27,12 +29,16 @@ try {
     $null=& $tools[0].FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 $certificate.Thumbprint $FilePath 2>&1
     if ($LASTEXITCODE -ne 0) { throw 'Windows code signing failed.' }
   }
+  $stage='read_signature'
   $signature=Get-AuthenticodeSignature -FilePath $FilePath
+  $status=$signature.Status.ToString()
+  $stage='verify_signature'
   $trusted=$signature.Status -eq 'Valid'
   $timestamped=$null -ne $signature.TimeStamperCertificate
   $eku=$trusted -and @($signature.SignerCertificate.EnhancedKeyUsageList | Where-Object {$_.ObjectId -eq '1.3.6.1.5.5.7.3.3'}).Count -gt 0
   if ($Mode -ne 'none' -and (!$trusted -or !$timestamped -or !$eku)) { throw 'The publisher signature or trusted timestamp could not be verified.' }
   if ($Mode -eq 'none' -and $signature.Status -ne 'NotSigned') { throw 'An unexpected signature exists on the unsigned build.' }
+  $stage='report_hash'
   [PSCustomObject]@{
     name=[IO.Path]::GetFileName($FilePath);sha256=(Get-FileHash $FilePath -Algorithm SHA256).Hash.ToLowerInvariant()
     status=$signature.Status.ToString();timestamped=$timestamped;code_signing=[bool]$eku
@@ -41,7 +47,7 @@ try {
   } | ConvertTo-Json -Compress
 } catch {
   # No native signer exception or credential material is printed.
-  [Console]::Error.WriteLine('Windows signature verification failed. Check the code-signing certificate, trusted chain, timestamp and SDK configuration.')
+  [Console]::Error.WriteLine(('Windows signature verification failed at {0}; Authenticode status: {1}. Check the code-signing certificate, trusted chain, timestamp and SDK configuration.' -f $stage,$status))
   exit 1
 } finally {
   if ($temporary -and (Test-Path $temporary)) { Remove-Item -Force $temporary }
