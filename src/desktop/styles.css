@@ -24,3 +24,7 @@ body[data-workspace=live] .chart-column,body[data-workspace=paper][data-simulati
 input[data-saved=true]{border-color:#356353;background:#132324}
 @media(max-width:1450px){.terminal-header{gap:8px}.brand strong{font-size:14px}.brand strong span{font-size:10px}.simulation-switch button{padding:3px 6px;font-size:9px}.header-actions{gap:5px}.runtime-control-heading>.subtle{max-width:110px}.runtime-flow>strong{font-size:9px}.runtime-flow>small{font-size:8px}}
 @media(max-height:800px){.runtime-controls{padding:6px 8px;gap:4px}.runtime-controls>p{display:none}.effective-model{padding:2px 5px}.codex-config{gap:5px}body[data-workspace=live] .chart-column,body[data-workspace=paper][data-simulation=realtime] .chart-column{grid-template-rows:auto minmax(225px,1fr) 145px}}
+/* Status belongs inside the modal's top layer so login failures remain visible. */
+.dialog-message{position:sticky;top:0;z-index:2;display:block;padding:10px 12px;margin:0 0 12px;border:1px solid #395b84;border-radius:6px;background:#172638;color:#d7eaff;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.dialog-message.failed{border-color:#a14a58;background:#3a2029;color:#ffd0d7}
+.dot.pending{background:#e5b55a}

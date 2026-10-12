@@ -18,7 +18,10 @@ import { BacktestController } from '../core/backtest-controller.js';
 import { BacktestRequestSchema,fillsCsv } from '../core/backtest.js';
 import { experienceStatus } from '../core/experience.js';
 import { z } from 'zod';
-import { CredentialVault,NativeConnection,connectionInput,type CredentialState } from './credentials.js';
+import { CredentialVault,CredentialError,NativeConnection,connectionInput,type CredentialState } from './credentials.js';
+import {actualOrdersBlock,reconnectBlocked,connectionView} from './connection-state.js';
+import {mergeDiagnostics} from '../broker/diagnostics.js';
+import {ConnectionSmoke} from './connection-smoke.js';
 import { liveChart } from '../core/live-chart.js';
 import { ChartRequestSchema } from '../core/chart.js';
 import { bundledShioajiPath } from './broker-runtime.js';
@@ -41,6 +44,8 @@ let backtest:BacktestController;
 let vault:CredentialVault,nativeConnection:NativeConnection;
 let credentialState:CredentialState={remembered:false,state:'empty',message:'尚未保存登入設定'};
 let connectionBusy=false,chartBusy=false;const chartAbort=new AbortController();
+let loginStage='',smokeConnection=false;
+let smokeMarket:ConstructorParameters<typeof TradingService>[2];
 const operations=new DesktopOperations();let liveActionEpoch=0;
 const brokerPath=():Promise<string>=>bundledShioajiPath(app.isPackaged?join(process.resourcesPath,'shioaji'):join(directory,'../../../resources/shioaji'));
 let commonSettings:DesktopSettings,codexLogin:CodexLogin;
@@ -73,15 +78,14 @@ else {
     if(smoke){codexLogin.status.state='signed_out';codexLogin.status.message='隔離測試：不會使用真實 Codex 登入';}
     createWindow(); createTray(); registerIpc();
     if(!smoke)void codexLogin.check();
-    if(saved&&!smoke){connectionBusy=true;try{await operations.run(async()=>{await nativeConnection.start(saved);await connect(mode);});}
-      catch(error){initialError=error instanceof Error?error.message:'Shioaji 自動登入未完成，請重新連線';}finally{connectionBusy=false;}}
+    if(saved&&!smoke)try{await operations.run(()=>login(saved));}catch(error){initialError=desktopIssue(error);}
     if(quitting)return;
     if (service?.engine.settings.keep_awake) blocker = powerSaveBlocker.start('prevent-app-suspension');
     if (service?.engine.settings.start_minimized && tray && !smoke) window!.hide();
     if (smoke) await smokeTest();
   }).catch(error => { console.error(smoke ? error : '桌面啟動失敗'); app.exit(1); });
 }
-async function connect(nextMode: Settings['mode'],override?:Settings): Promise<void> {
+async function connect(nextMode: Settings['mode'],override?:Settings,start=true): Promise<void> {
   if (service) await service.close(); service = undefined; initialError = ''; mode = nextMode;
   try {
     const base=nativeConnection.baseUrl,index=override?.stock_account_index??commonSettings.accountIndex;
@@ -93,15 +97,43 @@ async function connect(nextMode: Settings['mode'],override?:Settings): Promise<v
         store.set('legacy_account_origin',store.settings().base_url);
       store.saveSettings(commonSettings.apply(store.settings(),mode,base,override));
     }finally{store.close();}
-    service = new TradingService(path,mode,undefined,{automaticLive:!smoke&&mode==='live'});
+    service = new TradingService(path,mode,smokeConnection?smokeMarket:undefined,{automaticLive:!smoke&&mode==='live'});
     commonSettings.save(service.engine.settings);
     preferences.last_mode=mode;preferences.connections[mode]={base_url:base,stock_account_index:index};
     if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
     if(!smoke)service.engine.setSettings({...service.engine.settings,auto_execute:false});
-    if(smoke||nativeConnection.connected)await service.start(!smoke);
+    if(start&&((smoke&&!smokeConnection)||nativeConnection.connected))await service.start(!smoke);
   }
-  catch(error) {initialError=mode==='demo'?'模擬程式啟動失敗':brokerIssue(error);}
+  catch(error) {initialError=mode==='demo'?'模擬程式啟動失敗':desktopIssue(error);}
 }
+function desktopIssue(error:unknown):string {
+  if(error instanceof CredentialError)return error.message;
+  if(error instanceof Error&&error.message==='這個資料庫已有執行中的程式')return '交易工作台資料庫仍由另一個程式使用，請從系統匣完全結束舊版後重試';
+  return brokerIssue(error);
+}
+async function login(input:unknown):Promise<string>{
+  if(connectionBusy)throw new Error('連線仍在進行');
+  if(backtest.progress.running)throw new Error('回測仍在執行，請先停止再重新連線');
+  const saved=await vault.read(),validated=connectionInput(input,saved);
+  const sameLogin=nativeConnection.hasLoginIdentity?nativeConnection.sameLogin(validated):!!saved&&saved.api_key===validated.api_key&&saved.secret_key===validated.secret_key;
+  if(reconnectBlocked(mode,!!(service?.store.orders(true).length||service?.engine.account?.orders.some(active)),sameLogin))
+    throw new Error('實盤仍有未完成委託，請先核對後再變更 API 金鑰；相同登入可重新連線核對');
+  connectionBusy=true;initialError='';
+  try{
+    const settings=SettingsSchema.parse({...service?.engine.settings??commonSettings.apply(SettingsSchema.parse({mode}),mode,nativeConnection.baseUrl),auto_execute:false});
+    loginStage='正在加密保存登入設定';
+    try{await vault.save(validated);}finally{credentialState=await vault.status();}
+    loginStage='正在準備交易工作台';await connect(mode,settings,false);
+    if(!service)throw new BrokerError(initialError||'交易工作台尚未建立');
+    loginStage='';await nativeConnection.start(validated);
+    loginStage='正在載入帳務與行情';await connect(mode,settings);
+    if(!service?.engine.connected)throw new BrokerError(initialError||service?.engine.dataIssue||'交易工作台尚未完成連線');
+    return validated.remember?'Shioaji 已連線，登入設定已保存':'Shioaji 已連線，本次設定未保存';
+  }catch(error){if(!(error instanceof z.ZodError))initialError=desktopIssue(error);throw error;}
+  finally{connectionBusy=false;loginStage='';}
+}
+function connectionStatus(){return connectionView((smoke&&!smokeConnection)||nativeConnection.connected,!!service?.engine.connected,
+  connectionBusy||operations.busy,loginStage||nativeConnection.status,initialError||(!nativeConnection.connected&&nativeConnection.phase==='failed'?nativeConnection.status:''));}
 function createWindow(): void {
   window = new BrowserWindow({width:1600,height:960,minWidth:1100,minHeight:680,icon:join(directory,'assets/app.png'),title:'Shioaji Codex Trader',
     backgroundColor:'#0c1016',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
@@ -159,8 +191,8 @@ function registerIpc(): void {
     });
   };
   handle('trader:state',() => ({status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
-    settings:JSON.stringify(service?.engine.settings ?? SettingsSchema.parse({mode}),null,2),
-    connected:connected(),error:initialError||(mode==='live'?service?.engine.dataIssue??'':''),backtest:backtest.text(),backtest_running:backtest.progress.running,
+    settings:JSON.stringify(service?.engine.settings ?? commonSettings.apply(SettingsSchema.parse({mode}),mode,nativeConnection.baseUrl),null,2),
+    connected:connected(),workspace_mode:mode==='live'?'live':'paper',error:initialError||service?.engine.dataIssue||'',backtest:backtest.text(),backtest_running:backtest.progress.running,
     backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:codexLogin.status.message,
     codex_auth:{...codexLogin.status},broker_diagnostics:diagnosticSnapshot(),
     runtime:service?{mode,auto:service.engine.settings.auto_execute,paused:service.engine.pausedEntries,killed:service.engine.killed,
@@ -177,7 +209,7 @@ function registerIpc(): void {
       workflow:backtest.report.workflow?.slice(-400),failures:backtest.report.failures?.slice(-20),
       timeline:backtest.report.timeline?.filter((_,index,rows)=>index%Math.max(1,Math.ceil(rows.length/1500))===0||index===rows.length-1)}:null,
     backtest_history:backtest.history,backtest_comparisons:backtest.comparisons,
-    connection:{status:nativeConnection.status,remembered:credentialState.remembered,credential_state:credentialState.state,
+    connection:{...connectionStatus(),remembered:credentialState.remembered,credential_state:credentialState.state,
       credential_message:credentialState.message,encrypted:secureAvailable(),busy:connectionBusy||operations.busy,has_ca:nativeConnection.hasCa},
     live:smoke&&mode==='live'?{authorized:false,ready:false,account:'隔離測試帳戶',issues:['測試資料：不會啟用實盤交易']}
       :service?.liveReadiness()??{authorized:false,ready:false,account:'尚未連接帳戶',issues:['請先連接 Shioaji']},
@@ -226,7 +258,7 @@ function registerIpc(): void {
     const next = z.enum(['paper','live']).parse(value);
     if(next===mode)return '目前已是'+(next==='live'?'實盤':'模擬')+'模式';
     if(backtest.progress.running||connectionBusy)throw new Error('目前仍有模擬或連線在進行，請先停止再切換模式');
-    if (service?.store.orders(true).length||service?.engine.account?.orders.some(active)) throw new Error('目前模式仍有未完成委託，請先核對並處理');
+    if (actualOrdersBlock(mode,!!(service?.store.orders(true).length||service?.engine.account?.orders.some(active)))) throw new Error('實盤仍有未完成委託，請先核對並處理');
     await connect(next); return initialError || '已切換到 ' + next;
   }));
   handle('trader:authorize',() => enableLive(true));
@@ -282,20 +314,7 @@ function registerIpc(): void {
     const result=await dialog.showOpenDialog(window!,{title:'選取 CA 憑證',properties:['openFile'],filters:[{name:'CA 憑證',extensions:['pfx','p12']}]});
     return result.canceled?'':result.filePaths[0]??'';
   });
-  const apiConnect=(input:unknown):Promise<string>=>operations.run(async()=>{
-    if(connectionBusy)throw new Error('連線仍在進行');if(!service)throw new Error('連線設定尚未載入');
-    if(backtest.progress.running||service.store.orders(true).length||service.engine.account?.orders.some(active))throw new Error('目前仍有回測或未完成委託，不能變更 API 連線');
-    connectionBusy=true;
-    try{const settings=SettingsSchema.parse({...service.engine.settings,auto_execute:false});
-      const validated=connectionInput(input,await vault.read());
-      // Saving is independent of native login/account readiness, and cannot silently clear the previous successful save.
-      try{await vault.save(validated);}finally{credentialState=await vault.status();}
-      await service.close();service=undefined;
-      await nativeConnection.close();await nativeConnection.start(validated);
-      await connect(mode,settings);
-      return initialError||'Shioaji 已連線，可開始模擬或 Codex 分析';
-    }finally{connectionBusy=false;if(!service)await connect(mode);}
-  });
+  const apiConnect=(input:unknown):Promise<string>=>operations.run(()=>login(input));
   handle('trader:connect-api',apiConnect);
   handle('trader:connect-saved',async()=>{const input=await vault.read();if(!input)throw new Error('尚未記住 API 金鑰');return apiConnect(input);});
   handle('trader:forget-credentials',()=>operations.run(async()=>{await vault.clear();credentialState=await vault.status();return '已移除記住的金鑰與憑證設定';}));
@@ -335,15 +354,16 @@ function registerIpc(): void {
   });
   handle('trader:exit',() => exit());
 }
-function connected():boolean{return smoke?!!service?.engine.connected:nativeConnection.connected;}
+function connected():boolean{return ((smoke&&!smokeConnection)||nativeConnection.connected)&&!!service?.engine.connected;}
 function diagnosticSnapshot(){
-  if(smoke){const at=new Date().toISOString();return {version:'1.7.7',stream_connected:true,generation:1,trade_cache:'Healthy',
+  if(smoke&&!smokeConnection){const at=new Date().toISOString();return {version:'1.7.7',stream_connected:true,generation:1,trade_cache:'Healthy',
     health:{status:'healthy' as const,token_stale:false,ca_expired:false},endpoints:[
       {endpoint:'/health',stage:'登入狀態',attempts:1,successes:1,failures:0,last_attempt_at:at,last_success_at:at,issue:'',http_status:null,retry_at:null},
       {endpoint:'/portfolio/account_balance',stage:'交割戶餘額',attempts:2,successes:1,failures:1,last_attempt_at:at,last_success_at:at,
         issue:'隔離介面測試：Shioaji 交割戶餘額讀取失敗（HTTP 503）',http_status:503,retry_at:null}]};}
   const broker=service?.broker instanceof PaperBroker?service.broker.market:service?.broker;
-  return broker instanceof ShioajiHttpBroker?broker.diagnosticSnapshot():null;
+  const result=mergeDiagnostics(nativeConnection.diagnostics(),broker instanceof ShioajiHttpBroker?broker.diagnosticSnapshot():null);
+  result.startup={phase:connectionStatus().phase,issue:initialError||result.startup?.issue||''};return result;
 }
 async function enableLive(startAutomation:boolean,afterAuthorization?:(selected:TradingService)=>Promise<string>):Promise<string>{
   return operations.run(async()=>{
@@ -560,7 +580,7 @@ async function smokeTest(): Promise<void> {
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
   for(const status of ['ready','active','paused','offline'])if(trayIcon(status).isEmpty())throw new Error('原生狀態圖示未打包');
-  console.log('Electron single workspace at 1366/1600/1920, realtime paper/replay/live, complete model journal, masked saved credentials, built-in Shioaji, chart gestures and native status icons: PASS'); await exit();
+  console.log('Electron single workspace at 1366/1600/1920, realtime paper/replay/live, complete model journal, masked saved credentials, built-in Shioaji, chart gestures and native status icons: PASS');await verifyConnectionLifecycle();await exit();
 }
 async function verifyRenderer(): Promise<void> {
   const result = await window!.webContents.executeJavaScript(`(async () => ({ bridge: typeof window.trader?.state === 'function',
@@ -568,6 +588,52 @@ async function verifyRenderer(): Promise<void> {
     workspaces:document.querySelectorAll('.terminal-grid').length,codex:!!document.querySelector('.codex-panel'),
     csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content }))()`);
   if (!result.bridge || result.node !== 'undefined' || !result.status || !result.csp || result.workspaces!==1||!result.codex) throw new Error('安全 IPC 或單一工作台未載入');
+}
+async function verifyConnectionLifecycle():Promise<void>{
+  if(!smoke||!window||!service)throw new Error('Connection test must be isolated');
+  const sample=service.store.orders()[0];await service.close();service=undefined;
+  const originalNative=nativeConnection;await originalNative.close();
+  const fixture=new ConnectionSmoke();smokeConnection=true;smokeMarket=fixture.market;
+  if(!window.webContents.debugger.isAttached())window.webContents.debugger.attach('1.3');
+  nativeConnection=fixture.native(join(dataRoot,'connection-fixture'));mode='paper';simulationScope='realtime';
+  await vault.clear();credentialState=await vault.status();initialError='';fixture.failWorkspace=true;
+  const js=(source:string)=>window!.webContents.executeJavaScript(source);
+  const wait=async(condition:string)=>{const deadline=Date.now()+12000;while(!await js(condition)){
+    if(Date.now()>deadline)throw new Error('First-login GUI regression did not finish: '+condition);await new Promise(resolve=>setTimeout(resolve,80));}};
+  const state=()=>js('window.trader.state()') as Promise<DesktopState>;
+  await js('document.querySelector("#open-settings").click()');await new Promise(resolve=>setTimeout(resolve,400));
+  await js('for(const [id,value] of [["api-key","SYNTHETIC_KEY"],["secret-key","SYNTHETIC_SECRET"]]){const el=document.getElementById(id);el.value=value;el.dispatchEvent(new Event("input",{bubbles:true}));}document.querySelector("#remember-keys").checked=true;document.querySelector("#connect-api").click()');
+  await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("交易工作台隔離測試載入失敗")');
+  let current=await state();if(!current.connection.remembered||current.runtime||fixture.launches||current.connected||!current.broker_diagnostics?.startup?.issue)throw new Error('Missing-workspace save, no redundant login or startup diagnostic failed');
+  if(!await js('document.querySelector("#settings-dialog").open && document.querySelector("#settings-dialog .dialog-message.failed").getBoundingClientRect().height>0'))throw new Error('Login error is hidden behind the modal');
+  await captureConnection('SYNTHETIC-ui-login-failure.png');
+  fixture.failWorkspace=false;fixture.simulation=true;
+  await js('document.querySelector("#connect-saved").click()');
+  await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("未取得正式行情")');
+  current=await state();if(!current.connection.remembered||!current.broker_diagnostics?.endpoints.some(e=>e.endpoint==='/info')||current.connected)throw new Error('A failed native login lost its saved settings or endpoint record');
+  if(JSON.stringify(current.broker_diagnostics).includes('SYNTHETIC_'))throw new Error('Startup diagnostics leaked credential/account fixture data');
+  fixture.simulation=false;await js('document.querySelector("#connect-saved").click()');
+  await wait('!document.querySelector("#settings-dialog").open && document.querySelector("#sidebar-connection").textContent.includes("已連線")');
+  current=await state();if(!current.connected||!current.runtime?.connected||!current.connection.remembered)throw new Error('Saved-login recovery failed');
+  const paperService=service as TradingService|undefined;
+  if(!sample||!paperService)throw new Error('Pending paper order fixture unavailable');
+  paperService.store.insertIntent({...sample,local_id:'SYNTHETIC-PENDING',tag:'SYN001',status:'PENDING',filled:0});
+  await js('document.querySelector("[data-mode=live]").click()');
+  await wait('document.body.dataset.workspace==="live" && document.querySelector("[data-mode=live]").classList.contains("active")');
+  current=await state();if(current.workspace_mode!=='live'||!current.connected)throw new Error('A paper order blocked live-workspace switching');
+  fixture.failWorkspace=true;await js('window.trader.configure("paper")');await new Promise(resolve=>setTimeout(resolve,1200));
+  current=await state();if(!current.connection.server_ready||current.connected||current.runtime||!await js('document.querySelector("#sidebar-connection").textContent==="工作台待恢復" && document.querySelector("#headline").textContent==="工作台尚未就緒"'))throw new Error('Native/workspace availability still contradicts the GUI');
+  await captureConnection('SYNTHETIC-ui-workspace-failure.png');
+  fixture.failWorkspace=false;const launches=fixture.launches;
+  await js('document.querySelector("#open-settings").click()');await new Promise(resolve=>setTimeout(resolve,400));
+  await js('document.querySelector("#connect-api").click()');
+  await wait('!document.querySelector("#settings-dialog").open && document.querySelector("#sidebar-connection").textContent.includes("已連線")');
+  current=await state();if(!current.connected||fixture.launches!==launches||fixture.mutations)throw new Error('Retry required another login or attempted a live mutation');
+  await captureConnection('SYNTHETIC-ui-login-ready.png');
+  console.log('Cold-start login, encrypted-save failure/recovery, modal feedback, shared live login and zero live mutations passed.');
+  async function captureConnection(name:string){const root=process.env.TRADER_SMOKE_OUTPUT??join(directory,'../../../release');mkdirSync(root,{recursive:true});
+    await js('document.querySelector("#mode-badge").textContent="隔離連線測試 · 虛構資料"');
+    const shot=await window!.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}) as {data:string};writeFileSync(join(root,name),Buffer.from(shot.data,'base64'));}
 }
 async function exit(): Promise<void> {
   if (quitting) return;
