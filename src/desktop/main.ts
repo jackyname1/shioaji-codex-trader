@@ -687,11 +687,18 @@ async function verifyConnectionLifecycle():Promise<void>{
   if(!await js('!document.querySelector("#workspace-retry").hidden && !document.querySelector("#workspace-retry").disabled'))throw new Error('Local recovery button is unavailable in account-read-only mode');
   await js('document.querySelector("#workspace-retry").click()');
   await wait('document.querySelector("#diagnostics-dialog .dialog-message.failed")?.textContent.includes("SCHEMA_VERSION")');
-  current=await state();if(!current.connected||!current.runtime?.account?.complete||!current.live.issues.some(i=>i.includes('SCHEMA_VERSION'))||fixture.mutations)throw new Error('An unsuccessful journal retry lost account reads or enabled live trading');
+  current=await state();const failedRetry=service as TradingService|undefined;
+  if(!current.connected||!current.runtime?.account?.available?.cash||current.broker_diagnostics?.workspace?.state!=='read_only'
+    ||!failedRetry?.persistenceIssue.includes('SCHEMA_VERSION')||failedRetry.liveAuthorized||current.runtime.auto||fixture.mutations)
+    throw new Error('An unsuccessful journal retry lost account reads or enabled live trading');
   const {DatabaseSync}=await import('node:sqlite'),repair=new DatabaseSync(livePath);
   repair.prepare('UPDATE kv SET value=? WHERE key=?').run('2','schema_version');repair.close();
   await js('document.querySelector("#workspace-retry").click()');
-  await wait('document.querySelector("#workspace-retry").hidden && document.querySelector("#diagnostic-workspace").textContent.includes("已就緒") && window.trader.state().then(s=>s.runtime?.account?.complete)');
+  await wait('document.querySelector("#workspace-retry").hidden && document.querySelector("#diagnostic-workspace").textContent.includes("已就緒")');
+  // The smoke fixture has no monitoring timer. Read the next reconciled snapshot
+  // after SSE establishes its initial generation, using the actual read-only IPC.
+  await js('window.trader.command("reconcile")');
+  await wait('window.trader.state().then(s=>s.runtime?.account?.complete)');
   current=await state();const recovered=service as TradingService|undefined;
   if(!current.connected||!current.runtime?.account?.complete||current.live.authorized||current.runtime.auto||recovered?.persistenceIssue
     ||!recovered?.store.orders().some(o=>o.local_id==='SYNTHETIC-HISTORY')||current.broker_diagnostics?.workspace?.issue||fixture.mutations)throw new Error('Journal recovery discarded historical orders, retained an old diagnostic or resumed live execution');
