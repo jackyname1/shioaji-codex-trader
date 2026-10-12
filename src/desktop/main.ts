@@ -136,7 +136,7 @@ function connectionStatus(){return connectionView((smoke&&!smokeConnection)||nat
   connectionBusy||operations.busy,loginStage||nativeConnection.status,initialError||(!nativeConnection.connected&&nativeConnection.phase==='failed'?nativeConnection.status:''));}
 function createWindow(): void {
   window = new BrowserWindow({width:1600,height:960,minWidth:1100,minHeight:680,icon:join(directory,'assets/app.png'),title:'Shioaji Codex Trader',
-    backgroundColor:'#0c1016',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
+    backgroundColor:'#0d0d14',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
       contextIsolation:true,sandbox:true,webSecurity:true}});
   window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));

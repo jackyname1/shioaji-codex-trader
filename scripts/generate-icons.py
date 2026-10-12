@@ -1,6 +1,6 @@
-"""Render our own candle glyph, using Windows' 48px icon grid and optical small-size adjustments."""
+"""Render the multicolor candle symbol on Windows' 48px icon grid."""
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1] / "src/desktop/assets"
 
@@ -8,9 +8,9 @@ ROOT = Path(__file__).resolve().parents[1] / "src/desktop/assets"
 def glyph(draw, scale, small=False):
     # Three rising candles: one trading metaphor, no letters, rings, axes or badges.
     for x, top, height, wick_top, wick_bottom, color in [
-        (9, 27, 9, 23, 39, "#f5faff"),
-        (20, 21, 11, 16, 36, "#c3efff"),
-        (31, 13, 14, 8, 31, "#8af3d0"),
+        (9, 27, 9, 23, 39, "#f5c777"),
+        (20, 21, 11, 16, 36, "#79c7f4"),
+        (31, 13, 14, 8, 31, "#c3a4ff"),
     ]:
         if not small:
             draw.rounded_rectangle(((x+2.8)*scale, wick_top*scale, (x+5.2)*scale, wick_bottom*scale),
@@ -26,18 +26,18 @@ def icon(size, status=None):
     image = Image.new("RGBA", (side, side))
     mask = Image.new("L", (side, side))
     ImageDraw.Draw(mask).rounded_rectangle((2*scale, 2*scale, 46*scale, 46*scale), radius=11*scale, fill=255)
-    background = Image.new("RGBA", (side, side))
-    painter = ImageDraw.Draw(background)
-    for y in range(side):
-        t=y/(side-1)
-        color=tuple(round(a*(1-t)+b*t) for a,b in zip((46, 95, 228),(16, 42, 94)))+(255,)
-        painter.line((0,y,side,y), fill=color)
+    # Diagonal plum-to-ink tile, with a light edge that survives dark taskbars.
+    ramp=bytes(round(255*n/(2*(side-1))) for n in range(2*side-1))
+    diagonal=Image.frombytes("L",(side,side),b"".join(ramp[y:y+side] for y in range(side)))
+    background=ImageOps.colorize(diagonal,"#6c4597","#1a1e33").convert("RGBA")
     image.paste(background,mask=mask)
     painter=ImageDraw.Draw(image)
+    painter.rounded_rectangle((2*scale,2*scale,46*scale,46*scale),radius=11*scale,
+                              outline="#9980bd",width=max(1,round(.6*scale)))
     glyph(painter,scale,small=size<=24)
     if status:
-        color={"ready":"#60e9ba","active":"#72b8ff","paused":"#ffc77b","offline":"#a8b1c4"}[status]
-        painter.ellipse((35*scale,32*scale,47*scale,44*scale),fill="#101c36")
+        color={"ready":"#61d8b5","active":"#79c7f4","paused":"#f5c777","offline":"#a1a0b6"}[status]
+        painter.ellipse((35*scale,32*scale,47*scale,44*scale),fill="#13131e")
         painter.ellipse((37*scale,34*scale,45*scale,42*scale),fill=color)
     return image.resize((size,size),Image.Resampling.LANCZOS)
 

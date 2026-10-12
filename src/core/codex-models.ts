@@ -54,7 +54,7 @@ export async function codexModels(settings:Pick<Settings,'codex_path'>,profile:s
           }catch{stop(new CodexError('Codex 模型資料格式未通過'));return;}
         }
       });
-      send({id:1,method:'initialize',params:{clientInfo:{name:'shioaji_codex_trader',title:'Shioaji Codex Trader',version:'0.1.2'}}});
+      send({id:1,method:'initialize',params:{clientInfo:{name:'shioaji_codex_trader',title:'Shioaji Codex Trader',version:'0.1.3'}}});
     }catch{stop(new CodexError('Codex 模型查詢無法啟動'));}
   });
   cached.set(key,{at:Date.now(),models});return models;
