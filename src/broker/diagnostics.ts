@@ -6,8 +6,10 @@ export interface EndpointDiagnostic {
   last_attempt_at:string|null;last_success_at:string|null;issue:string;http_status:number|null;retry_at:string|null;
 }
 export interface BrokerDiagnostics {
+  app_version?:string;
   version:string|null;stream_connected:boolean;generation:number;trade_cache:string|null;health?:BrokerHealth;
   startup?:{phase:string;issue:string};
+  workspace?:import('../desktop/workspace-profile.js').WorkspaceDiagnostic;
   endpoints:EndpointDiagnostic[];
 }
 export function mergeDiagnostics(native:BrokerDiagnostics,broker?:BrokerDiagnostics|null):BrokerDiagnostics {

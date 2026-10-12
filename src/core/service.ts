@@ -24,6 +24,7 @@ export class TradingService {
   readonly liveSession = new LiveSession();
   private liveEpoch = 0;
   private automaticLive:boolean;
+  readonly persistenceIssue:string;
   private queue: Promise<unknown> = Promise.resolve();
   private timer?: NodeJS.Timeout;
   private tickPending = false;
@@ -51,19 +52,23 @@ export class TradingService {
   get scanning():boolean{return !!this.watchTask;}
   private closeTask?: Promise<void>;
   constructor(path: string, mode?: Settings['mode'], createMarket?: (store: Store, settings: Settings, session: LiveSession) => Broker,
-    options:{automaticLive?:boolean;now?:()=>Date;executionAdvisor?:(request:ExecutionRequest,signal:AbortSignal)=>Promise<ExecutionAdvice>}={}) {
+    options:{automaticLive?:boolean;now?:()=>Date;executionAdvisor?:(request:ExecutionRequest,signal:AbortSignal)=>Promise<ExecutionAdvice>;settings?:Settings;persistenceIssue?:string}={}) {
     this.now=options.now??(()=>new Date());this.executionAdvisor=options.executionAdvisor;
-    this.automaticLive=options.automaticLive??false;
+    this.persistenceIssue=options.persistenceIssue??'';
+    this.automaticLive=!this.persistenceIssue&&(options.automaticLive??false);
     this.store = new Store(path);
     try {
-    const stored = this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {}),auto_execute:false});
+    const stored = options.settings??this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {}),auto_execute:false});
     const priorMode = this.store.get<string>('database_mode');
-    if (priorMode && priorMode !== settings.mode) { throw new Error('每種交易模式須使用獨立資料庫'); }
+    // readonly and live contain the same real account history. Never carry simulated orders into live.
+    if (priorMode && priorMode !== settings.mode && !(priorMode==='readonly'&&settings.mode==='live')) {
+      throw new Error('每種交易模式須使用獨立資料庫');
+    }
     this.store.set('database_mode',settings.mode); this.store.saveSettings(settings);
     this.store.delete('live_consent');
     this.calendar = new TradingCalendar(this.store,settings.mode === 'demo');
     const market = createMarket?.(this.store,settings,this.liveSession) ?? (settings.mode === 'demo' ? new SyntheticMarket()
-      : new ShioajiHttpBroker(this.store,settings,settings.mode === 'live',undefined,this.liveSession));
+      : new ShioajiHttpBroker(this.store,settings,settings.mode === 'live'&&!this.persistenceIssue,undefined,this.liveSession));
     this.broker = ['demo','paper'].includes(settings.mode) ? new PaperBroker(this.store,market,settings,this.calendar,settings.mode==='paper') : market;
     this.engine = new Engine(this.store,this.broker,settings,this.calendar);
     this.analystEvents=this.store.analystEvents();
@@ -322,7 +327,7 @@ export class TradingService {
   get liveCancelAuthorized(): boolean { return this.liveSession.authorized(this.store.get('account_fingerprint'),'cancel'); }
   liveReadiness(now = this.now()): LiveReadiness {
     const s=this.engine.settings,broker=this.broker instanceof ShioajiHttpBroker?this.broker.liveStatus():{account:'尚未連接實盤帳戶',issues:['請切換至實盤模式']};
-    const issues=[...broker.issues];
+    const issues=[...broker.issues,...(this.persistenceIssue?[this.persistenceIssue]:[])];
     if(!this.engine.connected)issues.push('請先連接 Shioaji');
     const a=this.engine.account;
     if(!a?.complete)issues.push(a?.issue||'帳戶快照尚未完整');
@@ -332,6 +337,7 @@ export class TradingService {
   }
   async prepareLive(): Promise<LiveReadiness> {
     return this.enqueue(async()=>{
+      if(this.persistenceIssue)throw new BrokerError(this.persistenceIssue);
       if(!(this.broker instanceof ShioajiHttpBroker)||this.engine.settings.mode!=='live'||!this.engine.connected)
         throw new Error('請先連接實盤帳戶');
       await this.broker.verifyLiveConnection();const now=this.now();

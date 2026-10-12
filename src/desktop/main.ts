@@ -22,6 +22,7 @@ import { CredentialVault,CredentialError,NativeConnection,connectionInput,type C
 import {actualOrdersBlock,reconnectBlocked,connectionView} from './connection-state.js';
 import {mergeDiagnostics} from '../broker/diagnostics.js';
 import {ConnectionSmoke} from './connection-smoke.js';
+import {openWorkspace,workspaceFailure,WorkspaceProfileError,type WorkspaceDiagnostic} from './workspace-profile.js';
 import { liveChart } from '../core/live-chart.js';
 import { ChartRequestSchema } from '../core/chart.js';
 import { bundledShioajiPath } from './broker-runtime.js';
@@ -46,9 +47,11 @@ let credentialState:CredentialState={remembered:false,state:'empty',message:'尚
 let connectionBusy=false,chartBusy=false;const chartAbort=new AbortController();
 let loginStage='',smokeConnection=false;
 let smokeMarket:ConstructorParameters<typeof TradingService>[2];
+let smokeReadMarket:ConstructorParameters<typeof TradingService>[2];
 const operations=new DesktopOperations();let liveActionEpoch=0;
 const brokerPath=():Promise<string>=>bundledShioajiPath(app.isPackaged?join(process.resourcesPath,'shioaji'):join(directory,'../../../resources/shioaji'));
 let commonSettings:DesktopSettings,codexLogin:CodexLogin;
+let workspaceDiagnostic:WorkspaceDiagnostic|undefined;
 let preferences:{last_mode:Settings['mode'];paper_scope?:'realtime'|'replay';connections:Partial<Record<Settings['mode'],{base_url:string;stock_account_index:number}>>}={last_mode:'paper',connections:{}};
 
 if (!smoke&&!app.requestSingleInstanceLock()) app.quit();
@@ -63,7 +66,8 @@ else {
       preferences=p;if(!argsMode)mode=p.last_mode==='live'?'live':'paper';simulationScope=p.paper_scope==='replay'?'replay':'realtime';
     }catch{/* New or malformed preferences start in paper mode. */}
     commonSettings=new DesktopSettings(dataRoot);
-    commonSettings.migrate(preferences.last_mode,preferences.connections[preferences.last_mode]?.stock_account_index??0);
+    try{commonSettings.migrate(preferences.last_mode,preferences.connections[preferences.last_mode]?.stock_account_index??0);}
+    catch{/* A preference write must not prevent the login window; connect records its exact safe stage. */}
     const secure={isEncryptionAvailable:()=>safeStorage.isEncryptionAvailable()&&(process.platform!=='linux'||safeStorage.getSelectedStorageBackend()!=='basic_text'),
       encryptString:(value:string)=>safeStorage.encryptString(value),decryptString:(value:Buffer)=>safeStorage.decryptString(value)};
     vault=new CredentialVault(join(dataRoot,'private'),secure);nativeConnection=new NativeConnection(join(dataRoot,'native-service'),brokerPath);
@@ -86,25 +90,29 @@ else {
   }).catch(error => { console.error(smoke ? error : '桌面啟動失敗'); app.exit(1); });
 }
 async function connect(nextMode: Settings['mode'],override?:Settings,start=true): Promise<void> {
-  if (service) await service.close(); service = undefined; initialError = ''; mode = nextMode;
+  const old=service;service=undefined;initialError='';mode=nextMode;
+  workspaceDiagnostic={mode:mode==='live'?'live':'paper',stage:'closing',state:'loading',code:'',issue:''};
   try {
-    const base=nativeConnection.baseUrl,index=override?.stock_account_index??commonSettings.accountIndex;
-    // Database identity belongs to the mode/account, not the automatically chosen port.
-    const suffix=index===0?'':'-account-'+index;
-    const path=join(dataRoot,`${mode}${suffix}.db`);
-    const store=new Store(path);try{
-      if(store.get('account_fingerprint')&&store.get('account_identity_version')!==2&&!store.get('legacy_account_origin'))
-        store.set('legacy_account_origin',store.settings().base_url);
-      store.saveSettings(commonSettings.apply(store.settings(),mode,base,override));
-    }finally{store.close();}
-    service = new TradingService(path,mode,smokeConnection?smokeMarket:undefined,{automaticLive:!smoke&&mode==='live'});
-    commonSettings.save(service.engine.settings);
-    preferences.last_mode=mode;preferences.connections[mode]={base_url:base,stock_account_index:index};
-    if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
-    if(!smoke)service.engine.setSettings({...service.engine.settings,auto_execute:false});
+    if(old)await old.close();
+    workspaceDiagnostic.stage='database';
+    const opened=openWorkspace(dataRoot,mode,nativeConnection.baseUrl,commonSettings,override,smokeConnection?smokeMarket:undefined,!smoke&&mode==='live',smokeConnection?smokeReadMarket:undefined);
+    service=opened.service;workspaceDiagnostic=opened.diagnostic;
     if(start&&((smoke&&!smokeConnection)||nativeConnection.connected))await service.start(!smoke);
+    if(workspaceDiagnostic.state!=='read_only')workspaceDiagnostic.state=service.engine.connected?'ready':'loading';
+    // Preferences must never prevent the already-authenticated broker's account reads.
+    try {
+      commonSettings.save(service.engine.settings);
+      preferences.last_mode=mode;preferences.connections[mode]={base_url:nativeConnection.baseUrl,stock_account_index:service.engine.settings.stock_account_index};
+      if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
+    }catch(error){const warning=workspaceFailure(mode,'preferences',error);
+      workspaceDiagnostic={...warning,state:service.persistenceIssue?'read_only':service.engine.connected?'ready':'loading',
+        issue:warning.issue+'；目前工作台仍可讀取 Shioaji，偏好設定稍後再保存'};}
+    initialError=workspaceDiagnostic.issue;
   }
-  catch(error) {initialError=mode==='demo'?'模擬程式啟動失敗':desktopIssue(error);}
+  catch(error) {
+    workspaceDiagnostic=error instanceof WorkspaceProfileError?error.diagnostic:workspaceFailure(mode,workspaceDiagnostic?.stage??'database',error);
+    initialError=mode==='demo'?'模擬程式啟動失敗':error instanceof BrokerError?error.message:workspaceDiagnostic.issue;
+  }
 }
 function desktopIssue(error:unknown):string {
   if(error instanceof CredentialError)return error.message;
@@ -132,11 +140,14 @@ async function login(input:unknown):Promise<string>{
   }catch(error){if(!(error instanceof z.ZodError))initialError=desktopIssue(error);throw error;}
   finally{connectionBusy=false;loginStage='';}
 }
-function connectionStatus(){return connectionView((smoke&&!smokeConnection)||nativeConnection.connected,!!service?.engine.connected,
-  connectionBusy||operations.busy,loginStage||nativeConnection.status,initialError||(!nativeConnection.connected&&nativeConnection.phase==='failed'?nativeConnection.status:''));}
+function connectionStatus(){
+  const view=connectionView((smoke&&!smokeConnection)||nativeConnection.connected,!!service?.engine.connected,
+    connectionBusy||operations.busy,loginStage||nativeConnection.status,initialError||(!nativeConnection.connected&&nativeConnection.phase==='failed'?nativeConnection.status:''));
+  return service?.persistenceIssue&&view.workspace_ready&&!connectionBusy?{...view,phase:'read_only',status:'Shioaji 已連線 · 帳務可讀，本機紀錄待修復'}:view;
+}
 function createWindow(): void {
   window = new BrowserWindow({width:1600,height:960,minWidth:1100,minHeight:680,icon:join(directory,'assets/app.png'),title:'Shioaji Codex Trader',
-    backgroundColor:'#0d0d14',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
+    backgroundColor:'#0c1016',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
       contextIsolation:true,sandbox:true,webSecurity:true}});
   window.setMenuBarVisibility(false);
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
@@ -354,7 +365,12 @@ function registerIpc(): void {
   });
   handle('trader:exit',() => exit());
 }
-function connected():boolean{return ((smoke&&!smokeConnection)||nativeConnection.connected)&&!!service?.engine.connected;}
+function refreshWorkspaceStatus():void {
+  if(service?.engine.connected&&workspaceDiagnostic?.stage==='api'&&workspaceDiagnostic.state!=='read_only'){
+    workspaceDiagnostic={...workspaceDiagnostic,state:'ready',code:'',issue:''};initialError='';
+  }
+}
+function connected():boolean{refreshWorkspaceStatus();return ((smoke&&!smokeConnection)||nativeConnection.connected)&&!!service?.engine.connected;}
 function diagnosticSnapshot(){
   if(smoke&&!smokeConnection){const at=new Date().toISOString();return {version:'1.7.7',stream_connected:true,generation:1,trade_cache:'Healthy',
     health:{status:'healthy' as const,token_stale:false,ca_expired:false},endpoints:[
@@ -363,7 +379,8 @@ function diagnosticSnapshot(){
         issue:'隔離介面測試：Shioaji 交割戶餘額讀取失敗（HTTP 503）',http_status:503,retry_at:null}]};}
   const broker=service?.broker instanceof PaperBroker?service.broker.market:service?.broker;
   const result=mergeDiagnostics(nativeConnection.diagnostics(),broker instanceof ShioajiHttpBroker?broker.diagnosticSnapshot():null);
-  result.startup={phase:connectionStatus().phase,issue:initialError||result.startup?.issue||''};return result;
+  result.startup={phase:connectionStatus().phase,issue:initialError||result.startup?.issue||''};
+  result.workspace=workspaceDiagnostic;result.app_version=app.getVersion();return result;
 }
 async function enableLive(startAutomation:boolean,afterAuthorization?:(selected:TradingService)=>Promise<string>):Promise<string>{
   return operations.run(async()=>{
@@ -593,7 +610,7 @@ async function verifyConnectionLifecycle():Promise<void>{
   if(!smoke||!window||!service)throw new Error('Connection test must be isolated');
   const sample=service.store.orders()[0];await service.close();service=undefined;
   const originalNative=nativeConnection;await originalNative.close();
-  const fixture=new ConnectionSmoke();smokeConnection=true;smokeMarket=fixture.market;
+  const fixture=new ConnectionSmoke();smokeConnection=true;smokeMarket=fixture.market;smokeReadMarket=fixture.reader;
   if(!window.webContents.debugger.isAttached())window.webContents.debugger.attach('1.3');
   nativeConnection=fixture.native(join(dataRoot,'connection-fixture'));mode='paper';simulationScope='realtime';
   await vault.clear();credentialState=await vault.status();initialError='';fixture.failWorkspace=true;
@@ -631,6 +648,34 @@ async function verifyConnectionLifecycle():Promise<void>{
   await wait('!document.querySelector("#settings-dialog").open && document.querySelector("#sidebar-connection").textContent.includes("已連線")');
   current=await state();if(!current.connected||fixture.launches!==launches||fixture.mutations)throw new Error('Retry required another login or attempted a live mutation');
   await captureConnection('SYNTHETIC-ui-login-ready.png');
+  const livePath=join(dataRoot,'live.db'),legacy=new Store(livePath);
+  legacy.set('database_mode','readonly');legacy.insertIntent({...sample,local_id:'SYNTHETIC-HISTORY',tag:'SYNHIS',status:'FILLED',filled:sample.shares});legacy.close();
+  await js('document.querySelector("[data-mode=live]").click()');
+  await wait('document.body.dataset.workspace==="live" && document.querySelector("#sidebar-connection").textContent.includes("已連線")');
+  current=await state();const migrated=service as TradingService|undefined;
+  if(!current.connected||migrated?.store.get('database_mode')!=='live'||!migrated?.store.orders().some(o=>o.local_id==='SYNTHETIC-HISTORY'))throw new Error('Legacy readonly account history did not survive the live-mode switch');
+  await captureConnection('SYNTHETIC-ui-legacy-live.png');
+  await js('window.trader.configure("paper")');
+  const savePreferences=commonSettings.save.bind(commonSettings);
+  try {
+    commonSettings.save=()=>{throw Object.assign(new Error('SYNTHETIC_PRIVATE_PREFERENCE_PATH'),{code:'EPERM'});};
+    await js('window.trader.configure("live")');current=await state();
+    if(!current.connected||current.broker_diagnostics?.workspace?.stage!=='preferences'||current.broker_diagnostics.workspace.code!=='EPERM')throw new Error('A preference-write failure prevented authenticated account reads');
+    if(JSON.stringify(current.broker_diagnostics).includes('SYNTHETIC_PRIVATE'))throw new Error('Preference diagnostics exposed a private path');
+    await captureConnection('SYNTHETIC-ui-preferences-warning.png');
+  }finally{commonSettings.save=savePreferences;}
+  await js('window.trader.configure("paper")');
+  const incompatible=new Store(livePath);incompatible.set('schema_version',999);incompatible.close();
+  await js('document.querySelector("[data-mode=live]").click()');
+  await wait('document.body.dataset.workspace==="live" && document.querySelector("#sidebar-connection").textContent.includes("帳務可讀")');
+  current=await state();const reader=service as TradingService|undefined;
+  if(!current.connected||!current.runtime?.account?.available?.cash||current.broker_diagnostics?.workspace?.code!=='SCHEMA_VERSION'
+    ||current.broker_diagnostics.workspace.state!=='read_only'||!reader?.persistenceIssue||reader.liveAuthorized||fixture.mutations)throw new Error('Unavailable live journal did not preserve safe account reads and disable trading');
+  await js('document.querySelector("#open-diagnostics").click()');await new Promise(resolve=>setTimeout(resolve,400));
+  if(!await js('document.querySelector("#diagnostic-workspace").textContent.includes("SCHEMA_VERSION") && document.querySelector("#diagnostic-endpoints").textContent.includes("account_balance")'))throw new Error('The GUI did not expose the local failure stage and successful portfolio endpoints');
+  await captureConnection('SYNTHETIC-ui-live-readonly.png');
+  if(fixture.launches!==launches)throw new Error('Workspace mode/profile recovery relaunched an already-healthy native login');
+  console.log('Legacy live journal, preference-write failure, safe Pro-compatible account reader and GUI diagnostics passed; zero live mutations.');
   console.log('Cold-start login, encrypted-save failure/recovery, modal feedback, shared live login and zero live mutations passed.');
   async function captureConnection(name:string){const root=process.env.TRADER_SMOKE_OUTPUT??join(directory,'../../../release');mkdirSync(root,{recursive:true});
     await js('document.querySelector("#mode-badge").textContent="隔離連線測試 · 虛構資料"');

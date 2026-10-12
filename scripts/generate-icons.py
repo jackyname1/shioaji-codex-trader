@@ -26,14 +26,14 @@ def icon(size, status=None):
     image = Image.new("RGBA", (side, side))
     mask = Image.new("L", (side, side))
     ImageDraw.Draw(mask).rounded_rectangle((2*scale, 2*scale, 46*scale, 46*scale), radius=11*scale, fill=255)
-    # Diagonal plum-to-ink tile, with a light edge that survives dark taskbars.
+    # Diagonal navy-to-black tile, with a light edge that survives dark taskbars.
     ramp=bytes(round(255*n/(2*(side-1))) for n in range(2*side-1))
     diagonal=Image.frombytes("L",(side,side),b"".join(ramp[y:y+side] for y in range(side)))
-    background=ImageOps.colorize(diagonal,"#6c4597","#1a1e33").convert("RGBA")
+    background=ImageOps.colorize(diagonal,"#172435","#0c1016").convert("RGBA")
     image.paste(background,mask=mask)
     painter=ImageDraw.Draw(image)
     painter.rounded_rectangle((2*scale,2*scale,46*scale,46*scale),radius=11*scale,
-                              outline="#9980bd",width=max(1,round(.6*scale)))
+                              outline="#3b4f6b",width=max(1,round(.6*scale)))
     glyph(painter,scale,small=size<=24)
     if status:
         color={"ready":"#61d8b5","active":"#79c7f4","paused":"#f5c777","offline":"#a1a0b6"}[status]

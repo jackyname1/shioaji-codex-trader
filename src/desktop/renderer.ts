@@ -99,8 +99,9 @@ function loadSettings(s:Settings):void {
 }
 function renderRuntime(state:DesktopState):void {
   const r=workspaceRuntime(state),s=latestSettings,paper=replayView(state);
-  el('connection-dot').classList.toggle('connected',state.connected);el('connection-dot').classList.toggle('pending',!!state.connection.server_ready&&!state.connected||state.connection.busy);
-  text('sidebar-connection',state.connection.busy?'連線中':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
+  const accountOnly=state.connection.phase==='read_only';
+  el('connection-dot').classList.toggle('connected',state.connected&&!accountOnly);el('connection-dot').classList.toggle('pending',accountOnly||!!state.connection.server_ready&&!state.connected||state.connection.busy);
+  text('sidebar-connection',state.connection.busy?'連線中':accountOnly?'帳務可讀 · 委託暫停':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
   text('connection-status',`${state.connection.status} · ${state.connection.has_ca?'CA 已載入':'實盤委託需有效 CA'}`);
   text('runtime-workspace-name',simulationView(state)?paper?'歷史回放 · 當時行情':'即時模擬 · 虛擬資金':'正式交易 · 真實帳戶');
   text('runtime-orders-title',simulationView(state)?'模擬委託與成交':'未完成委託');
@@ -305,7 +306,8 @@ function conditionList(id:string,rows:[string,string][],note=''):void {
 }
 function renderExtras(state:DesktopState):void {
   const diagnostic=state.broker_diagnostics;
-  text('diagnostic-status',diagnostic?.startup?`${state.connection.status}${diagnostic.startup.issue?' · '+diagnostic.startup.issue:''}`:diagnostic?`Shioaji ${diagnostic.version??'版本待確認'} · ${diagnostic.stream_connected?'行情串流已連線':'行情串流等待恢復'} · 回報快取 ${diagnostic.trade_cache??'待核對'}`:'尚未登入 Shioaji');
+  text('diagnostic-status',diagnostic?.startup?`${state.connection.status}${diagnostic.startup.issue&&!diagnostic.workspace?.issue&&!state.connection.status.includes(diagnostic.startup.issue)?' · '+diagnostic.startup.issue:''}`:diagnostic?`Shioaji ${diagnostic.version??'版本待確認'} · ${diagnostic.stream_connected?'行情串流已連線':'行情串流等待恢復'} · 回報快取 ${diagnostic.trade_cache??'待核對'}`:'尚未登入 Shioaji');
+  text('diagnostic-workspace',diagnostic?.workspace?`${diagnostic.workspace.mode==='live'?'實盤':'模擬'}工作台 · ${diagnostic.workspace.state==='read_only'?'帳務唯讀':diagnostic.workspace.state==='ready'?'已就緒':diagnostic.workspace.state==='failed'?'初始化未完成':'正在準備'}${diagnostic.workspace.issue?'\n'+diagnostic.workspace.issue:''}`:'');
   text('diagnostic-count',diagnostic?.health?`服務 ${diagnostic.health.status} · ${diagnostic.health.session_recovering?'正在恢復登入':diagnostic.health.token_stale?'登入已過期':'登入狀態已讀取'} · ${diagnostic.health.ca_expired===false?'CA 有效':diagnostic.health.ca_expired?'CA 已過期':'CA 狀態待核對'}`:'登入後會保留各端點的讀取狀態');
   table('diagnostic-endpoints',['端點','HTTP 讀取','最後成功','狀態與原因','重試時間'],(diagnostic?.endpoints??[]).map(e=>[`${e.stage}\n${e.endpoint}`,`${e.attempts} 次 / ${e.failures} 次失敗`,stamp(e.last_success_at),e.issue||'已取得回應',e.retry_at?stamp(e.retry_at):'—']),diagnostic?.startup?.issue||'尚未呼叫本機 API；登入後會顯示啟動與健康檢查紀錄');
   text('native-status',state.connection.status+' · '+(state.connection.credential_message??''));el<HTMLButtonElement>('connect-api').disabled=state.connection.busy;
