@@ -27,6 +27,7 @@ const bridge: TraderBridge = {
   replaySpeed: speed => ipcRenderer.invoke('trader:replay-speed',speed),
   exportMarket: () => ipcRenderer.invoke('trader:export-market'),
   exportDiagnostics:()=>ipcRenderer.invoke('trader:export-diagnostics'),
+  retryWorkspace:()=>ipcRenderer.invoke('trader:retry-workspace'),
   minimize: () => ipcRenderer.invoke('trader:hide'),
   exit: () => ipcRenderer.invoke('trader:exit'),
 };

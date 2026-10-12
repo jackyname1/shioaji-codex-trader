@@ -105,8 +105,8 @@ async function connect(nextMode: Settings['mode'],override?:Settings,start=true)
       preferences.last_mode=mode;preferences.connections[mode]={base_url:nativeConnection.baseUrl,stock_account_index:service.engine.settings.stock_account_index};
       if(!smoke)writeFileSync(join(dataRoot,'desktop-settings.json'),JSON.stringify(preferences),{mode:0o600});
     }catch(error){const warning=workspaceFailure(mode,'preferences',error);
-      workspaceDiagnostic={...warning,state:service.persistenceIssue?'read_only':service.engine.connected?'ready':'loading',
-        issue:warning.issue+'；目前工作台仍可讀取 Shioaji，偏好設定稍後再保存'};}
+      workspaceDiagnostic=service.persistenceIssue?{...workspaceDiagnostic,issue:workspaceDiagnostic.issue+'；桌面偏好亦暫時無法保存'}:
+        {...warning,state:service.engine.connected?'ready':'loading',issue:warning.issue+'；目前工作台仍可讀取 Shioaji，偏好設定稍後再保存'};}
     initialError=workspaceDiagnostic.issue;
   }
   catch(error) {
@@ -163,10 +163,10 @@ function updateNativeStatus():void {
   const engine=service?.engine,replay=mode!=='live'&&simulationScope==='replay';
   const stopped=!!engine?.killed,paused=!!engine?.pausedEntries;
   const state=replay?(backtest.progress.running?(backtest.clock.paused?'paused':'active'):'ready')
-    :!engine?.connected?'offline':stopped||paused?'paused':engine.settings.auto_execute?'active':'ready';
+    :!engine?.connected?'offline':service?.persistenceIssue||stopped||paused?'paused':engine.settings.auto_execute?'active':'ready';
   const workspace=mode==='live'?'正式交易':replay?'歷史回放':'即時模擬';
   const activity=replay?(backtest.progress.running?(backtest.clock.paused?'已暫停':'回放中'):'待命')
-    :!engine?.connected?'等待連線':stopped?'委託已停止':paused?'暫停新增買進':service?.sizing?'Codex 確認數量':service?.analyzing?'Codex 更新條件':engine.settings.auto_execute?'自動監測中':'已連線 · 待命';
+    :!engine?.connected?'等待連線':service?.persistenceIssue?'帳務可讀 · 本機紀錄待修復':stopped?'委託已停止':paused?'暫停新增買進':service?.sizing?'Codex 確認數量':service?.analyzing?'Codex 更新條件':engine.settings.auto_execute?'自動監測中':'已連線 · 待命';
   const key=`${workspace}:${state}:${activity}`;if(key===nativeStatusKey)return;nativeStatusKey=key;
   const icon=trayIcon(state);tray.setImage(icon);tray.setToolTip(`Shioaji Codex Trader｜${workspace}｜${activity}`);
   if(process.platform==='win32')window?.setOverlayIcon(state==='ready'?null:icon.resize({width:16,height:16}),`${workspace} · ${activity}`);
@@ -247,6 +247,16 @@ function registerIpc(): void {
     writeFileSync(target.filePath,JSON.stringify({version:app.getVersion(),created_at:new Date().toISOString(),diagnostics:diagnosticSnapshot()},null,2),{mode:0o600});
     return '連線診斷已匯出，不含帳號、金鑰及帳務內容';
   });
+  handle('trader:retry-workspace',()=>operations.run(async()=>{
+    if(connectionBusy||backtest.progress.running)throw new BrokerError('目前仍有連線或模擬在進行，請稍後重試');
+    // Recovery reopens the original journal and resets authority. It never changes
+    // credentials, launches another login, or resumes the previous auto session.
+    liveActionEpoch++;
+    const settings=SettingsSchema.parse({...service?.engine.settings??commonSettings.apply(SettingsSchema.parse({mode}),mode,nativeConnection.baseUrl),auto_execute:false});
+    await connect(mode,settings);
+    if(!service||service.persistenceIssue||!service.engine.connected)throw new BrokerError(initialError||'本機紀錄仍待恢復，請查看連線診斷');
+    return initialError||'本機紀錄已恢復，已重新讀取帳務與委託；自動交易尚未開始';
+  }));
   handle('trader:settings',value => operations.run(async () => {
     if (typeof value !== 'string' || value.length > 20000 || !service) throw new Error('設定內容不合法');
     const settings = SettingsSchema.parse(JSON.parse(value));
@@ -674,8 +684,27 @@ async function verifyConnectionLifecycle():Promise<void>{
   await js('document.querySelector("#open-diagnostics").click()');await new Promise(resolve=>setTimeout(resolve,400));
   if(!await js('document.querySelector("#diagnostic-workspace").textContent.includes("SCHEMA_VERSION") && document.querySelector("#diagnostic-endpoints").textContent.includes("account_balance")'))throw new Error('The GUI did not expose the local failure stage and successful portfolio endpoints');
   await captureConnection('SYNTHETIC-ui-live-readonly.png');
+  if(!await js('!document.querySelector("#workspace-retry").hidden && !document.querySelector("#workspace-retry").disabled'))throw new Error('Local recovery button is unavailable in account-read-only mode');
+  await js('document.querySelector("#workspace-retry").click()');
+  await wait('document.querySelector("#diagnostics-dialog .dialog-message.failed")?.textContent.includes("SCHEMA_VERSION")');
+  current=await state();const failedRetry=service as TradingService|undefined;
+  if(!current.connected||!current.runtime?.account?.available?.cash||current.broker_diagnostics?.workspace?.state!=='read_only'
+    ||!failedRetry?.persistenceIssue.includes('SCHEMA_VERSION')||failedRetry.liveAuthorized||current.runtime.auto||fixture.mutations)
+    throw new Error('An unsuccessful journal retry lost account reads or enabled live trading');
+  const {DatabaseSync}=await import('node:sqlite'),repair=new DatabaseSync(livePath);
+  repair.prepare('UPDATE kv SET value=? WHERE key=?').run('2','schema_version');repair.close();
+  await js('document.querySelector("#workspace-retry").click()');
+  await wait('document.querySelector("#workspace-retry").hidden && document.querySelector("#diagnostic-workspace").textContent.includes("已就緒")');
+  // The smoke fixture has no monitoring timer. Read the next reconciled snapshot
+  // after SSE establishes its initial generation, using the actual read-only IPC.
+  await js('window.trader.command("reconcile")');
+  await wait('window.trader.state().then(s=>s.runtime?.account?.complete)');
+  current=await state();const recovered=service as TradingService|undefined;
+  if(!current.connected||!current.runtime?.account?.complete||current.live.authorized||current.runtime.auto||recovered?.persistenceIssue
+    ||!recovered?.store.orders().some(o=>o.local_id==='SYNTHETIC-HISTORY')||current.broker_diagnostics?.workspace?.issue||fixture.mutations)throw new Error('Journal recovery discarded historical orders, retained an old diagnostic or resumed live execution');
+  await captureConnection('SYNTHETIC-ui-live-recovered.png');
   if(fixture.launches!==launches)throw new Error('Workspace mode/profile recovery relaunched an already-healthy native login');
-  console.log('Legacy live journal, preference-write failure, safe Pro-compatible account reader and GUI diagnostics passed; zero live mutations.');
+  console.log('Legacy live journal, preference-write failure, safe Pro-compatible account reader, failed retry and GUI journal recovery passed; zero live mutations.');
   console.log('Cold-start login, encrypted-save failure/recovery, modal feedback, shared live login and zero live mutations passed.');
   async function captureConnection(name:string){const root=process.env.TRADER_SMOKE_OUTPUT??join(directory,'../../../release');mkdirSync(root,{recursive:true});
     await js('document.querySelector("#mode-badge").textContent="隔離連線測試 · 虛構資料"');

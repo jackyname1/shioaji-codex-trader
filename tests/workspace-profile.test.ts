@@ -11,6 +11,8 @@ import {DesktopSettings} from '../src/desktop/settings.js';
 import {openWorkspace,workspaceFailure,WorkspaceProfileError} from '../src/desktop/workspace-profile.js';
 import {ShioajiHttpBroker} from '../src/broker/http.js';
 import {order} from './helpers.js';
+import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 
 /** Actual loopback HTTP, the same selectors/methods/Share unit used by Pro.
  * Every value is synthetic; mutation routes are forbidden and counted. */
@@ -119,4 +121,26 @@ test('paper workspace failures remain explicit and never silently replace a simu
   try{const s=new Store(join(root,'paper.db'));s.set('schema_version',999);s.close();
     assert.throws(()=>openWorkspace(root,'paper','http://127.0.0.1:8080',new DesktopSettings(root)),e=>e instanceof WorkspaceProfileError&&e.diagnostic.code==='SCHEMA_VERSION');
   }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test('a real lock-create EPERM preserves account reads and history, then retries the original journal without trading',async t=>{
+  const root=mkdtempSync(join(tmpdir(),'profile-eperm-')),path=join(root,'live.db'),fixture=await proServer();let service:TradingService|undefined;
+  try{
+    const original=new Store(path),intent=order({local_id:'SYNTHETIC_PRESERVED',tag:'SYN003',status:'FILLED'});
+    original.insertIntent(intent);original.close();const before=readFileSync(path),open=fs.openSync;
+    t.mock.method(fs,'openSync',(...args:Parameters<typeof fs.openSync>)=>{
+      if(args[0]===path+'.lock.pid')throw Object.assign(new Error('SYNTHETIC_SECRET_PATH'),{code:'EPERM'});return open(...args);
+    });syncBuiltinESMExports();
+    const common=new DesktopSettings(root),opened=openWorkspace(root,'live',fixture.base,common,undefined,undefined,true);service=opened.service;
+    assert.equal(opened.diagnostic.code,'EPERM');assert.equal(opened.diagnostic.operation,'lock_create');assert.equal(opened.diagnostic.state,'read_only');
+    await service.start(false);assert.equal(service.engine.account?.cash,'123456');assert.equal(service.liveAuthorized,false);assert.equal(service.liveReadiness().ready,false);
+    await assert.rejects(service.activateLive(),/EPERM/);assert.deepEqual(readFileSync(path),before);assert.ok(!JSON.stringify(opened.diagnostic).includes('SYNTHETIC'));
+    await service.close();service=undefined;t.mock.restoreAll();syncBuiltinESMExports();
+    const recovered=openWorkspace(root,'live',fixture.base,common,undefined,undefined,true);service=recovered.service;await service.start(false);
+    const deadline=Date.now()+2000;
+    while(service.broker instanceof ShioajiHttpBroker&&!service.broker.diagnosticSnapshot().stream_connected&&Date.now()<deadline)await new Promise(r=>setTimeout(r,10));
+    await service.engine.refreshAccount(new Date());
+    assert.equal(service.persistenceIssue,'');assert.deepEqual(service.store.orders(),[intent]);assert.equal(service.engine.account?.complete,true,service.engine.account?.issue);
+    assert.equal(service.liveAuthorized,false);assert.equal(service.engine.settings.auto_execute,false);assert.equal(fixture.mutations,0);
+  }finally{t.mock.restoreAll();syncBuiltinESMExports();await service?.close();await close(fixture.server);rmSync(root,{recursive:true,force:true});}
 });

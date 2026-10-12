@@ -31,10 +31,10 @@ try {
   if (hash(bytes) !== asset.sha256) throw new Error('Official Shioaji archive SHA-256 does not match the pinned release');
   const archive = join(temporary, asset.name), extracted = join(temporary, 'extracted');
   await writeFile(archive, bytes); await mkdir(extracted);
-  if (platform === 'win32') await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-    'Expand-Archive -LiteralPath $env:TRADER_BROKER_ARCHIVE -DestinationPath $env:TRADER_BROKER_EXTRACTED'], {
-    env: { ...process.env, TRADER_BROKER_ARCHIVE: archive, TRADER_BROKER_EXTRACTED: extracted }, timeout: 60000, windowsHide: true,
-  });
+  // Windows' built-in bsdtar reads ZIP directly, without PowerShell module startup
+  // or Expand-Archive's slow extraction of the large pinned vendor runtime.
+  if (platform === 'win32') await promisify(execFile)(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'),
+    ['-xf', archive, '-C', extracted], { timeout: 180000, windowsHide: true });
   else await promisify(execFile)('tar', ['-xzf', archive, '-C', extracted], { timeout: 60000 });
   async function binaries(path: string): Promise<string[]> {
     const out: string[] = [];
@@ -55,3 +55,4 @@ try {
     relative_path: relativePath, sha256: hash(await readFile(found[0]!)), archive_sha256: asset.sha256, source: url }, null, 2));
   console.log(`Bundled and SHA-256 verified official Shioaji ${lock.version} (${platform}-${arch}).`);
 } finally { await rm(temporary, { recursive: true, force: true }); }
+

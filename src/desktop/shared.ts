@@ -55,6 +55,7 @@ export interface TraderBridge {
   replaySpeed(speed:number):Promise<string>;
   exportMarket():Promise<string>;
   exportDiagnostics():Promise<string>;
+  retryWorkspace():Promise<string>;
   minimize(): Promise<void>;
   exit(): Promise<void>;
 }
