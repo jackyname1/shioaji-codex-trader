@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,openSync,ftruncateSync,closeSync,rmSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -51,6 +52,9 @@ test('new versions publish separately; published tags and differing assets are r
     const executable=join(root,'release','Shioaji-Codex-Trader-0.2.1-Windows-x64.exe');
     const fd=openSync(executable,'w');ftruncateSync(fd,50*1024*1024+1);closeSync(fd);
     writeFileSync(join(root,'package.json'),JSON.stringify({version:'0.2.1'}));
+    writeFileSync(join(root,'release','WINDOWS-SIGNATURE.json'),JSON.stringify({version:'0.2.1',mode:'none',publisher:null,files:[
+      {name:'Shioaji Codex Trader.exe',sha256:'b'.repeat(64),status:'NotSigned'},
+      {name:'Shioaji-Codex-Trader-0.2.1-Windows-x64.exe',sha256:createHash('sha256').update(readFileSync(executable)).digest('hex'),status:'NotSigned'}]}));
     for(const name of ['README.md','RELEASE_NOTES.md','SYNTHETIC-historical-sample.csv',
       'SYNTHETIC-ui-paper-1366.png','SYNTHETIC-ui-paper-1600.png','SYNTHETIC-ui-paper-1920.png','SYNTHETIC-ui-live.png','SYNTHETIC-ui-connection.png'])writeFileSync(join(root,'release',name),'isolated fixture');
     writeFileSync(join(root,'release','SYNTHETIC-demo-backtest.json'),JSON.stringify({status:'COMPLETED',metrics:{filled_orders:1}}));

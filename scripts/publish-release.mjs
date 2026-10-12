@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {resetRelease} from './reset-release.mjs';
+import {validateSignatureReport} from './signature-report.mjs';
 
 const repository = 'jackyname1/shioaji-codex-trader';
 const commit = process.env.RELEASE_COMMIT;
@@ -18,7 +19,7 @@ if (api('git/ref/heads/main').object.sha !== commit) throw new Error('A newer ma
 const tag = `v${packageJson.version}`;
 const directory = resolve('release');
 const executable = `Shioaji-Codex-Trader-${packageJson.version}-Windows-x64.exe`;
-const names = (await readdir(directory)).filter(name => name === executable || /^(?:README|RELEASE_NOTES)\.md$/.test(name) || /^SYNTHETIC-[\w.-]+\.(?:png|json|csv)$/.test(name)).sort();
+const names = (await readdir(directory)).filter(name => name === executable || name==='WINDOWS-SIGNATURE.json' || /^(?:README|RELEASE_NOTES)\.md$/.test(name) || /^SYNTHETIC-[\w.-]+\.(?:png|json|csv)$/.test(name)).sort();
 const required = [executable, 'README.md', 'RELEASE_NOTES.md', 'SYNTHETIC-demo-backtest.json', 'SYNTHETIC-historical-sample.csv', 'SYNTHETIC-ui-paper-1366.png', 'SYNTHETIC-ui-paper-1600.png', 'SYNTHETIC-ui-paper-1920.png', 'SYNTHETIC-ui-live.png', 'SYNTHETIC-ui-connection.png'];
 if (required.some(name => !names.includes(name))) throw new Error('A verified release asset is missing.');
 if ((await stat(resolve(directory, executable))).size < 50 * 1024 * 1024) throw new Error('The packaged Windows executable is incomplete.');
@@ -26,6 +27,8 @@ const report = JSON.parse(await readFile(resolve(directory, 'SYNTHETIC-demo-back
 if (report.status !== 'COMPLETED' || !report.metrics.filled_orders) throw new Error('The synthetic release demonstration did not pass.');
 const digests = new Map();
 for (const name of names) digests.set(name, createHash('sha256').update(await readFile(resolve(directory, name))).digest('hex'));
+if(!names.includes('WINDOWS-SIGNATURE.json'))throw new Error('Windows signature verification report is missing.');
+validateSignatureReport(JSON.parse(await readFile(resolve(directory,'WINDOWS-SIGNATURE.json'),'utf8')),packageJson.version,executable,digests.get(executable));
 await writeFile(resolve(directory, 'SHA256SUMS.txt'), names.map(name => `${digests.get(name)}  ${name}`).join('\n') + '\n');
 names.push('SHA256SUMS.txt');
 digests.set('SHA256SUMS.txt', createHash('sha256').update(await readFile(resolve(directory, 'SHA256SUMS.txt'))).digest('hex'));

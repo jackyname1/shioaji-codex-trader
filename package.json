@@ -1,6 +1,6 @@
 {
   "name": "shioaji-codex-trader",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Shioaji market workbench with Codex strategies and historical simulation",
   "main": "dist/src/desktop/main.js",
@@ -15,7 +15,7 @@
     "start": "npm run prepare:broker && npm run build && electron .",
     "doctor": "npm run build && node dist/src/cli.js --doctor",
     "prepare:broker": "node scripts/prepare-broker.ts",
-    "pack:win": "npm run prepare:broker -- --platform=win32 --arch=x64 && npm run build && electron-builder --win portable --x64",
+    "pack:win": "npm run prepare:broker -- --platform=win32 --arch=x64 && npm run build && node scripts/package-windows.mjs",
     "backtest:demo": "npm run build && node dist/src/cli.js --backtest --start=2026-10-01 --end=2026-10-08 --source=sample --strategy=demo"
   },
   "dependencies": {
@@ -58,5 +58,8 @@
     "directories": {
       "output": "release"
     }
+  },
+  "author": {
+    "name": "Shioaji Codex Trader project"
   }
 }
