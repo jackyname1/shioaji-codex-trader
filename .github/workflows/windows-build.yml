@@ -42,6 +42,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Node/PowerShell signing bridge failed for a filename with spaces and Unicode' }
           $nodeResult = $nodeJson | ConvertFrom-Json
           if ($nodeResult.status -ne 'NotSigned' -or $nodeResult.sha256 -ne $result.sha256 -or $nodeResult.name -ne (Split-Path $sample -Leaf)) { throw 'Node/PowerShell signing report did not preserve the filename and digest' }
+          $probe = @'
+          node --input-type=module -e "import {readWindowsSignature} from './scripts/windows-signature.mjs'; console.log(JSON.stringify(readWindowsSignature(process.env.WINDOWS_SIGNATURE_FIXTURE,'none')));"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          '@
+          $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
+          $pwshJson = & pwsh.exe -NoProfile -NonInteractive -EncodedCommand $encoded
+          if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 -> Node -> Windows PowerShell inherited incompatible signing modules' }
+          $pwshResult = $pwshJson | ConvertFrom-Json
+          if ($pwshResult.status -ne 'NotSigned' -or $pwshResult.sha256 -ne $result.sha256 -or $pwshResult.name -ne (Split-Path $sample -Leaf)) { throw 'PowerShell 7 signing bridge changed the filename or digest' }
           Remove-Item Env:WINDOWS_SIGNATURE_FIXTURE
           Remove-Item $sample -Force
       - run: npm run demo
