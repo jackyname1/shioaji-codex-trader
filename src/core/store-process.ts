@@ -6,13 +6,20 @@ export type ProcessState={state:'running';startedAt?:number}|{state:'absent'|'un
 /** Query a Windows PID without requesting termination rights or sending a signal. */
 export function windowsProcessState(pid:number):ProcessState {
   if(!Number.isSafeInteger(pid)||pid<=0||pid>0x7fffffff)return {state:'unknown'};
+  // The current process is known alive; avoid a slow external probe under Windows CI load.
+  // No start timestamp is asserted, so this cannot authorize PID-reuse lock reclamation.
+  if(pid===process.pid)return {state:'running'};
+  // Query .NET directly: no Get-Process/ConvertTo-Json module autoload on a cold or busy host.
+  // GetProcessById(int) reports an expired local PID with ArgumentException; other failures remain unknown.
   const script=`try {
-    $item = Get-Process -Id ${pid} -ErrorAction Stop
-    $started = $null
-    try { $started = ([DateTimeOffset]$item.StartTime.ToUniversalTime()).ToUnixTimeMilliseconds() } catch {}
-    @{state='running';startedAt=$started} | ConvertTo-Json -Compress
+    $item = [System.Diagnostics.Process]::GetProcessById(${pid})
+    $started = 'null'
+    try { $started = ([DateTimeOffset]$item.StartTime.ToUniversalTime()).ToUnixTimeMilliseconds().ToString([Globalization.CultureInfo]::InvariantCulture) } catch {}
+    '{"state":"running","startedAt":' + $started + '}'
   } catch {
-    if ($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId,*') { '{"state":"absent"}' }
+    $cause = $_.Exception
+    while ($cause.InnerException) { $cause = $cause.InnerException }
+    if ($cause -is [System.ArgumentException]) { '{"state":"absent"}' }
     else { '{"state":"unknown"}' }
   }`;
   try {
@@ -20,7 +27,7 @@ export function windowsProcessState(pid:number):ProcessState {
     // PowerShell 7 callers can otherwise inject incompatible PS7 management modules.
     const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>key.toUpperCase()!=='PSMODULEPATH'));
     const output=execFileSync(executable,['-NoProfile','-NonInteractive','-Command',script],
-      {encoding:'utf8',env,windowsHide:true,timeout:5000,maxBuffer:4096,stdio:['ignore','pipe','pipe']});
+      {encoding:'utf8',env,windowsHide:true,timeout:15000,maxBuffer:4096,stdio:['ignore','pipe','pipe']});
     const result=JSON.parse(output.trim().replace(/^\uFEFF/,'')) as {state?:unknown;startedAt?:unknown};
     if(result.state==='absent')return {state:'absent'};
     if(result.state==='running')return {state:'running',...(typeof result.startedAt==='number'&&Number.isSafeInteger(result.startedAt)&&result.startedAt>0?{startedAt:result.startedAt}:{})};

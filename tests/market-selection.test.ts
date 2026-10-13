@@ -77,7 +77,7 @@ test('empty but valid Codex strategies complete daily replay and reviews without
 });
 test('history failures remain visible by stock and retry can recover; live snapshots include actual risk and price-band data',async()=>{
   const r=await rig();try{
-    const read=r.market.history.bind(r.market);r.store.set(`history_v2_${twDay(now)}_9001`,null);
+    const read=r.market.history.bind(r.market);r.store.set(`history_v3_${twDay(now)}_PRE_9001`,null);
     r.market.history=async(symbol,at)=>{if(symbol==='9001')throw new BrokerError('Shioaji 歷史 K 線暫時無法取得（HTTP 503）',true,503);return read(symbol,at);};
     const failed=await r.engine.collectBundle(now);assert.match(failed.features['9001']!.issue!,/歷史 K 線.*503/);
     const input=r.engine.snapshotFromBundle(failed,now);assert.ok(input.data_readiness!.history_issues.some(x=>x.symbol==='9001'&&x.issue.includes('503')));
@@ -85,3 +85,4 @@ test('history failures remain visible by stock and retry can recover; live snaps
     r.market.history=read;const recovered=await r.engine.collectBundle(now);assert.equal(recovered.features['9001']!.sufficient,true);assert.equal(recovered.features['9001']!.issue,undefined);
   }finally{await r.engine.close();r.store.close();}
 });
+

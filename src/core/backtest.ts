@@ -14,7 +14,7 @@ import { demoAnalysis } from './strategy.js';
 import { experienceContext } from './experience.js';
 import { nextMonitorTime, strategySlots } from './schedule.js';
 import type { WatchChange } from './watchlist.js';
-import { codexIssue } from './codex.js';
+import { codexIssue,codexFailureKind } from './codex.js';
 import type { AnalystEvent } from './codex.js';
 import type { ExecutionRequest,ExecutionAdvice } from './execution.js';
 
@@ -50,7 +50,9 @@ export interface BacktestProgress {running:boolean;phase:string;day:string;point
   at?:string;next_event_at?:string;last_error?:string}
 export interface ReplayActivity {at:string;stage:string;message:string;symbols?:string[];screening?:Analysis['screening']}
 export interface BacktestQuality {sessions:number;covered_sessions:number;calendar_verified:boolean;missing_sessions:string[];warmup:Record<string,number>;
-  insufficient_symbols:string[];last_marks:Record<string,string>;strategy_slots:number;successful_strategies:number;skipped_strategies:number}
+  insufficient_symbols:string[];last_marks:Record<string,string>;strategy_slots:number;successful_strategies:number;skipped_strategies:number;
+  universe_mode?:'DAILY_HISTORICAL'|'FIXED';universe_sessions?:number;execution_model?:'APPROXIMATE';
+  halted_at?:string;halt_reason?:'CODEX_QUOTA'|'CODEX_RATE_LIMIT';processed_sessions?:number}
 export interface BacktestReport {
   version:'0.2.0'|'0.1.0'|'0.4.0'|'0.5.0';final_frame?:ReplayFrame;dataset_id?:string;timeline?:{at:string;equity:string;cash:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
   source:string;synthetic:boolean;frequency:string;model:string;prompt_version:string;settings:Record<string,unknown>;
@@ -58,7 +60,8 @@ export interface BacktestReport {
     net_pnl:string;return_pct:string;realized_pnl:string;unrealized_pnl:string;fees:string;taxes:string;max_drawdown_pct:string;
     filled_orders:number;fill_count:number;winning_sell_fill_pct:string|null;codex_calls:number;decision_successes:number;decision_failures:number;
     risk_refusals:number;watch_scans:number;watch_adds:number;watch_removes:number;monitor_checks:number;
-    execution_requests?:number;execution_confirmations?:number;execution_failures?:number};
+    execution_requests?:number;execution_confirmations?:number;execution_failures?:number;
+    gross_pnl?:string;total_costs?:string;cost_drag_pct?:string;sell_orders?:number};
   quality:BacktestQuality;positions:import('./models.js').Position[];
   strategy_log:{at:string;review:boolean;stance:string;expires_at:string;summary:string;selected:string[]}[];watch_changes:WatchChange[];
   workflow?:ReplayActivity[];failures?:{at:string;review:boolean;stage:string;issue:string}[];normalization?:HistoryDataset['normalization'];
@@ -136,11 +139,13 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   const quality:BacktestQuality={sessions:expectedDays.length,covered_sessions:expectedDays.filter(d=>coveredDays.includes(d)).length,calendar_verified:calendarVerified,
     missing_sessions:expectedDays.filter(d=>!coveredDays.includes(d)),warmup,insufficient_symbols:Object.keys(warmup).filter(s=>warmup[s]!<20),
     last_marks:{},strategy_slots:0,successful_strategies:0,skipped_strategies:0};
+  quality.universe_mode=dataset.daily_universe?'DAILY_HISTORICAL':'FIXED';
+  quality.universe_sessions=Object.keys(dataset.daily_universe??{}).length;quality.execution_model='APPROXIMATE';
   const events=replayEvents(marketTimes,coveredDays,settings,calendar).filter(e=>e.at>=bounds.start&&e.at<=bounds.end);
   const limitations=[...dataset.limitations,
     ...(dataset.normalization?.duplicates?[`已整理 ${dataset.normalization.duplicates} 筆重複股票／時間；${dataset.normalization.revisions} 筆行情採用 Shioaji 同批最後修訂，成交量未重複加總`]:[]),
     '使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行',
-    '決策只看到截至虛擬時間已提供的價格與此前已完成日 K；不讀取今日新聞、營收或既有實盤經驗',
+    '決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗',
     '完整保留每次排程條件檢查；Codex 回測每五分鐘偵測並更新觀測股，分鐘行情只核對既有委託，不插值或製造行情',
     '缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合',
     '委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷',
@@ -149,7 +154,8 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     '買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進',
     '期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期',
     ...(!calendarVerified?['本區間沒有完整官方行事曆，使用資料中的行情日推定；無法辨識缺資料是否休市，T+2 僅為保守近似']:[]),
-    ...(request.strategy==='codex'?['Codex 可能在預訓練中知道歷史事件，不等於嚴格樣本外測試；呼叫會消耗本機登入方案額度／費用']:[])];
+    ...(request.strategy==='codex'?['Codex 可能在預訓練中知道歷史事件，不等於嚴格樣本外測試；呼叫會消耗本機登入方案額度／費用',
+      '回測等待 Codex 時凍結虛擬行情；實盤等待期間價格仍會變動，故無法由回測驗證分析延遲的成交影響']:[])];
   let status:BacktestReport['status']='COMPLETED',calls=0,successes=0,failures=0,currentDay='',lastTime=events[0]!.at,peak=d(request.initial_cash),drawdown=d(0),steps=0,checks=0,lastMonitor='',nextEvent='',lastError='';
   let sizeRequests=0,sizeConfirmations=0,sizeFailures=0;
   const timeline:NonNullable<BacktestReport['timeline']>=[];
@@ -163,6 +169,14 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     decisions:[...engine.decisionStates].map(([symbol,state])=>({symbol,...state})),next_event_at:nextEvent,last_monitor_at:lastMonitor,
     execution_queue:[...engine.pendingExecutions.values()].map(t=>({symbol:t.order.symbol,action:t.order.action,state:t.state,trigger:t.trigger}))});
   const cancelEntries=async(now:Date):Promise<void>=>{for(const o of store.orders(true))if(o.purpose==='ENTRY')await engine.cancel(o.local_id,now);};
+  const haltCodex=async(error:unknown,now:Date):Promise<void>=>{
+    const kind=codexFailureKind(error);if(kind==='OTHER')return;
+    quality.halted_at=now.toISOString();quality.halt_reason=kind==='QUOTA'?'CODEX_QUOTA':'CODEX_RATE_LIMIT';
+    status='PARTIAL';engine.entryBlocked=true;await cancelEntries(now);
+    for(const id of [...engine.pendingExecutions.keys()])engine.finishExecution(id,'SIZE_FAILED','Codex 無法確認；本次未送單，回測已停止',now);
+    const note='Codex 額度或限流已停止本次回測；保留截至此刻的部分結果，未繼續重試，也未跳過數量確認；恢復後需重新執行測試';
+    limitations.push(note);activity(now.toISOString(),'HALTED',note);
+  };
   const decision=async(now:Date,review=false):Promise<void>=>{
     if(signal.aborted)return;if(!review)quality.strategy_slots++;
     if(request.strategy==='codex'&&calls>=request.max_codex_calls){
@@ -191,10 +205,11 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       const issue=request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW')?codexIssue(error):error instanceof z.ZodError?'策略欄位格式不符，請核對結構化輸出':
         error instanceof Error&&/^(Codex|計畫|候選|策略|盤後|決策|買進|帳戶|回測)/.test(error.message)?error.message:'歷史快照或策略驗證未完成';
       lastError=`${twDay(now)} ${twClock(now)} · ${stage} · ${issue}`;failureLog.push({at:now.toISOString(),review,stage,issue});
-      activity(now.toISOString(),'FAILED',lastError);engine.log('ANALYSIS_FAIL',lastError+'；既有保護持續');}
+      activity(now.toISOString(),'FAILED',lastError);engine.log('ANALYSIS_FAIL',lastError+'；既有保護條件保留，委託仍需數量確認');
+      if(request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW'))await haltCodex(error,now);}
   };
   const executions=async(now:Date):Promise<void>=>{
-    for(;;){if(signal.aborted)return;const requestId=engine.nextExecutionId();if(!requestId)return;
+    for(;;){if(signal.aborted||quality.halt_reason)return;const requestId=engine.nextExecutionId();if(!requestId)return;
       let input:ExecutionRequest|undefined;
       try{
         input=await engine.executionRequest(requestId,now);if(!input)continue;
@@ -215,6 +230,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         engine.finishExecution(requestId,'SIZE_FAILED',issue+'；未送單',now);
         lastError=`${twDay(now)} ${twClock(now)} · SIZING · ${issue}`;failureLog.push({at:now.toISOString(),review:false,stage:'SIZING',issue});
         activity(now.toISOString(),'FAILED',lastError,input?{symbols:[input.symbol]}:{});
+        await haltCodex(error,now);
       }
     }
   };
@@ -244,7 +260,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       if(event.decision!==undefined){
         onFrame?.(frame(now));await decision(now,event.decision);scheduleExpiry(index);nextEvent=events.slice(index+1).find(e=>e.check||e.watch||e.decision!==undefined||e.close)?.at??'';
       }
-      if(event.check&&!signal.aborted){checks++;lastMonitor=event.at;progress('MONITOR',`${twClock(now)} 檢查進出場條件、風控與模擬送單`);await engine.tick(now,true);
+      if(event.check&&!signal.aborted&&!quality.halt_reason){checks++;lastMonitor=event.at;progress('MONITOR',`${twClock(now)} 檢查進出場條件、風控與模擬送單`);await engine.tick(now,true);
         await executions(now);}
       progress('RECONCILE',`${twClock(now)} 核對送單結果、成交股數與模擬帳務`);await engine.reconcile(now,true);
       const changed=store.orders().filter(o=>ordersBefore.get(o.local_id)!==o.status+':'+o.filled);
@@ -257,23 +273,28 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       const value=equity(engine.account!);if(value.gt(peak))peak=value;const loss=peak.minus(value).div(peak);if(loss.gt(drawdown))drawdown=loss;
       if(event.market){timeline.push({at:event.at,equity:value.toFixed(2),cash:engine.account!.cash});}
       if(visibleEvent||changed.length||broker.fillCount()>fillCount||clock?.paused||clock&&clock.speed>0){
-        onFrame?.(frame(now));progress('REPLAY',`${twClock(now)} 事件已完成，${nextEvent?'準備下一觸發點 '+twClock(new Date(nextEvent)):'正在彙整結果'}`);await yieldToEvents();}}
-    if(currentDay)await finishDay(currentDay,signal.aborted||twClock(new Date(lastTime))<'13:30'?new Date(lastTime):undefined);if(signal.aborted)status='CANCELLED';
-    else if(!quality.successful_strategies){status='FAILED';limitations.push('沒有任何有效 Codex 盤中決策或程式策略；本次損益不能用來評估策略');}
+        onFrame?.(frame(now));progress('REPLAY',`${twClock(now)} 事件已完成，${nextEvent?'準備下一觸發點 '+twClock(new Date(nextEvent)):'正在彙整結果'}`);await yieldToEvents();}
+      if(quality.halt_reason)break;}
+    if(currentDay)await finishDay(currentDay,signal.aborted||quality.halt_reason||twClock(new Date(lastTime))<'13:30'?new Date(lastTime):undefined);if(signal.aborted)status='CANCELLED';
+    else if(!quality.successful_strategies&&!quality.halt_reason){status='FAILED';limitations.push('沒有任何有效 Codex 盤中決策或程式策略；本次損益不能用來評估策略');}
     else if(failures||quality.skipped_strategies||quality.missing_sessions.length){status='PARTIAL';limitations.push('部分策略失敗、略過或交易日缺資料，這不是完整期間的成功測試');}
     const now=new Date(lastTime),account=await engine.refreshAccount(now),fills=broker.fills();
     const final=equity(account),realized=fills.reduce((sum,f)=>sum.plus(f.realized_pnl??'0'),d(0)),unrealized=marketValue(account).minus(broker.remainingCost());
     const sales=fills.filter(f=>f.action==='SELL'),refusals=store.db.prepare("SELECT COUNT(*) AS n FROM experiences WHERE json_extract(value,'$.kind')='RISK_REFUSAL'").get() as {n:number};
+    const fees=fills.reduce((sum,f)=>sum.plus(f.fee),d(0)),taxes=fills.reduce((sum,f)=>sum.plus(f.tax),d(0)),costs=fees.plus(taxes);
+    quality.processed_sessions=daily.length;
+    if(sales.length<20)limitations.push(`僅 ${new Set(sales.map(f=>f.order_id)).size} 筆有賣出成交的委託（${sales.length} 筆賣出成交明細），小樣本不能證明策略有效；成交比例不是完整交易勝率`);
     nextEvent='';const finalFrame=frame(now);onFrame?.(finalFrame);
     return {version:'0.1.0',final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
-      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:'two-stage-trading-v3',
+      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:'structured-conditions-v4',
       settings:Object.fromEntries(['min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
         'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','plan_max_minutes','experience_enabled',
         'watch_max_symbols','watch_min_amount','watch_remove_after_scans'].map(k=>[k,settings[k as keyof Settings]])),
       metrics:{initial_cash:request.initial_cash,final_cash:account.cash,settlement_credits:account.settlement_credits,stock_value:marketValue(account).toFixed(2),
         final_equity:final.toFixed(2),net_pnl:final.minus(request.initial_cash).toFixed(2),return_pct:final.div(request.initial_cash).minus(1).times(100).toFixed(4),
-        realized_pnl:realized.toFixed(2),unrealized_pnl:unrealized.toFixed(2),fees:fills.reduce((sum,f)=>sum.plus(f.fee),d(0)).toFixed(2),
-        taxes:fills.reduce((sum,f)=>sum.plus(f.tax),d(0)).toFixed(2),max_drawdown_pct:drawdown.times(100).toFixed(4),
+        realized_pnl:realized.toFixed(2),unrealized_pnl:unrealized.toFixed(2),fees:fees.toFixed(2),
+        taxes:taxes.toFixed(2),gross_pnl:final.minus(request.initial_cash).plus(costs).toFixed(2),total_costs:costs.toFixed(2),
+        cost_drag_pct:costs.div(request.initial_cash).times(100).toFixed(4),sell_orders:new Set(sales.map(f=>f.order_id)).size,max_drawdown_pct:drawdown.times(100).toFixed(4),
         filled_orders:new Set(fills.map(f=>f.order_id)).size,fill_count:fills.length,
         winning_sell_fill_pct:sales.length?d(sales.filter(f=>d(f.realized_pnl!).gt(0)).length).div(sales.length).times(100).toFixed(2):null,
         codex_calls:calls,decision_successes:successes,decision_failures:failures,risk_refusals:refusals.n,
@@ -288,10 +309,12 @@ export function formatBacktestReport(r:BacktestReport):string{const m=r.metrics;
     `策略 ${r.request.strategy_schedule==='fixed'?r.request.strategy_times.join('、'):r.request.decision_interval_minutes+' 分鐘'} / 偵測 ${r.request.monitor_interval_seconds} 秒 / 觀測 ${r.request.watch_refresh_minutes} 分鐘`,
     `起始資金=${m.initial_cash} 期末淨值=${m.final_equity} 現金=${m.final_cash} 待收交割=${m.settlement_credits} 股票市值=${m.stock_value}`,
     `淨損益=${m.net_pnl} 報酬=${m.return_pct}% 已實現=${m.realized_pnl} 未實現=${m.unrealized_pnl}`,`手續費=${m.fees} 交易稅=${m.taxes} 最大回撤=${m.max_drawdown_pct}%`,
+    ...(m.gross_pnl!==undefined?[`費用前損益=${m.gross_pnl} 已支付成本=${m.total_costs} 成本占起始資金=${m.cost_drag_pct}%`]:[]),
     `成交委託=${m.filled_orders} 成交明細=${m.fill_count} 獲利賣出成交比例=${m.winning_sell_fill_pct??'無賣出'}%`,
     `Codex 呼叫=${m.codex_calls} 有效分析／檢討=${m.decision_successes} 分析失敗=${m.decision_failures} 風控拒絕=${m.risk_refusals}`,
     `觀測更新=${m.watch_scans} 加入=${m.watch_adds} 移除=${m.watch_removes} 偵測=${m.monitor_checks}`,
     `資料覆蓋=${r.quality.covered_sessions}/${r.quality.sessions} 交易日；有效策略=${r.quality.successful_strategies}/${r.quality.strategy_slots}`,
+    `成交模型=近似；股票池=${r.quality.universe_mode==='DAILY_HISTORICAL'?'每日歷史排行':'固定資料池'}；${r.quality.halted_at?'停止於='+r.quality.halted_at:'已處理行情截止='+r.asof}`,
     '',...r.daily_equity.map(x=>`${x.day} 淨值=${x.equity} 現金=${x.cash} 待收=${x.settlement_credits}`),'',...r.limitations].join('\n');}
 const csvValue=(x:unknown):string=>'"'+String(x??'').replace(/"/g,'""')+'"';
 export function fillsCsv(r:BacktestReport):string{const fields=['at','symbol','action','lot','purpose','shares','price','amount','fee','tax','realized_pnl'] as const;

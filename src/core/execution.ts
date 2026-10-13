@@ -19,6 +19,16 @@ export interface ExecutionTicket {
 export interface ExecutionLot {
   lot:'ODD'|'COMMON';quote:Quote;limit_price:string;min_price:string;max_price:string;
   step:number;max_shares:number;reasons:string[];
+  cost_at_max_shares?:ReturnType<typeof roundTripEstimate>;
+}
+export function roundTripEstimate(shares:number,buyPrice:string,targetPrice:string|null,s:Settings){
+  const entry=d(buyPrice).times(shares),buyFee=fee(entry,s);
+  const target=targetPrice===null?null:d(targetPrice).times(shares);
+  const sellFee=target===null?null:fee(target,s),tax=target===null?null:target.times(s.sell_tax_rate).ceil();
+  const costs=sellFee===null?null:d(buyFee).plus(sellFee).plus(tax!);
+  return {shares,buy_price:buyPrice,target_price:targetPrice,buy_fee:buyFee.toFixed(),
+    estimated_sell_fee:sellFee?.toFixed()??null,estimated_sell_tax:tax?.toFixed()??null,
+    estimated_total_costs:costs?.toFixed()??null,estimated_net_target_gain:target===null?null:target.minus(entry).minus(costs!).toFixed()};
 }
 export interface ExecutionRequest {
   request_id:string;asof:string;triggered_at:string;symbol:string;action:'BUY'|'SELL';purpose:Order['purpose'];
@@ -69,7 +79,8 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     let lo=1,hi=q.odd?999:999;
     while(lo<=hi){const mid=Math.floor((lo+hi)/2);if(!test(mid*step).length){units=mid;lo=mid+1;}else hi=mid-1;}
   }
-  return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,max_shares:units*step,reasons};
+  return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,max_shares:units*step,reasons,
+    ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,ticket.smart?.take_profit??null,s)}:{})};
 }
 export function executionPrompt(request:ExecutionRequest):string {
   return `你是台灣現股交易數量確認器。本次已由程式確認 Codex 先前設定的條件觸發。
@@ -78,6 +89,8 @@ request_id、symbol 必須完全相符。action 只能沿用指定 BUY / SELL，
 shares 一律是股數，不是張數；一張=1000股。ODD 是 1–999 股；COMMON 只能使用 1000 股倍數且必須有可用 COMMON 範圍。
 股數不得超過所選 lots.max_shares；限價必須在 min_price / max_price 內並符合台股跳動單位。
 max_shares 是硬性風控上限，不是要求用滿；根據目前現金、保留現金、交割款、掛單占用、持倉集中度與風險決定較合適數量。
+cost_at_max_shares 是該上限數量按目前買價與停利目標估算的雙邊手續費、賣出稅與淨價差，不代表保證獲利；縮小數量時最低手續費未必同比減少。
+BUY 必須再按你選定股數估算成本，不能只看價格百分比；若目標價差不足覆蓋成本或資料不足，應 HOLD 並說明。停利目標為 null 時不得編造目標或預期獲利。
 SELL 只能使用目前 sellable 的可賣庫存；今日新增零股不得當沖，不能借券、融資或賣空。
 SELL 的觸發可能是停損、停利、移動停損或定時策略減碼；清楚說明本次數量理由。
 禁止現金不足時改用槓桿、要求降低風控或把尚未可用的賣出交割款當現金。
@@ -86,3 +99,4 @@ HOLD 時 shares=0。無法確認或資料不足時必須 HOLD；不要為維持�
 只回傳指定 JSON 結構，reason 說明交易理由、數量依據與風險。
 以下是唯一可用資料：\n${JSON.stringify(request)}`;
 }
+

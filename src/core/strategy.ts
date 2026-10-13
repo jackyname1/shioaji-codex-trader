@@ -62,7 +62,7 @@ export function demoAnalysis(snapshot: Snapshot, settings: Settings, now: Date):
       symbol: first.symbol, action: 'BUY', shares: 10, limit_price: price.plus(tickSize(price)).toFixed(),
       entry_when: 'IMMEDIATE', trigger_price: '0', smart: { stop_price: roundPrice(price.times('.95')),
         take_profit: roundPrice(price.times('1.10')), trailing_activate: roundPrice(price.times('1.08')), trailing_fraction: '.03'.replace(/^\./, '0.') },
-      reason: '虛構行情流程展示，不是投資策略或真實股票建議' }] : [],
+      conditions:[],reason: '虛構行情流程展示，不是投資策略或真實股票建議' }] : [],
     screening:snapshot.review_only?null:{min_amount:settings.watch_min_amount,min_volume_ratio:'0',rsi_min:0,rsi_max:100,return20_min:'-0.50',
       entry:{signal:'TREND',allocation_fraction:'0.02',max_ma20_distance:'0.10',stop_fraction:'0.05',take_profit_fraction:'0.10',trailing_fraction:'0.03'}},
     summary: 'DEMO：虛構股票，驗證動態觀測、規則進場、部分成交與跨日保護；不是有效獲利策略' });

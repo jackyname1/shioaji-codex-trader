@@ -159,9 +159,13 @@ test('historical Shioaji loader queries only past ranking, contracts and bars; c
     const first=await load(),historyCount=calls.filter(x=>x.path.endsWith('/data/kbars')).length;assert.ok(first.points.length>0);
     const scan=calls.find(x=>x.path.endsWith('/data/scanner'))!.body;
     assert.equal(scan.date,'2026-06-30');assert.equal(scan.ascending,true);assert.equal(scan.count,200);
+    assert.deepEqual(calls.filter(x=>x.path.endsWith('/data/scanner')).map(x=>x.body.date),['2026-06-30','2026-07-01','2026-07-02']);
+    assert.deepEqual(Object.keys(first.daily_universe!),['2026-07-01','2026-07-02','2026-07-03']);
+    assert.equal(first.daily_universe!['2026-07-03']!.asof,'2026-07-02');
     assert.deepEqual(Object.keys(first.names).sort(),['9001','9002','9003','9004','9005']);assert.equal(first.points[0]!.amount_twd,'30000000');
     assert.equal(new Set(first.points.map(p=>p.symbol+':'+p.at)).size,first.points.length);
     await load();assert.equal(calls.filter(x=>x.path.endsWith('/data/kbars')).length,historyCount);
+    assert.equal(calls.filter(x=>x.path.endsWith('/data/scanner')).length,3,'Immutable daily ranks are cached too');
     const scannerCount=calls.filter(x=>x.path.endsWith('/data/scanner')).length;
     const selected=await shioajiDataset(BacktestRequestSchema.parse({...request,symbols:['9001']}),SettingsSchema.parse({}),dir,new AbortController().signal,()=>undefined,fetcher);
     assert.equal(calls.filter(x=>x.path.endsWith('/data/scanner')).length,scannerCount);assert.match(selected.source,/指定 1 檔股票/);
@@ -178,3 +182,4 @@ test('replayed sell proceeds remain reserved until T+2 rather than funding new b
   assert.ok(d(saleDay.settlement_credits).gt(0));assert.equal(settled.settlement_credits,'0');
   assert.ok(d(settled.cash).gt(saleDay.cash));assert.ok(d(r.metrics.net_pnl).eq(d(r.metrics.realized_pnl).plus(r.metrics.unrealized_pnl)));
 });
+
