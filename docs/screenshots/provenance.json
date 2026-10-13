@@ -1,0 +1,66 @@
+{
+  "app_version": "0.1.1",
+  "platform": "Windows x64",
+  "data": "isolated synthetic fixtures",
+  "source_commit": "372ca1089d2b81f00134b7c634799ca202ee03ce",
+  "workflow_run": 38411725657,
+  "artifact_id": 11822641981,
+  "artifact_sha256": "180c9d81fb8e799739defcc859ca0bc023a6b58963aa1947338304d5110b3a77",
+  "images": [
+    {
+      "path": "docs/screenshots/workbench-v0.1.1.png",
+      "source_file": "SYNTHETIC-ui-paper-1600.png",
+      "bytes": 244240,
+      "sha256": "ecb0510a76fa20362d929c321fbc8be1e9808ac844da147077c0a45c8f3cdf76",
+      "git_sha": "52e3687efdb1ed3e80b1d424fd62ec6f06df33c3",
+      "dimensions": [
+        1600,
+        960
+      ]
+    },
+    {
+      "path": "docs/screenshots/realtime-v0.1.1.png",
+      "source_file": "SYNTHETIC-ui-realtime-1600.png",
+      "bytes": 242721,
+      "sha256": "3292f807bdd2658232d63d7d717e2137686255f42f8b87a3baacab181a99a300",
+      "git_sha": "500700d6184cef743b1244538e5d596eacba964e",
+      "dimensions": [
+        1600,
+        960
+      ]
+    },
+    {
+      "path": "docs/screenshots/live-v0.1.1.png",
+      "source_file": "SYNTHETIC-ui-live.png",
+      "bytes": 240792,
+      "sha256": "7f4d7a12e1606683431cd52df5e438e03bac748a3c78538d7c4c641a7bde3b1c",
+      "git_sha": "f15fe1b7536a10ae38e35be14318c9a03b3ff1b1",
+      "dimensions": [
+        1600,
+        960
+      ]
+    },
+    {
+      "path": "docs/screenshots/connection-v0.1.1.png",
+      "source_file": "SYNTHETIC-ui-connection.png",
+      "bytes": 225837,
+      "sha256": "d18214b0051938efff9d370cea2186b988e32c4886d53cd16518ce243b97f19f",
+      "git_sha": "d999158a76c631bc91465875f4734762f02e6d73",
+      "dimensions": [
+        1600,
+        960
+      ]
+    },
+    {
+      "path": "docs/screenshots/codex-history-v0.1.1.png",
+      "source_file": "SYNTHETIC-ui-codex-history.png",
+      "bytes": 317029,
+      "sha256": "fb191c62573085152542efea463e7d8e678272d31790e457baffbc3d30b8ea56",
+      "git_sha": "21cd273f39a12a6750369e5ac71a5b773e04a840",
+      "dimensions": [
+        1920,
+        1080
+      ]
+    }
+  ]
+}
