@@ -25,6 +25,7 @@ const bridge: TraderBridge = {
   chart: request => ipcRenderer.invoke('trader:chart',request),
   replayControl: command => ipcRenderer.invoke('trader:replay-control',command),
   replaySpeed: speed => ipcRenderer.invoke('trader:replay-speed',speed),
+  onReplayClock: listener => {const callback=(_event:Electron.IpcRendererEvent,state:import('../core/replay-clock.js').ReplayClockState)=>listener(state);ipcRenderer.on('trader:replay-clock',callback);return ()=>ipcRenderer.removeListener('trader:replay-clock',callback);},
   exportMarket: () => ipcRenderer.invoke('trader:export-market'),
   exportDiagnostics:()=>ipcRenderer.invoke('trader:export-diagnostics'),
   retryWorkspace:()=>ipcRenderer.invoke('trader:retry-workspace'),

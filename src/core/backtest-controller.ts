@@ -2,7 +2,7 @@ import { readFile,writeFile,mkdir,rename,readdir,stat } from 'node:fs/promises';
 import { join,dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BacktestRequestSchema,formatBacktestReport,runBacktest,type BacktestProgress,type BacktestReport,type ReplayFrame } from './backtest.js';
-import { ReplayClock,type ReplayCommand } from './replay-clock.js';
+import { ReplayClock,type ReplayCommand,type ReplayClockState } from './replay-clock.js';
 import { buildChart,ChartRequestSchema,type ChartData } from './chart.js';
 import type { HistoryDataset } from './backtest-data.js';
 import type { AnalystEvent } from './codex.js';
@@ -25,7 +25,7 @@ export class BacktestController {
   report?:BacktestReport;history:BacktestSummary[]=[];comparisons:BacktestSummary[]=[];
   progress:BacktestProgress={running:false,phase:'IDLE',day:'',points:0,total_points:0,codex_calls:0,message:'選擇日期與排程，即可開始全自動測試'};
   private abort?:AbortController;private task?:Promise<void>;
-  constructor(readonly root:string){}
+  constructor(readonly root:string,private readonly onClock?:(state:ReplayClockState)=>void){this.clock=new ReplayClock(onClock);}
   private useReport(r:BacktestReport):void {
     this.report=r;this.frame=r.final_frame;
     this.progress={running:false,phase:r.status,day:r.request.end,points:0,total_points:0,
@@ -70,7 +70,7 @@ export class BacktestController {
     if(request.source==='csv'&&csv===undefined)throw new Error('回測尚未選取 CSV');
     if(request.strategy==='codex'&&!settings.codex_enabled)throw new Error('回測 Codex 需先啟用並在本機登入');
     this.abort=new AbortController();this.comparisons=[];this.frame=undefined;this.dataset=undefined;this.report=undefined;this.analystEvents=[];
-    this.clock=new ReplayClock();this.clock.setSpeed(request.playback_speed);
+    this.clock=new ReplayClock(this.onClock);this.clock.setSpeed(request.playback_speed);
     const intervals=request.comparison_intervals.length?request.comparison_intervals:[request.decision_interval_minutes];
     this.progress={running:true,phase:'LOADING',day:request.start,points:0,total_points:0,codex_calls:0,message:'準備歷史資料與獨立模擬帳戶',run:1,total_runs:intervals.length};
     const signal=this.abort.signal,snapshotSettings=structuredClone(settings);let consumed=0;
@@ -109,7 +109,7 @@ export class BacktestController {
     return intervals.length>1?`已啟動 ${intervals.length} 組自動比較；Codex 呼叫上限為整批共用`:'已啟動全自動歷史測試，交易監控持續';
   }
   control(command:ReplayCommand):string{if(!this.task)throw new Error('回測尚未執行');this.clock.command(command);return command==='pause'?'目前步驟完成後暫停，保留尚未執行的事件':command==='step'?'完整執行下一個觸發事件後暫停':'依序繼續全部模擬步驟';}
-  speed(value:number):string{this.clock.setSpeed(value);return value?'時間快進 '+value+'×；每個步驟仍完整執行':'每五分鐘完整檢查，直到條件觸發或下一輪 Codex；確認股數與核對完成後才繼續';}
+  speed(value:number):string{this.clock.setSpeed(value);return value?'加速播放 '+value+'×；模擬秒數連續前進，每五分鐘檢查條件':'每五分鐘完整檢查，直到條件觸發或下一輪 Codex；確認股數與核對完成後才繼續';}
   async marketData():Promise<HistoryDataset>{
     if(this.dataset)return this.dataset;
     const id=this.report?.dataset_id;if(!id||! /^[a-f0-9-]{36}$/.test(id))throw new Error('回測舊版報表沒有保存原始行情，請重新執行');
