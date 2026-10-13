@@ -16,6 +16,7 @@ import type { DesktopState } from './shared.js';
 import { bundledCodexPath, CodexError, codexEnvironment, prepareCodexProfile,compactAnalystEvent } from '../core/codex.js';
 import {ReplayClock} from '../core/replay-clock.js';
 import { BacktestController } from '../core/backtest-controller.js';
+import {replayMinutesCsv} from '../core/backtest-data.js';
 import { BacktestRequestSchema,fillsCsv } from '../core/backtest.js';
 import { experienceStatus } from '../core/experience.js';
 import { z } from 'zod';
@@ -360,11 +361,13 @@ function registerIpc(): void {
   handle('trader:replay-control',value=>backtest.control(z.enum(['pause','resume','step']).parse(value)));
   handle('trader:replay-speed',value=>backtest.speed(z.number().finite().min(0).max(60).parse(value)));
   handle('trader:export-market',async()=>{
-    if(backtest.progress.running)throw new Error('回測完成後才能匯出整段原始行情');
-    const dataset=await backtest.marketData(),result=await dialog.showSaveDialog(window!,{title:'匯出完整歷史行情',defaultPath:'Shioaji-history.csv',filters:[{name:'CSV',extensions:['csv']}]});
+    if(backtest.progress.running)throw new Error('回測完成後才能匯出回測資料');
+    const dataset=await backtest.marketData(),result=await dialog.showSaveDialog(window!,{title:'匯出回測資料',defaultPath:'Shioaji-history.json',filters:[
+      {name:'完整 JSON（分鐘、暖機日 K、每日股票池）',extensions:['json']},{name:'分鐘行情 CSV（不含暖機與股票池）',extensions:['csv']}]});
     if(result.canceled||!result.filePath)return '已取消匯出';
-    const columns=['symbol','at','open','high','low','close','volume_shares'] as const;
-    writeFileSync(result.filePath,'\uFEFF'+columns.join(',')+'\r\n'+dataset.points.map(p=>columns.map(k=>String(p[k])).join(',')).join('\r\n'),{mode:0o600});return '完整歷史行情已匯出';
+    const csv=result.filePath.toLowerCase().endsWith('.csv');
+    writeFileSync(result.filePath,csv?replayMinutesCsv(dataset):JSON.stringify(dataset),{mode:0o600});
+    return csv?'分鐘行情 CSV 已匯出（不含每日股票池及暖機日 K）':'完整回測資料已匯出（含分鐘行情、暖機日 K、每日股票池及入池日期）';
   });
   handle('trader:codex-login',value=>{
     if(smoke)throw new Error('Codex 登入不在測試流程執行');
