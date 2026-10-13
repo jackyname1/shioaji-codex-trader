@@ -106,15 +106,16 @@ test('a lock updated during an owner probe is never removed',t=>{
 test('Windows PID probes use bounded read-only PowerShell and treat ambiguous results as unknown',t=>{
   let output='{"state":"running","startedAt":123456}',calls=0;
   t.mock.method(childProcess,'execFileSync',(file:string,args:string[],options:Record<string,unknown>)=>{
-    calls++;assert.match(file,/System32[\\/]WindowsPowerShell/);assert.ok(args.includes('-NoProfile'));assert.match(args.at(-1)!,/Get-Process -Id 123 -ErrorAction Stop/);
-    assert.ok(!args.at(-1)!.includes('Stop-Process'));assert.equal(options.timeout,5000);assert.equal(options.windowsHide,true);
+    calls++;assert.match(file,/System32[\\/]WindowsPowerShell/);assert.ok(args.includes('-NoProfile'));assert.match(args.at(-1)!,/\[System.Diagnostics.Process\]::GetProcessById\(123\)/);
+    assert.match(args.at(-1)!,/\$cause -is \[System.ArgumentException\]/);
+    assert.ok(!/Stop-Process|Get-Process|ConvertTo-Json|\.Kill\(/.test(args.at(-1)!));assert.equal(options.timeout,15000);assert.equal(options.windowsHide,true);
     assert.ok(!Object.keys(options.env as object).some(key=>key.toUpperCase()==='PSMODULEPATH'));
-    if(output==='throw')throw denied();return output;
+    if(output==='throw')throw denied();if(output==='timeout')throw Object.assign(new Error('isolated timeout'),{code:'ETIMEDOUT'});return output;
   });trackMocks(t);
   assert.deepEqual(windowsProcessState(123),{state:'running',startedAt:123456});
   output='{"state":"absent"}';assert.deepEqual(processState(123,'win32'),{state:'absent'});
   output='{"state":"running","startedAt":null}';assert.deepEqual(windowsProcessState(123),{state:'running'});
-  for(const value of ['{}','SYNTHETIC_SECRET','{"state":"unknown"}','throw']){output=value;assert.deepEqual(windowsProcessState(123),{state:'unknown'});}
+  for(const value of ['{}','SYNTHETIC_SECRET','{"state":"unknown"}','throw','timeout']){output=value;assert.deepEqual(windowsProcessState(123),{state:'unknown'});}
   const before=calls;assert.deepEqual(windowsProcessState(-1),{state:'unknown'});assert.equal(calls,before);
 });
 
