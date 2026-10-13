@@ -72,3 +72,5 @@ dialog{background:#151d29}.card{background:#101824}.analyst-event{background:#11
 
 
 .replay-toolbar #replay-speed{width:110px;min-width:60px;padding:0;accent-color:var(--accent)}.replay-toolbar #replay-speed-number{width:72px;font-size:11px}.replay-toolbar label{white-space:nowrap;font-size:10px}.replay-toolbar output{font-size:10px;white-space:nowrap}
+
+.replay-toolbar{flex-wrap:wrap}.replay-toolbar>strong:first-child{flex:1 1 100px}.simulation-fields .replay-strategy{font-size:10px;white-space:nowrap;align-self:center;color:var(--muted)}
