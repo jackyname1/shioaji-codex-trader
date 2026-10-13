@@ -67,12 +67,12 @@ jobs:
           if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Electron smoke test timed out' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
       - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
         with:
           name: Workbench-screenshots
           path: release/SYNTHETIC-ui-*.png
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
   windows:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -101,6 +101,7 @@ jobs:
           if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Packaged app smoke test timed out' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
       - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           name: Shioaji-Codex-Trader-Windows-x64
           path: |
@@ -110,7 +111,7 @@ jobs:
             release/WINDOWS-SIGNATURE.json
             release/SYNTHETIC-*
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
   publish:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: [test, windows]
@@ -118,7 +119,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
-      actions: read
+      actions: write
     concurrency:
       group: release-publish-main
       cancel-in-progress: false
@@ -134,4 +135,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: node scripts/publish-release.mjs
+      - name: Remove temporary Windows artifact after verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          ids="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | select(.name == "Shioaji-Codex-Trader-Windows-x64") | .id')"
+          if [ -n "$ids" ]; then
+            while IFS= read -r id; do
+              if ! gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"; then
+                echo "::warning::Could not remove the temporary artifact $id; it will expire after one day."
+              fi
+            done <<< "$ids"
+          fi
 
