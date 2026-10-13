@@ -35,6 +35,7 @@ import { spendableCash } from '../core/execution.js';
 
 let window: BrowserWindow | undefined, tray: Tray | undefined, service: TradingService | undefined;
 let trayTimer:NodeJS.Timeout|undefined,nativeStatusKey='';
+let nativeOverlayClears=0;
 let quitting = false, initialError = '', blocker: number | undefined;
 const smoke = process.argv.includes('--smoke-test');
 const argsMode = process.argv.find(a => a.startsWith('--mode='))?.slice(7);
@@ -55,6 +56,8 @@ let commonSettings:DesktopSettings,codexLogin:CodexLogin;
 let workspaceDiagnostic:WorkspaceDiagnostic|undefined;
 let preferences:{last_mode:Settings['mode'];paper_scope?:'realtime'|'replay';connections:Partial<Record<Settings['mode'],{base_url:string;stock_account_index:number}>>}={last_mode:'paper',connections:{}};
 
+// Match the executable's Windows identity across portable versions and extraction paths.
+if(process.platform==='win32')app.setAppUserModelId('tw.shioaji.codex.trader');
 if (!smoke&&!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance',() => { window?.show(); window?.focus(); });
@@ -147,10 +150,14 @@ function connectionStatus(){
   return service?.persistenceIssue&&view.workspace_ready&&!connectionBusy?{...view,phase:'read_only',status:'Shioaji 已連線 · 帳務可讀，本機紀錄待修復'}:view;
 }
 function createWindow(): void {
-  window = new BrowserWindow({width:1600,height:960,minWidth:1100,minHeight:680,icon:join(directory,'assets/app.png'),title:'Shioaji Codex Trader',
+  window = new BrowserWindow({width:1600,height:960,minWidth:1100,minHeight:680,icon:join(directory,process.platform==='win32'?'assets/app.ico':'assets/app.png'),title:'Shioaji Codex Trader',
     backgroundColor:'#0c1016',show:false,webPreferences:{preload:join(directory,'preload.cjs'),nodeIntegration:false,
       contextIsolation:true,sandbox:true,webSecurity:true}});
   window.setMenuBarVisibility(false);
+  if(smoke&&process.platform==='win32'){
+    const clearOverlay=window.setOverlayIcon.bind(window);
+    window.setOverlayIcon=(image,description)=>{if(image!==null)throw new Error('工作列不得疊加第二個圖示');nativeOverlayClears++;clearOverlay(image,description);};
+  }
   window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
   window.webContents.on('will-navigate',event => event.preventDefault());
   window.once('ready-to-show',() => window?.show());
@@ -170,7 +177,9 @@ function updateNativeStatus():void {
     :!engine?.connected?'等待連線':service?.persistenceIssue?'帳務可讀 · 本機紀錄待修復':stopped?'委託已停止':paused?'暫停新增買進':service?.sizing?'Codex 確認數量':service?.analyzing?'Codex 更新條件':engine.settings.auto_execute?'自動監測中':'已連線 · 待命';
   const key=`${workspace}:${state}:${activity}`;if(key===nativeStatusKey)return;nativeStatusKey=key;
   const icon=trayIcon(state);tray.setImage(icon);tray.setToolTip(`Shioaji Codex Trader｜${workspace}｜${activity}`);
-  if(process.platform==='win32')window?.setOverlayIcon(state==='ready'?null:icon.resize({width:16,height:16}),`${workspace} · ${activity}`);
+  // An entire tray tile as an overlay looks like two broken/stacked taskbar icons.
+  // The taskbar keeps the base ICO; native state remains visible in the tray and its menu.
+  if(process.platform==='win32')window?.setOverlayIcon(null,'');
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:`${workspace} · ${activity}`,enabled:false},{type:'separator'},
     {label:'開啟交易工作台',click:()=>{window?.show();window?.focus();}},
@@ -362,9 +371,11 @@ function registerIpc(): void {
     return codexLogin.start(value==='device');
   });
   handle('trader:codex-open',()=>{if(smoke)throw new Error('Codex 登入不在測試流程執行');return codexLogin.reopen();});
-  handle('trader:codex-test',()=>{
+  handle('trader:codex-test',async()=>{
     if(smoke||!service)throw new Error('Codex 連線測試不在隔離流程執行');
-    return codexLogin.test(service.engine.settings);
+    const testedService=service,result=await codexLogin.test(testedService.engine.settings);
+    if(service===testedService&&codexLogin.status.test_state==='connected')await testedService.enqueue(()=>testedService.clearCodexFailure());
+    return result;
   });
   handle('trader:backtest-export',async value=>{
     if(!backtest.report||!['json','csv'].includes(String(value)))throw new Error('回測沒有可匯出的報表');
@@ -642,6 +653,7 @@ async function smokeTest(): Promise<void> {
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
   for(const status of ['ready','active','paused','offline'])if(trayIcon(status).isEmpty())throw new Error('原生狀態圖示未打包');
+  if(process.platform==='win32'&&(nativeOverlayClears<2||nativeImage.createFromPath(join(directory,'assets/app.ico')).isEmpty()))throw new Error('Windows 固定主圖示與不重疊狀態驗證未通過');
   console.log('Electron single workspace at 1366/1600/1920, realtime paper/replay/live, complete model journal, masked saved credentials, built-in Shioaji, chart gestures and native status icons: PASS');await verifyConnectionLifecycle();await exit();
 }
 async function verifyRenderer(): Promise<void> {

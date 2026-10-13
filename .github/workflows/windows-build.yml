@@ -23,6 +23,9 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run prepare:broker
       - run: npm test
+        if: runner.os != 'Windows'
+      - run: npm run test:windows
+        if: runner.os == 'Windows'
       - name: Windows Authenticode report verification
         if: runner.os == 'Windows'
         shell: powershell
@@ -131,3 +134,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: node scripts/publish-release.mjs
+

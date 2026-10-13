@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Engine, type Bundle } from './engine.js';
-import { CodexAnalyst, CodexError, codexIssue, appendAnalystEvent, type AnalystEvent } from './codex.js';
+import { CodexAnalyst, CodexError, codexIssue, shouldHaltCodex, diagnoseCodexFailure, appendAnalystEvent, type AnalystEvent } from './codex.js';
 import type { ExecutionAdvice, ExecutionRequest } from './execution.js';
 import { BrokerError, brokerIssue } from '../broker/health.js';
 import { collectFacts } from './facts.js';
@@ -106,6 +106,7 @@ export class TradingService {
     if (!this.calendar.isOpen(twDay(now))) return;
     const s = this.engine.settings;
     if(!s.auto_execute)return;
+    if(s.codex_enabled&&this.engine.advisorIssue)return;
     if (!s.codex_enabled && s.mode !== 'demo') return;
     if(this.decisionTask)return;
     const slot=dueStrategy(now,s,this.calendar,key=>!!this.store.get('schedule_'+key));
@@ -121,11 +122,23 @@ export class TradingService {
     this.store.recordAnalystEvent(event);appendAnalystEvent(this.analystEvents,event);
     this.analystEvents=this.analystEvents.slice(-200);
   };
+  clearCodexFailure():void {
+    if(!this.engine.advisorIssue)return;this.engine.setAdvisorIssue('');
+    this.analysisStatus='Codex 連線已恢復；新買進仍等待有效策略';
+    this.engine.log('CODEX_RECOVERED',this.analysisStatus);
+    this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:this.now().toISOString(),stage:'RECOVERED',message:this.analysisStatus,
+      model:this.engine.settings.codex_model||'Codex 預設模型',reasoning:this.engine.settings.codex_reasoning,purpose:'STRATEGY'});
+  }
+  private blockCodexFailure(error:unknown):void {
+    if(error instanceof BrokerError||!shouldHaltCodex(error))return;
+    const issue=codexIssue(error);this.engine.setAdvisorIssue(issue);this.analysisStatus=issue+'；已停止自動 Codex 呼叫，請先測試連線或重新分析';
+    this.engine.logOnce('CODEX_UNAVAILABLE',this.analysisStatus+'；既有出場條件保留，未確認數量不送單');
+  }
   /** The model waits outside the engine queue, allowing ticks, fills and emergency commands to continue. */
   processExecutions():Promise<void>{
-    if(this.stopping)return Promise.resolve();if(this.executionTask)return this.executionTask;
+    if(this.stopping||this.engine.advisorIssue)return Promise.resolve();if(this.executionTask)return this.executionTask;
     this.executionTask=(async()=>{
-      for(;;){if(this.stopping)return;
+      for(;;){if(this.stopping||this.engine.advisorIssue)return;
         const id=await this.enqueue(()=>this.engine.nextExecutionId());if(!id)return;
         let request:ExecutionRequest|undefined;
         try {
@@ -145,10 +158,11 @@ export class TradingService {
         }catch(error){
           if(!this.stopping){const issue=this.executionAbort?.signal.aborted?'Codex 數量確認已停止'
             :error instanceof BrokerError?brokerIssue(error):codexIssue(error);
-            await this.enqueue(()=>this.engine.finishExecution(id,'SIZE_FAILED',issue+'；未送單',this.now()));
-            this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:request?.asof??this.now().toISOString(),stage:'FAILED',
+            await this.enqueue(()=>{this.engine.finishExecution(id,'SIZE_FAILED',issue+'；未送單',this.now());if(!this.executionAbort?.signal.aborted)this.blockCodexFailure(error);});
+            const previous=this.analystEvents.at(-1),sameTurn=previous?.stage==='FAILED'&&previous.run_id&&previous.purpose==='EXECUTION'&&previous.asof===request?.asof;
+            this.analystEvent({...(sameTurn?previous:{id:randomUUID()}),at:this.now().toISOString(),asof:request?.asof??this.now().toISOString(),stage:'FAILED',
               message:issue+'；本次未送單',model:this.executionAnalyst?.selection?.model||this.engine.settings.codex_model||'Codex 數量確認',
-              reasoning:this.engine.settings.codex_reasoning,purpose:'EXECUTION'});
+              reasoning:this.engine.settings.codex_reasoning,purpose:'EXECUTION',details:diagnoseCodexFailure(error)});
           }
         }finally{this.executionAnalyst=undefined;this.executionAbort=undefined;}
       }
@@ -211,7 +225,7 @@ export class TradingService {
         signal.throwIfAborted();
         analysis = await this.analyst.analyze(snapshot,signal);
       }
-      await this.enqueue(() => { signal.throwIfAborted(); return this.engine.activate(analysis,snapshot,this.now()); });
+      await this.enqueue(async () => { signal.throwIfAborted();await this.engine.activate(analysis,snapshot,this.now());this.clearCodexFailure(); });
       this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
     } catch (error) {
       const issue=signal.aborted?'Codex 分析已停止':error instanceof CodexError?codexIssue(error):
@@ -219,11 +233,12 @@ export class TradingService {
       this.analysisStatus=issue;
       if(!this.analystEvents.some(e=>e.stage==='FAILED'&&Date.parse(e.at)>=this.now().getTime()-2000))this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:this.now().toISOString(),stage:'FAILED',message:issue,model:this.analyst?.selection?.model||s.codex_model||'Codex 預設模型',reasoning:s.codex_reasoning,purpose:'STRATEGY'});
       if (!this.stopping) await this.enqueue(async () => {
+        this.blockCodexFailure(error);
         if(!review)this.engine.entryBlocked = true;
         this.store.recordExperience({id:'analysis-failure:'+randomUUID(),at:this.now().toISOString(),mode:this.engine.settings.mode,
           kind:'ANALYSIS_FAILURE',symbol:'',action:'NONE',shares:0,price:null,fee:null,tax:null,realized_pnl:null,
           note:'分析逾時、資料不足或 schema／快照核對失敗；未採用該輪結果'});
-        this.engine.log('ANALYSIS_FAIL',issue+'；停止新買進，既有保護持續');
+        this.engine.log('ANALYSIS_FAIL',issue+'；停止新買進，既有保護條件保留，委託仍需數量確認');
         // A failed analysis must also cancel owned outstanding entry orders when execution is enabled.
         if (!review&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,this.now());
       });
@@ -380,3 +395,4 @@ export class TradingService {
     return this.closeTask;
   }
 }
+

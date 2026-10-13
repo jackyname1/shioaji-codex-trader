@@ -8,13 +8,21 @@ import { createRequire } from 'node:module';
 import { AnalysisSchema, type Analysis, type Settings, type Snapshot } from './models.js';
 import { ExecutionAdviceSchema, executionPrompt, type ExecutionAdvice, type ExecutionRequest } from './execution.js';
 import { resolveCodexSelection, type CodexSelection } from './codex-models.js';
+import {CodexError,diagnoseCodexFailure,codexFailureMessage,codexNetworkContext} from './codex-failure.js';
+export {CodexError,codexFailureKind,diagnoseCodexFailure,shouldHaltCodex,type CodexFailureKind,type CodexFailureDetail} from './codex-failure.js';
 
 export function codexEnvironment(source: NodeJS.ProcessEnv, analysisHome: string): Record<string,string> {
   const result: Record<string,string> = {};
   // No SJ_*, CA paths/passwords, trading flags, or arbitrary inherited environment.
   for (const key of ['PATH','SystemRoot','WINDIR','COMSPEC','PATHEXT','TEMP','TMP','TMPDIR',
-    'USERPROFILE','HOME','LANG','LC_ALL','HTTP_PROXY','HTTPS_PROXY','NO_PROXY',
+    'USERPROFILE','HOME','LANG','LC_ALL','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY',
     'OPENAI_API_KEY','CODEX_API_KEY','SSL_CERT_FILE','CODEX_CA_CERTIFICATE']) if (source[key] !== undefined) result[key] = source[key]!;
+  // Preserve explicit proxy/custom-CA configuration, including Unix lowercase and Windows case variants.
+  // Never silently bypass an organization's proxy or certificate checks.
+  for(const key of ['HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY','SSL_CERT_FILE','CODEX_CA_CERTIFICATE']){
+    if(result[key]!==undefined)continue;
+    const match=Object.entries(source).find(([name])=>name.toUpperCase()===key);if(match?.[1]!==undefined)result[key]=match[1];
+  }
   result.CODEX_HOME = analysisHome; return result;
 }
 export function analysisPrompt(snapshot: Snapshot): string {
@@ -125,26 +133,11 @@ export function codexOutputSchema(source:z.ZodType=CodexAnalysisSchema): unknown
   };
   visit(schema); return schema;
 }
-export type CodexFailureKind='QUOTA'|'RATE_LIMIT'|'OTHER';
-export function codexFailureKind(error:unknown):CodexFailureKind {
-  if(error instanceof CodexError)return error.kind;
-  const raw=error instanceof Error?error.message:'';
-  if(/quota|usage limit|insufficient_quota|用量.{0,10}上限|額度/i.test(raw))return 'QUOTA';
-  if(/429|rate limit|too many requests/i.test(raw))return 'RATE_LIMIT';
-  return 'OTHER';
-}
-export class CodexError extends Error {
-  readonly kind:CodexFailureKind;
-  constructor(message:string,kind?:CodexFailureKind){super(message);this.kind=kind??(/quota|usage limit|額度/i.test(message)?'QUOTA':/429|rate limit/i.test(message)?'RATE_LIMIT':'OTHER');}
-}
 export function codexIssue(error: unknown): string {
   if (error instanceof CodexError) return error.message;
+  const known=codexFailureMessage(diagnoseCodexFailure(error));if(known)return known;
   const raw = error instanceof Error ? error.message : '';
-  if (/401|unauthorized|authentication|not logged|refresh token|login required/i.test(raw)) return 'Codex 尚未登入或登入已過期，請按登入重新連接';
-  if (/model.{0,100}(not found|not supported|unavailable|does not exist|does not support|not available)|(?:unsupported|unknown|invalid|not support).{0,60}model/i.test(raw)) return 'Codex 模型不可用，請清空模型欄位使用帳戶預設模型';
   if (/reasoning.{0,100}(unsupported|not support|invalid)|unsupported.{0,60}(reasoning|effort)/i.test(raw)) return 'Codex 模型不支援此推理強度，請使用模型預設';
-  if (/429|quota|usage limit|rate limit/i.test(raw)) return 'Codex 使用額度暫時不足，請稍後重試或檢查訂閱額度';
-  if (/network|connect|TLS|certificate|fetch|stream disconnected/i.test(raw)) return 'Codex 網路連線未完成，請檢查網路後重試';
   if (/schema|output format/i.test(raw)) return 'Codex 輸出格式未通過，請重新測試連線';
   if (/sandbox|CreateProcess|os error|permission denied|access.{0,10}denied/i.test(raw)) return 'Codex 本機執行環境未能啟動，請重開程式後測試連線';
   if (/invalid output|SyntaxError|JSON|未產生完整有效/.test(raw)) return 'Codex 沒有回傳完整分析結果，請重新測試連線';
@@ -181,7 +174,8 @@ export class CodexAnalyst {
       if(ready)emit('DATA',`股票池 ${ready.pool_count} 檔 · 歷史已就緒 ${ready.history_ready} 檔 · 基本資格與流動性合格 ${ready.eligible_symbols.length} 檔`,'data',ready);
     }
     const controller = new AbortController(); this.active = controller;
-    const timeout = setTimeout(() => controller.abort(),this.settings.codex_timeout_seconds * 1000);
+    let timedOut=false;
+    const timeout = setTimeout(() => {timedOut=true;controller.abort();},this.settings.codex_timeout_seconds * 1000);
     const abortSignal = signal ? AbortSignal.any([signal,controller.signal]) : controller.signal;
     try {
       let runner = this.injectedRunner;
@@ -217,10 +211,12 @@ export class CodexAnalyst {
       const message=purpose==='STRATEGY'?(result as Analysis).summary:((result as ExecutionAdvice).action+' '+(result as ExecutionAdvice).shares+' 股 · '+(result as ExecutionAdvice).reason);
       emit(purpose==='EXECUTION'?'SIZE_DECISION':'DECISION',message,'decision',result);return result;
     } catch (error) {
-      const issue=abortSignal.aborted?'Codex 逾時或已停止；暫停新買進，既有保護條件保留，未確認數量不送單':codexIssue(error);
-      emit('FAILED',issue);
+      const diagnostic={...diagnoseCodexFailure(error),...codexNetworkContext(process.env)};
+      if(abortSignal.aborted){diagnostic.kind=timedOut&&!signal?.aborted?'TIMEOUT':'CANCELLED';diagnostic.code=diagnostic.kind==='TIMEOUT'?'CODEX_TIMEOUT':'CODEX_CANCELLED';}
+      const issue=abortSignal.aborted?codexFailureMessage(diagnostic):codexIssue(error);
+      emit('FAILED',issue,'failure',diagnostic);
       // SDK stderr can contain environment or local paths. Never forward raw exception text.
-      throw new CodexError(issue,codexFailureKind(error));
+      throw new CodexError(issue,diagnostic.kind,diagnostic);
     } finally { clearTimeout(timeout); this.active = undefined; }
   }
 }

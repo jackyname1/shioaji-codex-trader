@@ -1,7 +1,7 @@
 import { readFile,writeFile,mkdir,rename,readdir,stat } from 'node:fs/promises';
 import { join,dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { BacktestRequestSchema,formatBacktestReport,runBacktest,type BacktestProgress,type BacktestReport,type ReplayFrame } from './backtest.js';
+import { BacktestRequestSchema,formatBacktestReport,runBacktest,type BacktestProgress,type BacktestReport,type ReplayFrame,type ReplayActivity } from './backtest.js';
 import { ReplayClock,type ReplayCommand,type ReplayClockState } from './replay-clock.js';
 import { buildChart,ChartRequestSchema,type ChartData } from './chart.js';
 import type { HistoryDataset } from './backtest-data.js';
@@ -10,6 +10,15 @@ import { csvDataset,syntheticDataset } from './backtest-data.js';
 import { shioajiDataset } from './backtest-source.js';
 import { CodexAnalyst,appendAnalystEvent } from './codex.js';
 import {twDay,type Settings} from './models.js';
+
+export function appendReplayActivity(events:AnalystEvent[],event:ReplayActivity):void {
+  const previous=events.at(-1);
+  // The SDK and replay engine describe the same failed turn. Keep its identity and safe diagnostic.
+  if(event.stage==='FAILED'&&previous?.stage==='FAILED'&&previous.run_id&&previous.asof===event.at){
+    appendAnalystEvent(events,{...previous,message:event.message});return;
+  }
+  events.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,model:'模擬執行引擎',reasoning:'程序步驟'});
+}
 
 export interface BacktestSummary {id:string;created_at:string;status:string;start:string;end:string;synthetic:boolean;
   strategy:string;schedule:string;monitor_seconds:number;net_pnl:string;return_pct:string;drawdown_pct:string;calls:number}
@@ -89,7 +98,7 @@ export class BacktestController {
           const eventStart=this.analystEvents.length;
           const r=await runBacktest(runRequest,dataset,snapshotSettings,analyst?(input,sig)=>analyst.analyze(input,sig):undefined,signal,
             p=>{this.progress={...p,codex_calls:consumed+p.codex_calls,run:index+1,total_runs:intervals.length};},this.clock,frame=>{this.frame=frame;},event=>{
-              this.analystEvents.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,model:'模擬執行引擎',reasoning:'程序步驟'});
+              appendReplayActivity(this.analystEvents,event);
             },analyst?(input,sig)=>analyst.size(input,sig):undefined);
           r.analyst_events=this.analystEvents.slice(eventStart);
           if(analyst?.selection)r.model=analyst.selection.model;
@@ -100,7 +109,7 @@ export class BacktestController {
         const exhausted=this.comparisons.length<intervals.length&&!signal.aborted;
         this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':exhausted?'PARTIAL':this.report?.status??'FAILED',codex_calls:consumed,
           last_error:this.report?.failures?.at(-1)?.issue??this.progress.last_error,next_event_at:'',
-          message:signal.aborted?'已停止，保存已完成的步驟與成交':this.report?.quality.halt_reason?`Codex 額度／限流：已停止於 ${this.report.asof}，保存部分結果；其餘比較不再重試`:
+          message:signal.aborted?'已停止，保存已完成的步驟與成交':this.report?.quality.halt_reason?`Codex 無法完成（${this.report.quality.halt_reason}）：已停止於 ${this.report.asof}，保存部分結果；請查看失敗記錄，其餘比較不再重試`:
             exhausted?'呼叫上限為整批共用；尚未執行所有比較。已完成結果可查看與匯出':
             this.report?.status==='FAILED'?'本次沒有有效盤中策略：'+(this.report.failures?.at(-1)?.issue??'請查看資料與策略紀錄'):
             this.report?.status==='PARTIAL'?'部分步驟未完成：'+(this.report.failures?.at(-1)?.issue??(this.report.quality.skipped_strategies?'已達 Codex 呼叫上限':'部分交易日缺少行情')):'完整流程已執行並保存，可查看每日選股、條件、委託與成交'};
