@@ -97,10 +97,10 @@ test('a plan expiration remains a trigger between bars and cancels its remainder
 });
 test('transient Codex failure preserves its specific reason and later sessions recover without reusing a failed plan',async()=>{
   let failed=false;const report=await runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({codex_enabled:true}),async s=>{
-    if(!failed){failed=true;throw new CodexError('Codex 測試網路暫時中斷');}return rules(s);
+    if(!failed){failed=true;throw new CodexError('Codex 測試輸出格式暫時無效');}return rules(s);
   },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
-  assert.equal(report.status,'PARTIAL');assert.equal(report.failures!.length,1);assert.equal(report.failures![0]!.issue,'Codex 測試網路暫時中斷');
-  assert.equal(report.failures![0]!.stage,'ANALYSIS');assert.ok(report.workflow!.some(e=>e.stage==='FAILED'&&e.message.includes('網路暫時中斷')));
+  assert.equal(report.status,'PARTIAL');assert.equal(report.failures!.length,1);assert.equal(report.failures![0]!.issue,'Codex 測試輸出格式暫時無效');
+  assert.equal(report.failures![0]!.stage,'ANALYSIS');assert.ok(report.workflow!.some(e=>e.stage==='FAILED'&&e.message.includes('輸出格式暫時無效')));
   assert.ok(report.strategy_log.some(s=>!s.review&&twDay(new Date(s.at))===end));assert.ok(report.fills.every(f=>twDay(new Date(f.at))===end));
 });
 

@@ -14,7 +14,8 @@ import { demoAnalysis } from './strategy.js';
 import { experienceContext } from './experience.js';
 import { nextMonitorTime, strategySlots } from './schedule.js';
 import type { WatchChange } from './watchlist.js';
-import { codexIssue,codexFailureKind } from './codex.js';
+import { codexIssue,codexFailureKind,shouldHaltCodex,diagnoseCodexFailure } from './codex.js';
+import type {CodexFailureDetail} from './codex-failure.js';
 import type { AnalystEvent } from './codex.js';
 import type { ExecutionRequest,ExecutionAdvice } from './execution.js';
 
@@ -52,7 +53,7 @@ export interface ReplayActivity {at:string;stage:string;message:string;symbols?:
 export interface BacktestQuality {sessions:number;covered_sessions:number;calendar_verified:boolean;missing_sessions:string[];warmup:Record<string,number>;
   insufficient_symbols:string[];last_marks:Record<string,string>;strategy_slots:number;successful_strategies:number;skipped_strategies:number;
   universe_mode?:'DAILY_HISTORICAL'|'FIXED';universe_sessions?:number;execution_model?:'APPROXIMATE';
-  halted_at?:string;halt_reason?:'CODEX_QUOTA'|'CODEX_RATE_LIMIT';processed_sessions?:number}
+  halted_at?:string;halt_reason?:'CODEX_QUOTA'|'CODEX_RATE_LIMIT'|'CODEX_NETWORK'|'CODEX_AUTH'|'CODEX_ACCESS'|'CODEX_MODEL'|'CODEX_TIMEOUT';processed_sessions?:number}
 export interface BacktestReport {
   version:'0.2.0'|'0.1.0'|'0.4.0'|'0.5.0';final_frame?:ReplayFrame;dataset_id?:string;timeline?:{at:string;equity:string;cash:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
   source:string;synthetic:boolean;frequency:string;model:string;prompt_version:string;settings:Record<string,unknown>;
@@ -64,7 +65,7 @@ export interface BacktestReport {
     gross_pnl?:string;total_costs?:string;cost_drag_pct?:string;sell_orders?:number};
   quality:BacktestQuality;positions:import('./models.js').Position[];
   strategy_log:{at:string;review:boolean;stance:string;expires_at:string;summary:string;selected:string[]}[];watch_changes:WatchChange[];
-  workflow?:ReplayActivity[];failures?:{at:string;review:boolean;stage:string;issue:string}[];normalization?:HistoryDataset['normalization'];
+  workflow?:ReplayActivity[];failures?:{at:string;review:boolean;stage:string;issue:string;diagnostic?:CodexFailureDetail}[];normalization?:HistoryDataset['normalization'];
   analyst_events?:AnalystEvent[];
   daily_equity:{day:string;cash:string;settlement_credits:string;equity:string;asof:string;complete:boolean}[];
   fills:SimulatedFill[];orders:import('./models.js').Order[];reviews:import('./experience.js').ExperienceReview[];logs:string[];limitations:string[];
@@ -170,11 +171,11 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     execution_queue:[...engine.pendingExecutions.values()].map(t=>({symbol:t.order.symbol,action:t.order.action,state:t.state,trigger:t.trigger}))});
   const cancelEntries=async(now:Date):Promise<void>=>{for(const o of store.orders(true))if(o.purpose==='ENTRY')await engine.cancel(o.local_id,now);};
   const haltCodex=async(error:unknown,now:Date):Promise<void>=>{
-    const kind=codexFailureKind(error);if(kind==='OTHER')return;
-    quality.halted_at=now.toISOString();quality.halt_reason=kind==='QUOTA'?'CODEX_QUOTA':'CODEX_RATE_LIMIT';
+    const kind=codexFailureKind(error);if(!shouldHaltCodex(error))return;
+    quality.halted_at=now.toISOString();quality.halt_reason=('CODEX_'+kind) as BacktestQuality['halt_reason'];
     status='PARTIAL';engine.entryBlocked=true;await cancelEntries(now);
     for(const id of [...engine.pendingExecutions.keys()])engine.finishExecution(id,'SIZE_FAILED','Codex 無法確認；本次未送單，回測已停止',now);
-    const note='Codex 額度或限流已停止本次回測；保留截至此刻的部分結果，未繼續重試，也未跳過數量確認；恢復後需重新執行測試';
+    const note=`${codexIssue(error)}；已停止本次回測，保留截至此刻的部分結果；其餘排程／比較不再重試，也不跳過數量確認。恢復後需重新執行測試`;
     limitations.push(note);activity(now.toISOString(),'HALTED',note);
   };
   const decision=async(now:Date,review=false):Promise<void>=>{
@@ -204,7 +205,8 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     }catch(error){if(signal.aborted)return;failures++;if(!review){engine.entryBlocked=true;await cancelEntries(now);}
       const issue=request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW')?codexIssue(error):error instanceof z.ZodError?'策略欄位格式不符，請核對結構化輸出':
         error instanceof Error&&/^(Codex|計畫|候選|策略|盤後|決策|買進|帳戶|回測)/.test(error.message)?error.message:'歷史快照或策略驗證未完成';
-      lastError=`${twDay(now)} ${twClock(now)} · ${stage} · ${issue}`;failureLog.push({at:now.toISOString(),review,stage,issue});
+      lastError=`${twDay(now)} ${twClock(now)} · ${stage} · ${issue}`;failureLog.push({at:now.toISOString(),review,stage,issue,
+        ...(request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW')?{diagnostic:diagnoseCodexFailure(error)}:{})});
       activity(now.toISOString(),'FAILED',lastError);engine.log('ANALYSIS_FAIL',lastError+'；既有保護條件保留，委託仍需數量確認');
       if(request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW'))await haltCodex(error,now);}
   };
@@ -228,7 +230,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       }catch(error){if(signal.aborted)return;sizeFailures++;failures++;
         const issue=error instanceof Error&&error.message.startsWith('Codex 數量確認器')?error.message:codexIssue(error);
         engine.finishExecution(requestId,'SIZE_FAILED',issue+'；未送單',now);
-        lastError=`${twDay(now)} ${twClock(now)} · SIZING · ${issue}`;failureLog.push({at:now.toISOString(),review:false,stage:'SIZING',issue});
+        lastError=`${twDay(now)} ${twClock(now)} · SIZING · ${issue}`;failureLog.push({at:now.toISOString(),review:false,stage:'SIZING',issue,diagnostic:diagnoseCodexFailure(error)});
         activity(now.toISOString(),'FAILED',lastError,input?{symbols:[input.symbol]}:{});
         await haltCodex(error,now);
       }

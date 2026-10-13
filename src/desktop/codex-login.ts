@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
-import { bundledCodexPath, codexEnvironment, prepareCodexProfile, codexThread, codexIssue, CodexError } from '../core/codex.js';
+import { bundledCodexPath, codexEnvironment, prepareCodexProfile, codexThread, codexIssue, CodexError,diagnoseCodexFailure } from '../core/codex.js';
 import type { Settings } from '../core/models.js';
 import type { ThreadEvent } from '@openai/codex-sdk';
 import { resolveCodexSelection,clearCodexModels,codexModels,type CodexModel,type CodexSelection } from '../core/codex-models.js';
@@ -129,9 +129,12 @@ export class CodexLogin {
       if(!complete||JSON.parse(response).ok!==true)throw new Error('invalid output');
       this.status.test_state='connected';this.status.message='Codex 連線測試成功 · '+selection.model+' · '+selection.reasoning;return this.status.message;
     }catch(error){this.status.test_state='failed';this.status.message=controller.signal.aborted?'Codex 連線測試逾時，請檢查網路後重試':codexIssue(error);
-      if(/尚未登入|登入已過期/.test(this.status.message))this.status.state='error';throw new CodexError(this.status.message);}
+      if(/尚未登入|登入已過期/.test(this.status.message))this.status.state='error';
+      if(controller.signal.aborted)throw new CodexError(this.status.message,'TIMEOUT',{kind:'TIMEOUT',code:'CODEX_TIMEOUT'});
+      throw new CodexError(this.status.message,undefined,diagnoseCodexFailure(error));}
     finally{clearTimeout(timer);this.status.testing=false;this.testAbort=undefined;}
   }
   async wait():Promise<void>{await this.task;}
   close():void{this.closed=true;this.child?.kill();this.testAbort?.abort();this.url=undefined;this.status.can_open=false;}
 }
+

@@ -27,6 +27,10 @@ export class Engine {
   killed: boolean;
   connected = false;
   dataIssue = '';
+  advisorIssue='';
+  setAdvisorIssue(issue:string):void {
+    this.advisorIssue=issue;if(issue)this.clearExecutions(issue+'；未確認數量不送單');
+  }
   private _entryBlocked=false;
   get entryBlocked():boolean{return this._entryBlocked;}
   set entryBlocked(value:boolean){this._entryBlocked=value;this.store.set('entry_blocked',value);}
@@ -347,6 +351,9 @@ export class Engine {
   }
   private async requestExecution(order:Order,now:Date,source:ExecutionTicket['source'],condition?:import('./models.js').Decision,
     smart?:SmartSpec,trigger='',protectionSpec?:SmartSpec):Promise<boolean>{
+    if(this.settings.codex_enabled&&this.advisorIssue){
+      this.decisionStates.set(order.symbol,{state:'WAIT',reason:this.advisorIssue+'；先測試連線或重新分析，未送單',source});return false;
+    }
     if(!this.settings.codex_enabled)return this.submit(order,now,source==='RULE'?smart:undefined);
     const key=`${twDay(now)}:${order.plan_id}:${order.symbol}:${order.purpose}:${trigger}`;
     if(this.executionRetry[key]&&Date.parse(this.executionRetry[key]!)>now.getTime())return false;
@@ -370,6 +377,7 @@ export class Engine {
   }
   private executionInvalid(ticket:ExecutionTicket,q:Quote|undefined,now:Date):string {
     if(!this.pendingExecutions.has(ticket.id))return '數量確認已取消';
+    if(this.advisorIssue)return this.advisorIssue+'；數量確認暫停';
     if(!this.canExecute()||!this.settings.codex_enabled)return '交易已停止，數量建議作廢';
     if(ticket.settings_key!==executionSettingsKey(this.settings)||ticket.generation!==this.broker.generation
       ||twDay(new Date(ticket.queued_at))!==twDay(now))return '設定、連線或交易日已改變';
