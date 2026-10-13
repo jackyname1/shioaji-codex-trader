@@ -53,7 +53,7 @@ export interface ReplayActivity {at:string;stage:string;message:string;symbols?:
 export interface BacktestQuality {sessions:number;covered_sessions:number;calendar_verified:boolean;missing_sessions:string[];warmup:Record<string,number>;
   insufficient_symbols:string[];last_marks:Record<string,string>;strategy_slots:number;successful_strategies:number;skipped_strategies:number;
   universe_mode?:'DAILY_HISTORICAL'|'FIXED';universe_sessions?:number;execution_model?:'APPROXIMATE';
-  halted_at?:string;halt_reason?:'CODEX_QUOTA'|'CODEX_RATE_LIMIT'|'CODEX_NETWORK'|'CODEX_AUTH'|'CODEX_ACCESS'|'CODEX_MODEL'|'CODEX_TIMEOUT';processed_sessions?:number}
+  halted_at?:string;halt_reason?:'CODEX_QUOTA'|'CODEX_RATE_LIMIT'|'CODEX_NETWORK'|'CODEX_AUTH'|'CODEX_ACCESS'|'CODEX_MODEL'|'CODEX_RUNTIME'|'CODEX_TIMEOUT';processed_sessions?:number}
 export interface BacktestReport {
   version:'0.2.0'|'0.1.0'|'0.4.0'|'0.5.0';final_frame?:ReplayFrame;dataset_id?:string;timeline?:{at:string;equity:string;cash:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
   source:string;synthetic:boolean;frequency:string;model:string;prompt_version:string;settings:Record<string,unknown>;
