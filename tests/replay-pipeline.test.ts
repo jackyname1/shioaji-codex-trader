@@ -59,7 +59,7 @@ test('paused slow Codex selection freezes virtual time; single step completes ac
   const running=runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({codex_enabled:true}),async s=>{
     if(++calls===1){entered();await gate;}return rules(s);
   },abort.signal,p=>progress.push(structuredClone(p)),clock,f=>frames.push(f),e=>activities.push(e),testSize);
-  await began;const frozen=frames.at(-1)!.at;clock.setSpeed(100000);clock.command('pause');await nextTurn();
+  await began;const frozen=frames.at(-1)!.at;clock.setSpeed(60);clock.command('pause');await nextTurn();
   assert.equal(calls,1);assert.equal(frames.at(-1)!.at,frozen);assert.equal(progress.at(-1)!.phase,'ANALYSIS');assert.equal(progress.at(-1)!.at,frozen);
   release();for(let n=0;n<30&&!frames.at(-1)?.account.orders.length;n++)await nextTurn();
   assert.equal(frames.at(-1)!.at,frozen);assert.ok(frames.at(-1)!.plan?.analysis.screening?.entry);assert.ok(frames.at(-1)!.account.orders.length);
@@ -78,7 +78,7 @@ test('paused slow Codex selection freezes virtual time; single step completes ac
 });
 test('fast-forward changes waiting only: prices, selections, automatic order/fill times and costs match a stepped run',async()=>{
   const options={start,end:start,source:'sample',strategy:'codex',end_time:'09:31',strategy_schedule:'interval',decision_interval_minutes:360};
-  const run=async(stepped:boolean)=>{const clock=new ReplayClock();clock.setSpeed(stepped?100000:0);
+  const run=async(stepped:boolean)=>{let elapsed=0;const clock=new ReplayClock(undefined,{now:()=>elapsed,wait:async(ms)=>{elapsed+=ms;await nextTurn();}});clock.setSpeed(stepped?60:0);
     return runBacktest(options,flat(),SettingsSchema.parse({codex_enabled:true}),async s=>{await nextTurn();return rules(s);},new AbortController().signal,()=>undefined,clock,undefined,undefined,testSize);};
   const fast=await run(false),paced=await run(true);
   assert.ok(fast.fills.length>0);assert.ok(fast.metrics.execution_confirmations!>0);

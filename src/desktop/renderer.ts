@@ -1,3 +1,5 @@
+import {replayDisplayTime} from './replay-time.js';
+import type {ReplayClockState} from '../core/replay-clock.js';
 import type { DesktopState,TraderBridge } from './shared.js';
 import type { Settings } from '../core/models.js';
 import { candles,equityChart } from './charts.js';
@@ -231,7 +233,7 @@ el('s-schedule').addEventListener('change',()=>schedulingFields('s'));el('bt-sch
 function request(compare=false):BacktestRequest {
   return {start:value('bt-start'),end:value('bt-end'),initial_cash:value('bt-cash'),source:value('bt-source') as BacktestRequest['source'],strategy:value('bt-strategy') as BacktestRequest['strategy'],
     whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
-    start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:checked('replay-direct')?0:Number(value('replay-speed-number')),
+    start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:value('replay-mode')==='direct'?0:Number(value('replay-speed-number')),
     decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
     comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),participation:value('bt-participation')};
 }
@@ -392,9 +394,24 @@ el('analyst-history-open').addEventListener('click',()=>void run(async()=>{
 el('analyst-history-refresh').addEventListener('click',()=>void run(async()=>{await loadAnalystHistory();return '紀錄已更新';}));
 el('analyst-history-filter').addEventListener('input',renderAnalystHistory);
 el('analyst-history-export').addEventListener('click',()=>void run(()=>window.trader.exportAnalystHistory(historyScope)));
+let playbackClock:ReplayClockState|undefined;
+function receiveClock(clock:ReplayClockState):void {
+  if(!playbackClock||clock.sampled_at>=playbackClock.sampled_at)playbackClock=clock;
+}
+window.trader.onReplayClock(receiveClock);
+function paintReplayTime():void {
+  if(latestState?.backtest_progress.running&&replayView(latestState)&&playbackClock?.at){
+    text('replay-time',new Date(replayDisplayTime(playbackClock)).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}));
+    el('replay-time').dataset.at=replayDisplayTime(playbackClock);
+  }
+  requestAnimationFrame(paintReplayTime);
+}
+requestAnimationFrame(paintReplayTime);
 function renderReplay(state:DesktopState):void {
   const frame=state.replay,p=state.backtest_progress,r=state.backtest_result;
-  text('replay-time',frame?new Date(frame.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):r?stamp(r.asof):'尚未開始模擬');
+  if(state.replay_clock)receiveClock(state.replay_clock);
+  el('replay-time').dataset.at=p.running&&playbackClock?.at?replayDisplayTime(playbackClock):frame?.at??r?.asof??'';
+  text('replay-time',p.running&&playbackClock?.at?new Date(replayDisplayTime(playbackClock)).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):frame?new Date(frame.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):r?stamp(r.asof):'尚未開始模擬');
   text('replay-pnl',frame?'損益 NT$ '+fmt(frame.net_pnl):r?'損益 NT$ '+fmt(r.metrics.net_pnl):'—');
   text('replay-pause',state.replay_paused?'▶ 繼續':'Ⅱ 暫停');el<HTMLButtonElement>('replay-pause').disabled=!p.running;el<HTMLButtonElement>('replay-step').disabled=!p.running;
   text('replay-next',p.running?(state.replay_paused?'步驟完成後暫停 · ':'')+(['ANALYSIS','REVIEW','SIZING'].includes(p.phase)?'等待 Codex 完成':p.next_event_at?'下次檢查／Codex '+stamp(p.next_event_at):p.message):'每一步完成後才前進');
@@ -470,14 +487,17 @@ el('replay-step').addEventListener('click',()=>void run(()=>window.trader.replay
 function updateReplaySpeed(fromSlider=false):void {
   if(fromSlider)el<HTMLInputElement>('replay-speed-number').value=value('replay-speed');
   const speed=Number(value('replay-speed-number'));
-  if(!Number.isFinite(speed)||speed<1||speed>100000)return;
-  el<HTMLInputElement>('replay-speed').value=String(Math.min(speed,10000));
-  text('replay-speed-label',checked('replay-direct')?'每 5 分鐘推進':speed+'×');
-  void window.trader.replaySpeed(checked('replay-direct')?0:speed).catch(error=>text('status',error instanceof Error?error.message:'倍速未更新'));
+  const direct=value('replay-mode')==='direct';
+  if(!direct&&(!Number.isFinite(speed)||speed<1||speed>60)){message('加速播放限 1–60 倍',true);return;}
+  el<HTMLInputElement>('replay-speed').value=String(speed);
+  el<HTMLInputElement>('replay-speed').disabled=direct;el<HTMLInputElement>('replay-speed-number').disabled=direct;
+  text('replay-speed-label',direct?'每 5 分鐘推進':speed+'× · 秒數連續');
+  void window.trader.replaySpeed(value('replay-mode')==='direct'?0:speed).catch(error=>text('status',error instanceof Error?error.message:'倍速未更新'));
 }
 el('replay-speed').addEventListener('input',()=>updateReplaySpeed(true));
 el('replay-speed-number').addEventListener('change',()=>updateReplaySpeed());
-el('replay-direct').addEventListener('change',()=>updateReplaySpeed());
+el('replay-mode').addEventListener('change',()=>updateReplaySpeed());
+updateReplaySpeed();
 el('bt-market').addEventListener('click',()=>void run(()=>window.trader.exportMarket()));
 for(const id of ['codex-model-control','codex-reasoning-control','codex-instruction-control'])el(id).addEventListener('input',()=>{codexDirty=true;});
 async function saveCodex():Promise<string>{

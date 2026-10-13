@@ -1,3 +1,4 @@
+import type { ReplayClockState } from '../core/replay-clock.js';
 import type { BacktestRequest,BacktestReport,BacktestProgress } from '../core/backtest.js';
 import type { BacktestSummary } from '../core/backtest-controller.js';
 import type { WatchState } from '../core/watchlist.js';
@@ -26,7 +27,7 @@ export interface DesktopState { status: string; logs: string[]; settings: string
   backtest_history:BacktestSummary[];backtest_comparisons:BacktestSummary[];
   connection:{status:string;phase?:string;server_ready?:boolean;workspace_ready?:boolean;remembered:boolean;credential_state?:string;credential_message?:string;encrypted:boolean;busy:boolean;has_ca:boolean};analyst_events:(AnalystEvent&{context:'live'|'replay'})[];
   live:LiveReadiness;
-  replay:ReplayFrame|null;replay_paused:boolean;replay_speed:number;replay_symbols:{symbol:string;name:string}[];
+  replay:ReplayFrame|null;replay_paused:boolean;replay_speed:number;replay_clock?:ReplayClockState;replay_symbols:{symbol:string;name:string}[];
   codex_models:string[];simulation_scope?:'realtime'|'replay';codex_selection?:{model:string;reasoning:string}|null }
 export interface TraderBridge {
   state(): Promise<DesktopState>;
@@ -53,6 +54,7 @@ export interface TraderBridge {
   chart(request:ChartRequest):Promise<ChartData>;
   replayControl(command:'pause'|'resume'|'step'):Promise<string>;
   replaySpeed(speed:number):Promise<string>;
+  onReplayClock(listener:(state:ReplayClockState)=>void):()=>void;
   exportMarket():Promise<string>;
   exportDiagnostics():Promise<string>;
   retryWorkspace():Promise<string>;

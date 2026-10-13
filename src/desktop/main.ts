@@ -14,6 +14,7 @@ import { loopbackOrigin,ShioajiHttpBroker } from '../broker/http.js';
 import { brokerIssue, BrokerError } from '../broker/health.js';
 import type { DesktopState } from './shared.js';
 import { bundledCodexPath, CodexError, codexEnvironment, prepareCodexProfile,compactAnalystEvent } from '../core/codex.js';
+import {ReplayClock} from '../core/replay-clock.js';
 import { BacktestController } from '../core/backtest-controller.js';
 import { BacktestRequestSchema,fillsCsv } from '../core/backtest.js';
 import { experienceStatus } from '../core/experience.js';
@@ -72,7 +73,7 @@ else {
       encryptString:(value:string)=>safeStorage.encryptString(value),decryptString:(value:Buffer)=>safeStorage.decryptString(value)};
     vault=new CredentialVault(join(dataRoot,'private'),secure);nativeConnection=new NativeConnection(join(dataRoot,'native-service'),brokerPath);
     const saved=await vault.read();credentialState=await vault.status();
-    backtest=new BacktestController(join(dataRoot,'backtests'));await backtest.restore();
+    backtest=new BacktestController(join(dataRoot,'backtests'),state=>{if(window&&!window.isDestroyed())window.webContents.send('trader:replay-clock',state);});await backtest.restore();
     await connect(mode);
     codexLogin=new CodexLogin(join(dataRoot,'codex-login'),url=>shell.openExternal(url),async()=>{
       const selected=service;if(!selected||quitting||selected.engine.settings.codex_enabled)return;
@@ -225,7 +226,7 @@ function registerIpc(): void {
     live:smoke&&mode==='live'?{authorized:false,ready:false,account:'隔離測試帳戶',issues:['測試資料：不會啟用實盤交易']}
       :service?.liveReadiness()??{authorized:false,ready:false,account:'尚未連接帳戶',issues:['請先連接 Shioaji']},
     analyst_events:[...(service?.analystEvents??[]).map(e=>({...compactAnalystEvent(e),context:'live' as const})),...backtest.analystEvents.slice(-200).map(e=>({...compactAnalystEvent(e),context:'replay' as const}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-400),
-    replay:backtest.frame??null,replay_paused:backtest.clock.paused,replay_speed:backtest.clock.speed,
+    replay:backtest.frame??null,replay_paused:backtest.clock.paused,replay_speed:backtest.clock.speed,replay_clock:backtest.clock.snapshot(),
     replay_symbols:replaySymbols(),codex_models:codexModels(),simulation_scope:simulationScope,
     codex_selection:codexLogin.status.model?{model:codexLogin.status.model,reasoning:codexLogin.status.reasoning??'default'}:null} satisfies DesktopState));
   handle('trader:command',async value => {
@@ -348,7 +349,7 @@ function registerIpc(): void {
     finally{chartBusy=false;}
   });
   handle('trader:replay-control',value=>backtest.control(z.enum(['pause','resume','step']).parse(value)));
-  handle('trader:replay-speed',value=>backtest.speed(z.number().finite().min(0).max(100000).parse(value)));
+  handle('trader:replay-speed',value=>backtest.speed(z.number().finite().min(0).max(60).parse(value)));
   handle('trader:export-market',async()=>{
     if(backtest.progress.running)throw new Error('回測完成後才能匯出整段原始行情');
     const dataset=await backtest.marketData(),result=await dialog.showSaveDialog(window!,{title:'匯出完整歷史行情',defaultPath:'Shioaji-history.csv',filters:[{name:'CSV',extensions:['csv']}]});
@@ -583,16 +584,33 @@ async function smokeTest(): Promise<void> {
     const result=await window!.webContents.executeJavaScript(`({strategy:document.querySelector('#bt-strategy').value,flow:document.querySelectorAll('[data-replay-stage]').length,workflow:document.querySelectorAll('#bt-workflow tbody tr').length})`);
     if(result.strategy!=='codex'||result.flow!==6||result.workflow<5)throw new Error('每日 Codex 模擬流程與完整步驟報表未通過');
     const replayControls=await window!.webContents.executeJavaScript(`(async()=>{
-      const direct=document.querySelector('#replay-direct'),slider=document.querySelector('#replay-speed'),number=document.querySelector('#replay-speed-number');
-      direct.checked=false;direct.dispatchEvent(new Event('change'));number.value='437';number.dispatchEvent(new Event('change'));
+      const direct=document.querySelector('#replay-mode'),slider=document.querySelector('#replay-speed'),number=document.querySelector('#replay-speed-number');
+      direct.value='accelerated';direct.dispatchEvent(new Event('change'));number.value='17';number.dispatchEvent(new Event('change'));
       await new Promise(resolve=>setTimeout(resolve,100));const precise=(await window.trader.state()).replay_speed;
-      slider.value='619';slider.dispatchEvent(new Event('input'));await new Promise(resolve=>setTimeout(resolve,100));const sliding=(await window.trader.state()).replay_speed;
-      direct.checked=true;direct.dispatchEvent(new Event('change'));await new Promise(resolve=>setTimeout(resolve,100));const fast=(await window.trader.state()).replay_speed;
-      return {precise,sliding,fast,numeric:number.value,range:slider.type,strategyType:document.querySelector('#bt-strategy').type,
+      slider.value='29';slider.dispatchEvent(new Event('input'));await new Promise(resolve=>setTimeout(resolve,100));const sliding=(await window.trader.state()).replay_speed;
+      direct.value='direct';direct.dispatchEvent(new Event('change'));await new Promise(resolve=>setTimeout(resolve,100));const fast=(await window.trader.state()).replay_speed;
+      return {precise,sliding,fast,numeric:number.value,disabled:slider.disabled&&number.disabled,mode:direct.value,range:slider.type,strategyType:document.querySelector('#bt-strategy').type,
         monitor:document.querySelector('#bt-monitor').value,readonly:document.querySelector('#bt-monitor').readOnly};
     })()`);
-    if(replayControls.precise!==437||replayControls.sliding!==619||replayControls.fast!==0||replayControls.numeric!=='619'||replayControls.range!=='range'||replayControls.strategyType!=='hidden'||replayControls.monitor!=='5'||!replayControls.readonly)
+    if(replayControls.precise!==17||replayControls.sliding!==29||replayControls.fast!==0||!replayControls.disabled||replayControls.mode!=='direct'||replayControls.numeric!=='29'||replayControls.range!=='range'||replayControls.strategyType!=='hidden'||replayControls.monitor!=='5'||!replayControls.readonly)
       throw new Error('完整 Codex 策略、五分鐘條件檢查、拉桿與精確倍速切換未通過');
+    const savedClock=backtest.clock,savedProgress=backtest.progress;
+    const clock=new ReplayClock(state=>{if(window&&!window.isDestroyed())window.webContents.send('trader:replay-clock',state);});
+    const at=backtest.frame!.at,abort=new AbortController();backtest.clock=clock;
+    backtest.progress={...savedProgress,running:true,phase:'REPLAY'};clock.setSpeed(10);await clock.before(at,abort.signal);
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    const label=async()=>Date.parse(await window!.webContents.executeJavaScript(`document.querySelector('#replay-time').dataset.at`));
+    const waiting=clock.before(new Date(Date.parse(at)+30000).toISOString(),abort.signal);
+    await new Promise(resolve=>setTimeout(resolve,350));const moving=await label();
+    if(moving<=Date.parse(at)+1000||moving>=Date.parse(at)+10000)throw new Error('加速播放沒有連續顯示模擬秒數');
+    clock.command('pause');await new Promise(resolve=>setTimeout(resolve,100));const paused=await label();
+    await new Promise(resolve=>setTimeout(resolve,250));if(await label()!==paused)throw new Error('暫停後秒數仍持續前進');
+    clock.command('resume');await new Promise(resolve=>setTimeout(resolve,300));if(await label()<=paused)throw new Error('恢復加速後秒數未繼續');
+    clock.setSpeed(0);await waiting;const frozen=clock.snapshot().at;
+    await new Promise(resolve=>setTimeout(resolve,100));const frozenLabel=await label();
+    await new Promise(resolve=>setTimeout(resolve,200));if(await label()!==frozenLabel||frozenLabel!==Date.parse(frozen))throw new Error('事件處理或 Codex 等待期間秒數未凍結');
+    backtest.clock=savedClock;backtest.progress=savedProgress;savedClock.setSpeed(0);
+    console.log('Electron accelerated seconds, pause/resume and event-boundary freeze: PASS');
     for(const rsi of [true,false]){await window!.webContents.executeJavaScript(`(()=>{const input=document.querySelector('#chart-rsi');input.checked=${rsi};input.dispatchEvent(new Event('input'));})()`);await pause();
       const panes=await window!.webContents.executeJavaScript(`(()=>{const host=document.querySelector('#market-chart'),bottom=n=>{const b=n.getBBox();return b.y+b.height;},time=Math.min(...[...host.querySelectorAll('[data-pane="time"]')].map(n=>n.getBBox().y));
         return {time,volume:Math.max(...[...host.querySelectorAll('[data-pane="volume"]')].map(bottom)),rsi:host.querySelector('[data-pane="rsi"]')?bottom(host.querySelector('[data-pane="rsi"]')):0};})()`);

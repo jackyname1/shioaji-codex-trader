@@ -8,7 +8,7 @@ import { PaperBroker, type SimulatedFill } from '../broker/paper.js';
 import { HistoricalMarket, validateDataset, validDay, type HistoryDataset } from './backtest-data.js';
 import { SettingsSchema, addDays, d, equity, marketValue, twClock, twDay, type Analysis, type Settings, type Snapshot } from './models.js';
 import { programAnalysis } from './program-strategy.js';
-import { ReplayClock } from './replay-clock.js';
+import { ReplayClock,validReplaySpeed } from './replay-clock.js';
 import type { WatchState } from './watchlist.js';
 import { demoAnalysis } from './strategy.js';
 import { experienceContext } from './experience.js';
@@ -25,7 +25,7 @@ export const BacktestRequestSchema = z.strictObject({
   start_time:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('09:00'),
   end_time:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('23:59'),
   symbols:z.array(z.string().regex(/^[1-9]\d{3}$/)).max(100).refine(v=>new Set(v).size===v.length,'股票代碼不可重複').default([]),
-  playback_speed:z.number().min(0).max(100000).default(0),
+  playback_speed:z.number().refine(validReplaySpeed,'加速限 1–60 倍；0 為直達模式').default(0),
   whole_lots:z.boolean().default(false),decision_interval_minutes:z.number().int().min(10).max(360).default(180),
   strategy_schedule:SettingsSchema.shape.strategy_schedule.default('interval'),strategy_times:SettingsSchema.shape.strategy_times,
   monitor_interval_seconds:SettingsSchema.shape.monitor_interval_seconds,watch_refresh_minutes:SettingsSchema.shape.watch_refresh_minutes,
@@ -232,7 +232,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   try{await engine.start(new Date(events[0]!.at));
     for(let index=0;index<events.length;index++){const event=events[index]!;if(signal.aborted){status='CANCELLED';break;}
       const visibleEvent=event.check||event.watch||event.decision!==undefined||event.close;
-      if(clock&&visibleEvent)try{await clock.before(event.at,signal);}catch{if(signal.aborted){status='CANCELLED';break;}throw new Error('回測時間控制失敗');}
+      if(clock)try{await clock.before(event.at,signal,visibleEvent);}catch{if(signal.aborted){status='CANCELLED';break;}throw new Error('回測時間控制失敗');}
       const now=new Date(event.at),day=twDay(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=events.slice(index+1).find(e=>e.check||e.watch||e.decision!==undefined||e.close)?.at??'';
       const ordersBefore=new Map(store.orders().map(o=>[o.local_id,o.status+':'+o.filled])),fillCount=broker.fillCount();
       const decisionsBefore=new Map([...engine.decisionStates].map(([symbol,state])=>[symbol,state.state+':'+state.reason]));
