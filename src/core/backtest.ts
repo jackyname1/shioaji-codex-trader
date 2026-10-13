@@ -21,7 +21,7 @@ import type { ExecutionRequest,ExecutionAdvice } from './execution.js';
 export const BacktestRequestSchema = z.strictObject({
   start:z.string().refine(validDay),end:z.string().refine(validDay),
   initial_cash:z.string().regex(/^\d+(?:\.\d+)?$/).refine(v=>d(v).gte(100)&&d(v).lte('1000000000')).default('100000'),
-  source:z.enum(['sample','csv','shioaji']).default('shioaji'),strategy:z.enum(['demo','codex','rules']).default('rules'),
+  source:z.enum(['sample','csv','shioaji']).default('shioaji'),strategy:z.enum(['demo','codex','rules']).default('codex'),
   start_time:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('09:00'),
   end_time:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('23:59'),
   symbols:z.array(z.string().regex(/^[1-9]\d{3}$/)).max(100).refine(v=>new Set(v).size===v.length,'股票代碼不可重複').default([]),
@@ -35,6 +35,7 @@ export const BacktestRequestSchema = z.strictObject({
 }).refine(x=>x.start<=x.end&&Date.parse(x.end)-Date.parse(x.start)<=366*86400000,'日期區間須為 1–367 天')
   .refine(x=>x.start!==x.end||x.start_time<=x.end_time,'開始時間不能晚於結束時間')
   .refine(x=>x.strategy!=='demo'||x.source==='sample','示範策略只能使用虛構資料；歷史資料須選 Codex')
+  .transform(x=>x.strategy==='codex'?{...x,monitor_interval_seconds:300,watch_refresh_minutes:5}:x)
   .refine(x=>!x.comparison_intervals.length||x.strategy_schedule==='interval','自動比較請使用間隔模式');
 export type BacktestRequest=z.infer<typeof BacktestRequestSchema>;
 export function replayBounds(request:BacktestRequest,now=new Date()):{start:string;end:string}{
@@ -72,16 +73,24 @@ export function replayEvents(marketTimes:string[],days:string[],settings:Setting
   const events=new Map<string,ReplayEvent>();
   const add=(at:string,flags:Partial<ReplayEvent>):void=>{const iso=new Date(at).toISOString();
     const old=events.get(iso)??{at:iso,market:false,check:false,watch:false,close:false};Object.assign(old,flags);events.set(iso,old);};
-  const check=(at:string):void=>{const t=nextMonitorTime(new Date(at),settings.monitor_interval_seconds);
-    // Keep the following check for confirmed-cancel/replacement; never fabricate quotes between events.
+  const legacyCheck=(at:string):void=>{
+    const t=nextMonitorTime(new Date(at),settings.monitor_interval_seconds);
     for(let n=0;n<2;n++){const time=new Date(t.getTime()+n*settings.monitor_interval_seconds*1000);
-      if(calendar.inSession(time,'COMMON'))add(time.toISOString(),{check:true});}};
-  for(const at of marketTimes){add(at,{market:true});check(at);}
+      if(calendar.inSession(time,'COMMON'))add(time.toISOString(),{check:true});}
+  };
+  // Legacy offline fixtures retain their short cadence; Codex always uses the complete five-minute grid.
+  // Market bars still reconcile standing orders, but only scheduled checks may create proposals.
+  for(const at of marketTimes){add(at,{market:true});if(settings.monitor_interval_seconds<300)legacyCheck(at);}
   for(const day of days){if(!calendar.isOpen(day))continue;
-    for(const slot of strategySlots(day,settings,calendar)){add(slot.at,{decision:slot.review});if(!slot.review)check(slot.at);}
-    for(let m=day<'2026-12-07'?550:540;m<810;m+=settings.watch_refresh_minutes){
+    for(const slot of strategySlots(day,settings,calendar)){add(slot.at,{decision:slot.review});if(!slot.review&&settings.monitor_interval_seconds<300)legacyCheck(slot.at);}
+    const opening=day<'2026-12-07'?550:540;
+    for(let second=opening*60;settings.monitor_interval_seconds>=300&&second<810*60;second+=settings.monitor_interval_seconds){
+      const at=new Date(Date.parse(day+'T00:00:00+08:00')+second*1000).toISOString();
+      add(at,{check:true});
+    }
+    for(let m=opening;m<810;m+=settings.watch_refresh_minutes){
       const at=`${day}T${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}:00+08:00`;
-      add(at,{watch:true});check(at);}
+      add(at,{watch:true});if(settings.monitor_interval_seconds<300)legacyCheck(at);}
     add(day+'T13:30:00+08:00',{close:true});}
   return [...events.values()].sort((a,b)=>a.at.localeCompare(b.at));
 }
@@ -132,7 +141,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     ...(dataset.normalization?.duplicates?[`已整理 ${dataset.normalization.duplicates} 筆重複股票／時間；${dataset.normalization.revisions} 筆行情採用 Shioaji 同批最後修訂，成交量未重複加總`]:[]),
     '使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行',
     '決策只看到截至虛擬時間已提供的價格與此前已完成日 K；不讀取今日新聞、營收或既有實盤經驗',
-    '偵測採設定秒數對齊；保留價格、策略、觀測與撤單後下一次偵測，略過無狀態變化的空白計時，不插值或製造新行情',
+    '完整保留每次排程條件檢查；Codex 回測每五分鐘偵測並更新觀測股，分鐘行情只核對既有委託，不插值或製造行情',
     '缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合',
     '委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷',
     'K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果',
@@ -222,8 +231,9 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   };
   try{await engine.start(new Date(events[0]!.at));
     for(let index=0;index<events.length;index++){const event=events[index]!;if(signal.aborted){status='CANCELLED';break;}
-      if(clock)try{await clock.before(event.at,signal);}catch{if(signal.aborted){status='CANCELLED';break;}throw new Error('回測時間控制失敗');}
-      const now=new Date(event.at),day=twDay(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=events[index+1]?.at??'';
+      const visibleEvent=event.check||event.watch||event.decision!==undefined||event.close;
+      if(clock&&visibleEvent)try{await clock.before(event.at,signal);}catch{if(signal.aborted){status='CANCELLED';break;}throw new Error('回測時間控制失敗');}
+      const now=new Date(event.at),day=twDay(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=events.slice(index+1).find(e=>e.check||e.watch||e.decision!==undefined||e.close)?.at??'';
       const ordersBefore=new Map(store.orders().map(o=>[o.local_id,o.status+':'+o.filled])),fillCount=broker.fillCount();
       const decisionsBefore=new Map([...engine.decisionStates].map(([symbol,state])=>[symbol,state.state+':'+state.reason]));
       progress('RECONCILE',`${twClock(now)} 處理價格事件並核對已存在的模擬委託`);
@@ -232,7 +242,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       if(event.market)for(const q of engine.quotes.values())if(q.trade_at===event.at)quality.last_marks[q.symbol]=q.trade_at;
       if(event.watch&&settings.auto_watchlist)await engine.refreshWatch(await engine.collectBundle(now),now);
       if(event.decision!==undefined){
-        onFrame?.(frame(now));await decision(now,event.decision);scheduleExpiry(index);nextEvent=events[index+1]?.at??'';
+        onFrame?.(frame(now));await decision(now,event.decision);scheduleExpiry(index);nextEvent=events.slice(index+1).find(e=>e.check||e.watch||e.decision!==undefined||e.close)?.at??'';
       }
       if(event.check&&!signal.aborted){checks++;lastMonitor=event.at;progress('MONITOR',`${twClock(now)} 檢查進出場條件、風控與模擬送單`);await engine.tick(now,true);
         await executions(now);}
@@ -246,7 +256,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       if(event.close)await finishDay(day);
       const value=equity(engine.account!);if(value.gt(peak))peak=value;const loss=peak.minus(value).div(peak);if(loss.gt(drawdown))drawdown=loss;
       if(event.market){timeline.push({at:event.at,equity:value.toFixed(2),cash:engine.account!.cash});}
-      if(steps%25===0||event.decision!==undefined||changed.length||broker.fillCount()>fillCount||clock?.paused||clock&&clock.speed>0){
+      if(visibleEvent||changed.length||broker.fillCount()>fillCount||clock?.paused||clock&&clock.speed>0){
         onFrame?.(frame(now));progress('REPLAY',`${twClock(now)} 事件已完成，${nextEvent?'準備下一觸發點 '+twClock(new Date(nextEvent)):'正在彙整結果'}`);await yieldToEvents();}}
     if(currentDay)await finishDay(currentDay,signal.aborted||twClock(new Date(lastTime))<'13:30'?new Date(lastTime):undefined);if(signal.aborted)status='CANCELLED';
     else if(!quality.successful_strategies){status='FAILED';limitations.push('沒有任何有效 Codex 盤中決策或程式策略；本次損益不能用來評估策略');}
@@ -286,3 +296,4 @@ export function formatBacktestReport(r:BacktestReport):string{const m=r.metrics;
 const csvValue=(x:unknown):string=>'"'+String(x??'').replace(/"/g,'""')+'"';
 export function fillsCsv(r:BacktestReport):string{const fields=['at','symbol','action','lot','purpose','shares','price','amount','fee','tax','realized_pnl'] as const;
   return '\uFEFF'+fields.join(',')+'\r\n'+r.fills.map(f=>fields.map(k=>csvValue(f[k])).join(',')).join('\r\n');}
+

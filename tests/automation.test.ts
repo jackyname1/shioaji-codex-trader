@@ -148,14 +148,14 @@ test('replay timer alignment retains genuine price events and distinct strategy,
 });
 test('fixed-time replay analyzes only requested times plus review, uses auto observations and does not reuse the daily review as strategy',async()=>{
   const data=flat('2026-01-05','2026-01-06');
-  const r=await runBacktest({start:'2026-01-05',end:'2026-01-06',strategy_schedule:'fixed',strategy_times:['09:15','11:45'],monitor_interval_seconds:7},data,SettingsSchema.parse({}),undefined,new AbortController().signal);
+  const r=await runBacktest({start:'2026-01-05',end:'2026-01-06',strategy:'rules',strategy_schedule:'fixed',strategy_times:['09:15','11:45'],monitor_interval_seconds:7},data,SettingsSchema.parse({}),undefined,new AbortController().signal);
   assert.equal(r.status,'COMPLETED');assert.deepEqual(r.strategy_log.filter(x=>!x.review).map(x=>twClock(new Date(x.at))),['09:15','11:45','09:15','11:45']);
   assert.ok(r.metrics.watch_scans>r.quality.strategy_slots);assert.ok(r.metrics.monitor_checks>r.metrics.watch_scans);assert.ok(r.fills.length);
   assert.ok(r.fills.every(f=>Date.parse(f.at)>Date.parse(r.orders.find(o=>o.local_id===f.order_id)!.created_at)));
 });
 test('missing sessions report PARTIAL instead of claiming a completed period',async()=>{
   const data=flat();data.points=data.points.filter(p=>!p.at.startsWith('2026-01-07'));
-  const r=await runBacktest({start:'2026-01-05',end:'2026-01-09'},data,SettingsSchema.parse({}),undefined,new AbortController().signal);
+  const r=await runBacktest({start:'2026-01-05',end:'2026-01-09',strategy:'rules'},data,SettingsSchema.parse({}),undefined,new AbortController().signal);
   assert.equal(r.status,'PARTIAL');assert.deepEqual(r.quality.missing_sessions,['2026-01-07']);
 });
 test('exhausted Codex coverage is PARTIAL after one valid strategy, and skips later entries within its total budget',async()=>{
@@ -182,3 +182,4 @@ test('automatic interval comparison saves independent accounts and restores sele
     await assert.rejects(()=>next.select('../latest.json'));
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
+

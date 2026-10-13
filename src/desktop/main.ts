@@ -318,9 +318,9 @@ function registerIpc(): void {
     if(connectionBusy)throw new Error('目前連線或模式切換仍在進行');
     if(!service)throw new Error('回測需要有效的本機設定');
     const request=BacktestRequestSchema.parse(value);let csv:string|undefined;
-    if(!smoke&&(!nativeConnection.connected||request.source!=='shioaji'||!['codex','rules'].includes(request.strategy)))
+    if(!smoke&&(!nativeConnection.connected||request.source!=='shioaji'||request.strategy!=='codex'))
       throw new Error('回測需要連接 Shioaji 真實行情；請先完成 API 設定');
-    if(!smoke&&request.strategy==='codex'&&!await codexLogin.check())throw new CodexError('Codex 尚未登入，請先按登入；快速程式模擬可直接執行');
+    if(!smoke&&request.strategy==='codex'&&!await codexLogin.check())throw new CodexError('Codex 尚未登入，請先按登入');
     if(request.source==='csv'){
       const result=await dialog.showOpenDialog(window!,{title:'匯入歷史行情 CSV（含至少 20 個交易日暖機資料）',properties:['openFile'],filters:[{name:'CSV',extensions:['csv']}]});
       if(result.canceled)return '已取消匯入';const path=result.filePaths[0]!;

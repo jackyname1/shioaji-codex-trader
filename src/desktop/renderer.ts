@@ -91,7 +91,7 @@ function loadSettings(s:Settings):void {
   if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;el<HTMLTextAreaElement>('codex-instruction-control').value=s.codex_instruction;}
   if(!replayPreferencesLoaded){replayPreferencesLoaded=true;
     for(const [id,v] of Object.entries({'bt-schedule':s.strategy_schedule,'bt-times':s.strategy_times.join(','),'bt-interval':s.decision_interval_minutes,
-      'bt-monitor':s.monitor_interval_seconds,'bt-watch':s.watch_refresh_minutes,'bt-cash':s.demo_cash}))el<HTMLInputElement>(id).value=String(v);
+      'bt-monitor':5,'bt-watch':5,'bt-cash':s.demo_cash}))el<HTMLInputElement>(id).value=String(v);
     el<HTMLInputElement>('bt-whole').checked=s.whole_lots;schedulingFields('bt');
   }
   el<HTMLInputElement>('s-times').value=s.strategy_times.join(',');el<HTMLSelectElement>('mode').value=s.mode==='live'?'live':'paper';
@@ -137,7 +137,7 @@ function renderRuntime(state:DesktopState):void {
   const replaySettings=paper&&!state.backtest_progress.running?state.backtest_result?.request:undefined;
   text('schedule-strategy',paper?(replaySettings?(replaySettings.strategy_schedule==='fixed'?replaySettings.strategy_times.join(' / '):replaySettings.decision_interval_minutes+' 分鐘'):
     value('bt-schedule')==='fixed'?value('bt-times'):value('bt-interval')+' 分鐘'):s.strategy_schedule==='fixed'?s.strategy_times.join(' / '):s.decision_interval_minutes+' 分鐘');text('analysis-status',paper?phase[state.backtest_progress.phase]??state.backtest_progress.phase:r.sizing?'確認股數':r.analyzing?'條件分析中':valid?'監測中':'等待策略');
-  text('schedule-monitor',(paper?replaySettings?.monitor_interval_seconds??value('bt-monitor'):s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
+  text('schedule-monitor',(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
   text('schedule-watch',(paper?replaySettings?.watch_refresh_minutes??value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
   el('live-authorization').hidden=r.mode!=='live';
   const live=state.live;
@@ -231,8 +231,8 @@ el('s-schedule').addEventListener('change',()=>schedulingFields('s'));el('bt-sch
 function request(compare=false):BacktestRequest {
   return {start:value('bt-start'),end:value('bt-end'),initial_cash:value('bt-cash'),source:value('bt-source') as BacktestRequest['source'],strategy:value('bt-strategy') as BacktestRequest['strategy'],
     whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
-    start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:Number(value('replay-speed')),
-    decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:Number(value('bt-monitor')),watch_refresh_minutes:Number(value('bt-watch')),
+    start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:checked('replay-direct')?0:Number(value('replay-speed-number')),
+    decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
     comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),participation:value('bt-participation')};
 }
 el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>beginReplay());});
@@ -397,7 +397,7 @@ function renderReplay(state:DesktopState):void {
   text('replay-time',frame?new Date(frame.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):r?stamp(r.asof):'尚未開始模擬');
   text('replay-pnl',frame?'損益 NT$ '+fmt(frame.net_pnl):r?'損益 NT$ '+fmt(r.metrics.net_pnl):'—');
   text('replay-pause',state.replay_paused?'▶ 繼續':'Ⅱ 暫停');el<HTMLButtonElement>('replay-pause').disabled=!p.running;el<HTMLButtonElement>('replay-step').disabled=!p.running;
-  text('replay-next',p.running?(state.replay_paused?'步驟完成後暫停 · ':'')+(['ANALYSIS','REVIEW','SIZING'].includes(p.phase)?'等待 Codex 完成':p.next_event_at?'下個觸發 '+stamp(p.next_event_at):p.message):'每一步完成後才前進');
+  text('replay-next',p.running?(state.replay_paused?'步驟完成後暫停 · ':'')+(['ANALYSIS','REVIEW','SIZING'].includes(p.phase)?'等待 Codex 完成':p.next_event_at?'下次檢查／Codex '+stamp(p.next_event_at):p.message):'每一步完成後才前進');
   el('replay-next').title=p.message;
   const stages=['SNAPSHOT','ANALYSIS','ACTIVATION','MONITOR','SIZING','RECONCILE'],index=stages.indexOf(p.phase==='SIZE_CONFIRM'?'RECONCILE':p.phase);
   for(const node of document.querySelectorAll<HTMLElement>('[data-replay-stage]')){const n=stages.indexOf(node.dataset.replayStage!);node.classList.toggle('active',p.running&&n===index);node.classList.toggle('done',p.phase==='COMPLETED'||p.running&&(p.phase==='REPLAY'||n<index));}
@@ -467,7 +467,17 @@ new ResizeObserver(scheduleChart).observe(chartHost);
 el('market-chart').addEventListener('pointermove',()=>text('chart-hover',el('market-chart').dataset.hover??''));
 el('replay-pause').addEventListener('click',()=>void run(()=>window.trader.replayControl(latestState?.replay_paused?'resume':'pause')));
 el('replay-step').addEventListener('click',()=>void run(()=>window.trader.replayControl('step')));
-el('replay-speed').addEventListener('change',()=>void run(()=>window.trader.replaySpeed(Number(value('replay-speed')))));
+function updateReplaySpeed(fromSlider=false):void {
+  if(fromSlider)el<HTMLInputElement>('replay-speed-number').value=value('replay-speed');
+  const speed=Number(value('replay-speed-number'));
+  if(!Number.isFinite(speed)||speed<1||speed>100000)return;
+  el<HTMLInputElement>('replay-speed').value=String(Math.min(speed,10000));
+  text('replay-speed-label',checked('replay-direct')?'每 5 分鐘推進':speed+'×');
+  void window.trader.replaySpeed(checked('replay-direct')?0:speed).catch(error=>text('status',error instanceof Error?error.message:'倍速未更新'));
+}
+el('replay-speed').addEventListener('input',()=>updateReplaySpeed(true));
+el('replay-speed-number').addEventListener('change',()=>updateReplaySpeed());
+el('replay-direct').addEventListener('change',()=>updateReplaySpeed());
 el('bt-market').addEventListener('click',()=>void run(()=>window.trader.exportMarket()));
 for(const id of ['codex-model-control','codex-reasoning-control','codex-instruction-control'])el(id).addEventListener('input',()=>{codexDirty=true;});
 async function saveCodex():Promise<string>{

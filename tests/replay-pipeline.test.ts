@@ -6,13 +6,15 @@ import {join} from 'node:path';
 import {ChartViewport} from '../src/desktop/chart-viewport.js';
 import {cachedHistory} from '../src/core/history-cache.js';
 import {normalizeHistoryPoints,syntheticDataset,type HistoryDataset} from '../src/core/backtest-data.js';
-import {runBacktest,type ReplayFrame,type ReplayActivity,type BacktestProgress} from '../src/core/backtest.js';
+import {runBacktest,replayEvents,BacktestRequestSchema,type ReplayFrame,type ReplayActivity,type BacktestProgress} from '../src/core/backtest.js';
 import {ReplayClock} from '../src/core/replay-clock.js';
 import {CodexError} from '../src/core/codex.js';
 import {SettingsSchema,twDay,type Snapshot,type Analysis} from '../src/core/models.js';
 import {ShioajiHttpBroker} from '../src/broker/http.js';
 import {Store} from '../src/core/store.js';
-import {testSize} from './helpers.js';
+import {testSize,snapshot,now} from './helpers.js';
+import {validateAnalysis} from '../src/core/strategy.js';
+import {TradingCalendar} from '../src/core/calendar.js';
 
 const start='2026-01-05',end='2026-01-06';
 const nextTurn=()=>new Promise<void>(resolve=>setImmediate(resolve));
@@ -90,7 +92,7 @@ test('a plan expiration remains a trigger between bars and cancels its remainder
     a.decisions=[{symbol:a.candidates[0]!,action:'BUY',shares:10,limit_price:'29.5',entry_when:'IMMEDIATE',trigger_price:'0',reason:'測試未成交掛單',smart:{stop_price:'29',take_profit:'33',trailing_activate:null,trailing_fraction:null}}];return a;
   },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
   const order=report.orders[0]!;assert.equal(order.status,'CANCELLED');assert.equal(order.filled,0);
-  const cancelled=report.workflow!.find(e=>e.stage==='RECONCILE'&&e.message.includes('CANCELLED'))!;assert.equal(cancelled.at,new Date(start+'T09:11:00+08:00').toISOString());
+  const cancelled=report.workflow!.find(e=>e.stage==='RECONCILE'&&e.message.includes('CANCELLED'))!;assert.equal(cancelled.at,new Date(start+'T09:15:00+08:00').toISOString());
   assert.equal(report.final_frame!.decisions!.find(d=>d.symbol===order.symbol)!.state,'CANCELLED');
 });
 test('Codex failure preserves its specific reason and later sessions recover without reusing a failed plan',async()=>{
@@ -100,4 +102,36 @@ test('Codex failure preserves its specific reason and later sessions recover wit
   assert.equal(report.status,'PARTIAL');assert.equal(report.failures!.length,1);assert.equal(report.failures![0]!.issue,'Codex 測試額度暫時不足');
   assert.equal(report.failures![0]!.stage,'ANALYSIS');assert.ok(report.workflow!.some(e=>e.stage==='FAILED'&&e.message.includes('額度暫時不足')));
   assert.ok(report.strategy_log.some(s=>!s.review&&twDay(new Date(s.at))===end));assert.ok(report.fills.every(f=>twDay(new Date(f.at))===end));
+});
+
+
+test('Codex replay fixes five-minute monitoring and preserves every check even with sparse market bars',()=>{
+  const request=BacktestRequestSchema.parse({start,end:start,monitor_interval_seconds:3,watch_refresh_minutes:1});
+  assert.equal(request.strategy,'codex');assert.equal(request.monitor_interval_seconds,300);assert.equal(request.watch_refresh_minutes,5);
+  const store=new Store(':memory:');try{
+    const calendar=new TradingCalendar(store,true),settings=SettingsSchema.parse({monitor_interval_seconds:request.monitor_interval_seconds,watch_refresh_minutes:request.watch_refresh_minutes,strategy_schedule:'fixed',strategy_times:['09:17']});
+    const events=replayEvents([start+'T01:11:00.000Z',start+'T01:26:00.000Z'],[start],settings,calendar);
+    const checks=events.filter(e=>e.check);assert.equal(checks.length,52);
+    for(let i=1;i<checks.length;i++)assert.equal(Date.parse(checks[i]!.at)-Date.parse(checks[i-1]!.at),300000);
+    assert.ok(events.find(e=>e.at===start+'T01:11:00.000Z')?.market);
+    assert.equal(events.find(e=>e.at===start+'T01:11:00.000Z')?.check,false);
+    assert.ok(events.find(e=>e.at===start+'T01:17:00.000Z')?.decision===false);
+  }finally{store.close();}
+});
+test('excluded universe HOLD comments do not invalidate the plan or authorize noncandidate trades',()=>{
+  const s=snapshot(),config=SettingsSchema.parse({}),a=rules(s),symbol=s.universe[1]!.symbol;
+  a.candidates=[s.universe[0]!.symbol];a.decisions=[{symbol,action:'HOLD',shares:0,limit_price:'30',entry_when:'IMMEDIATE',trigger_price:'0',smart:null,reason:'未入選，保持觀望'}];
+  assert.ok(validateAnalysis(a,s,now,config));
+  assert.throws(()=>validateAnalysis({...a,decisions:[{...a.decisions[0]!,action:'BUY',shares:1,smart:{stop_price:'29',take_profit:'33',trailing_activate:null,trailing_fraction:null}}]},s,now,config),/決策標的/);
+  assert.throws(()=>validateAnalysis({...a,decisions:[{...a.decisions[0]!,symbol:'9999'}]},s,now,config),/決策標的/);
+  assert.throws(()=>validateAnalysis({...a,decisions:[{...a.decisions[0]!,smart:{stop_price:'29',take_profit:null,trailing_activate:null,trailing_fraction:null}}]},s,now,config),/決策標的/);
+});
+test('five-minute replay emits all intermediate checks and quantity requests only on checks, awaiting each result',async()=>{
+  const frames:ReplayFrame[]=[],sizes:string[]=[];
+  const r=await runBacktest({start,end:start,source:'sample',strategy:'codex',end_time:'09:31',decision_interval_minutes:360},flat(),SettingsSchema.parse({codex_enabled:true}),async s=>rules(s),new AbortController().signal,()=>undefined,new ReplayClock(),f=>frames.push(f),undefined,async input=>{
+    const at=frames.at(-1)!.at;sizes.push(input.asof);await nextTurn();assert.equal(frames.at(-1)!.at,at);
+    return testSize(input);
+  });
+  assert.deepEqual([...new Set(frames.map(f=>f.last_monitor_at).filter(Boolean))],['09:10','09:15','09:20','09:25','09:30'].map(t=>new Date(start+'T'+t+':00+08:00').toISOString()));
+  assert.ok(sizes.length>0);assert.ok(sizes.every(t=>Date.parse(t)%300000===0));assert.equal(r.metrics.monitor_checks,5);
 });

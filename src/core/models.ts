@@ -132,7 +132,7 @@ export const SettingsSchema = z.strictObject({
     .refine(v => new Set(v).size === v.length, '策略時間不可重複').default(['09:15','11:45']),
   schedule_catch_up_minutes: quantity.min(1).max(60).default(20),
   decision_interval_minutes: quantity.min(10).max(360).default(180),
-  monitor_interval_seconds: quantity.min(1).max(30).default(3),
+  monitor_interval_seconds: quantity.min(1).max(300).default(3),
   watch_refresh_minutes: quantity.min(1).max(60).default(5),
   auto_watchlist: z.boolean().default(true), watch_max_symbols: quantity.min(5).max(20).default(12),
   watch_remove_after_scans: quantity.min(1).max(12).default(3), watch_min_amount: nonnegative.default('20000000'),
@@ -182,3 +182,4 @@ export const ageSeconds = (now: Date, stamp: string): number => (now.getTime() -
 export const twDay = (now: Date): string => new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
 export const twClock = (now: Date): string => new Date(now.getTime() + 8 * 3600000).toISOString().slice(11, 16);
 export const addDays = (day: string, n: number): string => new Date(Date.parse(day + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+

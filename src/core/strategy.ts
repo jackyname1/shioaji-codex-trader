@@ -43,7 +43,9 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
       throw new Error(`策略缺少持倉 ${position.symbol} 的出場條件；既有委託不會因此改變`);
   }
   for (const decision of a.decisions) {
-    if (!candidates.has(decision.symbol) && !held.has(decision.symbol)) throw new Error('決策標的不在候選或持倉內');
+    // HOLD may explain exclusion of a stock from the supplied universe; it grants no buy authority.
+    const excludedHold=decision.action==='HOLD'&&universe.has(decision.symbol)&&decision.smart===null;
+    if (!candidates.has(decision.symbol) && !held.has(decision.symbol) && !excludedHold) throw new Error('決策標的不在候選或持倉內');
     if (decision.action === 'BUY' && (!candidates.has(decision.symbol) || !snapshot.features[decision.symbol]?.sufficient))
       throw new Error('買進標的缺少候選資格或足夠歷史資料');
     if (snapshot.review_only && decision.action !== 'HOLD') throw new Error('盤後檢討不得產生交易委託');
@@ -65,3 +67,4 @@ export function demoAnalysis(snapshot: Snapshot, settings: Settings, now: Date):
       entry:{signal:'TREND',allocation_fraction:'0.02',max_ma20_distance:'0.10',stop_fraction:'0.05',take_profit_fraction:'0.10',trailing_fraction:'0.03'}},
     summary: 'DEMO：虛構股票，驗證動態觀測、規則進場、部分成交與跨日保護；不是有效獲利策略' });
 }
+
