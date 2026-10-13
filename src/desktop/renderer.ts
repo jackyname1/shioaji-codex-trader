@@ -185,7 +185,8 @@ function renderRuntime(state:DesktopState):void {
 function renderBacktest(state:DesktopState):void {
   const p=state.backtest_progress,r=state.backtest_result;renderReplay(state);
   text('bt-progress-title',phase[p.phase]??p.phase);text('bt-progress-detail',`${p.total_runs&&p.total_runs>1?`第 ${p.run} / ${p.total_runs} 組 · `:''}${p.day} · Codex ${p.codex_calls}`);
-  text('bt-progress-message',p.message);el<HTMLProgressElement>('bt-progress').value=p.total_points?Math.round(p.points/p.total_points*100):p.phase==='COMPLETED'?100:0;
+  // The compact layout hides metric subtitles; keep the execution-model warning visible here.
+  text('bt-progress-message',(r||p.running?'近似成交 · ':'')+p.message);el<HTMLProgressElement>('bt-progress').value=p.total_points?Math.round(p.points/p.total_points*100):p.phase==='COMPLETED'?100:0;
   el<HTMLButtonElement>('bt-run').disabled=p.running;el<HTMLButtonElement>('bt-compare').disabled=p.running;el<HTMLButtonElement>('bt-cancel').disabled=!p.running;
   for(const node of document.querySelectorAll<HTMLInputElement|HTMLSelectElement>('#backtest-form input,#backtest-form select,[form="backtest-form"]')){
     node.disabled=p.running;

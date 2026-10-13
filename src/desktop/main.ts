@@ -474,6 +474,7 @@ async function smokeTest(): Promise<void> {
     await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-form').requestSubmit();})()`);
     await new Promise(resolve=>setTimeout(resolve,1800));
     await verifyLayout('paper','replay');
+    if(!await window.webContents.executeJavaScript(`(()=>{const note=document.querySelector('#bt-progress-message');return note.getBoundingClientRect().height>0&&getComputedStyle(note).visibility!=='hidden'&&note.textContent.includes('近似成交');})()`))throw new Error('精簡與寬版回測近似成交警示不可見');
     if(width===1600)await verifyChartInteraction();
     await capture(`SYNTHETIC-ui-paper-${width}.png`,width,height);
   }
