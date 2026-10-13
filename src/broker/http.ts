@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { Store } from '../core/store.js';
 import { TradingCalendar } from '../core/calendar.js';
 import { Risk } from '../core/risk.js';
-import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addDays, d, money, remaining, twDay,
+import { AccountSchema, InstrumentSchema, OrderSchema, QuoteSchema, active, addDays, d, money, remaining, twDay,twClock,
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import { NoSubmissionError, type Broker } from './types.js';
 import { cachedHistory } from '../core/history-cache.js';
@@ -489,17 +489,19 @@ export class ShioajiHttpBroker implements Broker {
   }
   async history(symbol: string, now: Date): Promise<Bar[]> {
     const m = (await this.instruments([symbol],now))[symbol]; if (!m) return [];
+    const today=twDay(now),postmarket=twClock(now)>='13:40';
     const raw = await cachedHistory(this, this.store.path === ':memory:' ? undefined : join(dirname(this.store.path), 'history-cache'),
-      symbol, m.exchange, addDays(twDay(now),-150), addDays(twDay(now),-1), now.toISOString(), this.stop.signal);
-    const grouped = new Map<string, Bar>();
+      symbol, m.exchange, addDays(today,-150),postmarket?today:addDays(today,-1), now.toISOString(), this.stop.signal);
+    const grouped = new Map<string, Bar>(),lastTimes=new Map<string,string>();
     for (const row of raw) {
-      const day = twDay(new Date(row.at)); if (day >= twDay(now)) continue;
+      const day = twDay(new Date(row.at)); if (day>today||day===today&&!postmarket) continue;
+      lastTimes.set(day,row.at);
       const b = grouped.get(day), high = Number(row.high), low = Number(row.low), close = Number(row.close), volume = row.volume_shares;
       grouped.set(day, { date: day, high: b ? Math.max(b.high,high) : high, low: b ? Math.min(b.low,low) : low,
         close, volume: (b?.volume ?? 0) + volume,
         ...(row.amount_twd!==undefined&&(!b||b.amount!==undefined)?{amount:d(b?.amount??0).plus(row.amount_twd).toFixed()}:{}) });
     }
-    return [...grouped.values()].sort((a,b) => a.date.localeCompare(b.date));
+    return [...grouped.values()].filter(b=>b.date<today||twClock(new Date(lastTimes.get(b.date)!))>='13:30').sort((a,b) => a.date.localeCompare(b.date));
   }
   private async mutationReady(scope:'trade'|'cancel'='trade'): Promise<void> {
     if (!this.liveSession.authorized(this.store.get('account_fingerprint'),scope)) throw new NoSubmissionError('請先確認本次實盤授權');
@@ -544,3 +546,4 @@ export class ShioajiHttpBroker implements Broker {
     return this.normalizeTrade(result,{ ...o,status:'CANCEL_PENDING' });
   }
 }
+

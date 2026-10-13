@@ -3,7 +3,7 @@ import { csvRows } from './facts.js';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { roundPrice, tickSize } from './risk.js';
-import { addDays, d, twDay, SessionSchema,type SessionDay, type Account, type Bar, type Candidate, type Instrument, type Order, type Quote } from './models.js';
+import { addDays, d, twDay, twClock, SessionSchema,type SessionDay, type Account, type Bar, type Candidate, type Instrument, type Order, type Quote } from './models.js';
 import type { Broker } from '../broker/types.js';
 
 export const validDay = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -17,11 +17,16 @@ export const HistoryPointSchema = z.strictObject({
 }).refine(x => d(x.high).gte(x.open) && d(x.high).gte(x.close) && d(x.low).lte(x.open) && d(x.low).lte(x.close), 'OHLC 範圍不符')
   .refine(x => (x.bid === undefined) === (x.ask === undefined) && (!x.bid || d(x.bid).lte(x.ask!)), '買賣報價不符');
 export type HistoryPoint = z.infer<typeof HistoryPointSchema>;
+export const DailyUniverseSchema=z.record(z.string().refine(validDay),z.strictObject({
+  asof:z.string().refine(validDay),symbols:z.array(z.string().regex(/^[1-9]\d{3}$/)).min(1).max(100)
+    .refine(s=>new Set(s).size===s.length,'每日股票池不可重複'),
+})).refine(days=>Object.entries(days).every(([day,pool])=>pool.asof<day),'每日排行不得使用當日或未來資料');
 export interface HistoryDataset {
   source:string; synthetic:boolean; frequency:'MINUTE'|'DAILY'; points:HistoryPoint[];
   names:Record<string,{name:string;exchange:'TSE'|'OTC'}>; limitations:string[];
   calendar?:SessionDay[];
   normalization?:{duplicates:number;revisions:number};
+  daily_universe?:z.infer<typeof DailyUniverseSchema>;
 }
 /** One closed bar per stock/instant. Provider revisions replace a bar, never add its volume twice. */
 export function normalizeHistoryPoints(input:HistoryPoint[],conflicts:'reject'|'latest'='reject'):{points:HistoryPoint[];duplicates:number;revisions:number} {
@@ -39,10 +44,11 @@ export function normalizeHistoryPoints(input:HistoryPoint[],conflicts:'reject'|'
 }
 export function validateDataset(input: HistoryDataset): HistoryDataset {
   if (!input.points.length || input.points.length > 3000000) throw new Error('回測資料必須有 1–3,000,000 筆行情');
-  if (new Set(input.points.map(p => p.symbol)).size > 100) throw new Error('回測最多 100 個普通股票');
+  if (new Set(input.points.map(p => p.symbol)).size > 100) throw new Error('回測資料聯集最多 100 個普通股票；請縮短日期區間或縮小每日資料池');
   const normalized=normalizeHistoryPoints(input.points);
   const normalization={duplicates:(input.normalization?.duplicates??0)+normalized.duplicates,revisions:(input.normalization?.revisions??0)+normalized.revisions};
-  return {...input,points:normalized.points,normalization,...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{})};
+  return {...input,points:normalized.points,normalization,...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{}),
+    ...(input.daily_universe?{daily_universe:DailyUniverseSchema.parse(input.daily_universe)}:{})};
 }
 export function csvDataset(text: string): HistoryDataset {
   if (Buffer.byteLength(text) > 80000000) throw new Error('回測 CSV 超過 80 MB');
@@ -82,11 +88,13 @@ export class HistoricalMarket implements Broker {
   readonly points:HistoryPoint[];
   private watched=new Set<string>(); private wholeLots=false;
   private bySymbol=new Map<string,HistoryPoint[]>(); private daily=new Map<string,Bar[]>();
+  private dailyLast=new Map<string,string>();
   constructor(readonly dataset:HistoryDataset,readonly participation:string) {
     for(const p of dataset.points) {const rows=this.bySymbol.get(p.symbol)??[];rows.push(p);this.bySymbol.set(p.symbol,rows);}
     for(const [symbol,rows] of this.bySymbol) {
       const days=new Map<string,Bar>();
       for(const p of rows) {const day=twDay(new Date(p.at)),old=days.get(day);
+        this.dailyLast.set(symbol+':'+day,p.at);
         days.set(day,{date:day,close:Number(p.close),high:Math.max(old?.high??0,Number(p.high)),
           low:Math.min(old?.low??Infinity,Number(p.low)),volume:(old?.volume??0)+p.volume_shares,
           ...(p.amount_twd!==undefined&&(!old||old.amount!==undefined)?{amount:d(old?.amount??0).plus(p.amount_twd).toFixed()}:{})});}
@@ -119,10 +127,19 @@ export class HistoricalMarket implements Broker {
       return (this.wholeLots?[true,false]:[true]).map(odd=>({symbol,last,bid,ask,odd,simulated:false,
         trade_at:p.at,book_at:p.at,bid_shares:p.bid_shares??depth,ask_shares:p.ask_shares??depth}));});
   }
-  async history(symbol:string,now:Date):Promise<Bar[]> {return (this.daily.get(symbol)??[]).filter(b=>b.date<twDay(now)).slice(-150);}
+  private previousDays(symbol:string,now:Date):Bar[]{return (this.daily.get(symbol)??[]).filter(b=>b.date<twDay(now));}
+  async history(symbol:string,now:Date):Promise<Bar[]> {
+    const today=twDay(now);
+    return (this.daily.get(symbol)??[]).filter(b=>{
+      if(b.date<today)return true;if(b.date!==today||twClock(now)<'13:40')return false;
+      const last=this.dailyLast.get(symbol+':'+today);
+      // Include today's aggregate only after all its rows have occurred and a closing bar exists.
+      return !!last&&last<=now.toISOString()&&twClock(new Date(last))>='13:30';
+    }).slice(-150);
+  }
   async instruments(symbols:string[],now:Date):Promise<Record<string,Instrument>> {
     const result:Record<string,Instrument>={};
-    for(const symbol of symbols) {const p=this.latest(symbol,now),previous=(await this.history(symbol,now)).at(-1);if(!p||!previous)continue;
+    for(const symbol of symbols) {const p=this.latest(symbol,now),previous=this.previousDays(symbol,now).at(-1);if(!p||!previous)continue;
       result[symbol]={symbol,name:this.dataset.names[symbol]?.name??symbol,exchange:this.dataset.names[symbol]?.exchange??'TSE',
         kind:'STOCK',category:'HISTORICAL_SIMULATION',reference:String(previous.close),limit_down:roundPrice(d(previous.close).times('.9'),false),
         limit_up:roundPrice(d(previous.close).times('1.1')),suspended:false,disposition:false,attention:false,verified_at:now.toISOString()};}
@@ -130,11 +147,15 @@ export class HistoricalMarket implements Broker {
   }
   async discover(count:number,now:Date):Promise<Candidate[]> {
     const result:Candidate[]=[];
-    for(const symbol of this.bySymbol.keys()) {const p=this.latest(symbol,now),previous=(await this.history(symbol,now)).at(-1);if(!p||!previous)continue;
+    const pool=this.dataset.daily_universe?.[twDay(now)];
+    // A loaded future entrant must stay invisible until its dated membership becomes effective.
+    if(this.dataset.daily_universe&&!pool)return [];
+    for(const symbol of pool?.symbols??this.bySymbol.keys()) {const p=this.latest(symbol,now),previous=this.previousDays(symbol,now).at(-1);if(!p||!previous)continue;
       result.push({symbol,name:this.dataset.names[symbol]?.name??(this.dataset.synthetic?'虛構股票 '+symbol:symbol),
-        last:p.close,amount:previous.amount??d(previous.close).times(previous.volume).toFixed(),source:'歷史資料池：以前一已完成交易日成交金額排序'});}
+        last:p.close,amount:previous.amount??d(previous.close).times(previous.volume).toFixed(),source:pool?`${pool.asof} 歷史排行每日股票池`:'歷史資料池：以前一已完成交易日成交金額排序'});}
     return result.sort((a,b)=>d(b.amount).cmp(a.amount)).slice(0,count);
   }
   async submit():Promise<Order>{throw new Error('歷史行情源禁止真實委託');}
   async cancel():Promise<Order>{throw new Error('歷史行情源禁止真實撤單');}
 }
+

@@ -9,7 +9,7 @@ import type { AnalystEvent } from './codex.js';
 import { csvDataset,syntheticDataset } from './backtest-data.js';
 import { shioajiDataset } from './backtest-source.js';
 import { CodexAnalyst,appendAnalystEvent } from './codex.js';
-import type { Settings } from './models.js';
+import {twDay,type Settings} from './models.js';
 
 export interface BacktestSummary {id:string;created_at:string;status:string;start:string;end:string;synthetic:boolean;
   strategy:string;schedule:string;monitor_seconds:number;net_pnl:string;return_pct:string;drawdown_pct:string;calls:number}
@@ -28,7 +28,7 @@ export class BacktestController {
   constructor(readonly root:string,private readonly onClock?:(state:ReplayClockState)=>void){this.clock=new ReplayClock(onClock);}
   private useReport(r:BacktestReport):void {
     this.report=r;this.frame=r.final_frame;
-    this.progress={running:false,phase:r.status,day:r.request.end,points:0,total_points:0,
+    this.progress={running:false,phase:r.status,day:twDay(new Date(r.asof)),points:0,total_points:0,
       codex_calls:r.metrics.codex_calls,at:r.asof,last_error:r.failures?.at(-1)?.issue,
       message:r.status==='FAILED'?'本次沒有有效盤中策略：'+(r.failures?.at(-1)?.issue??'請查看策略與資料紀錄'):'已載入測試結果，可查看與匯出'};
     this.analystEvents=r.analyst_events??(r.workflow??[]).map(e=>({at:e.at,asof:e.at,stage:e.stage,message:e.message,model:'模擬執行引擎',reasoning:'程序步驟'}));
@@ -95,12 +95,13 @@ export class BacktestController {
           if(analyst?.selection)r.model=analyst.selection.model;
           r.dataset_id=datasetId;
           this.report=r;consumed+=r.metrics.codex_calls;this.comparisons.push(reportSummary(r));await this.save(r);
-          if(r.status==='CANCELLED')break;
+          if(r.status==='CANCELLED'||r.quality.halt_reason)break;
         }
         const exhausted=this.comparisons.length<intervals.length&&!signal.aborted;
         this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':exhausted?'PARTIAL':this.report?.status??'FAILED',codex_calls:consumed,
           last_error:this.report?.failures?.at(-1)?.issue??this.progress.last_error,next_event_at:'',
-          message:signal.aborted?'已停止，保存已完成的步驟與成交':exhausted?'呼叫上限為整批共用；尚未執行所有比較。已完成結果可查看與匯出':
+          message:signal.aborted?'已停止，保存已完成的步驟與成交':this.report?.quality.halt_reason?`Codex 額度／限流：已停止於 ${this.report.asof}，保存部分結果；其餘比較不再重試`:
+            exhausted?'呼叫上限為整批共用；尚未執行所有比較。已完成結果可查看與匯出':
             this.report?.status==='FAILED'?'本次沒有有效盤中策略：'+(this.report.failures?.at(-1)?.issue??'請查看資料與策略紀錄'):
             this.report?.status==='PARTIAL'?'部分步驟未完成：'+(this.report.failures?.at(-1)?.issue??(this.report.quality.skipped_strategies?'已達 Codex 呼叫上限':'部分交易日缺少行情')):'完整流程已執行並保存，可查看每日選股、條件、委託與成交'};
       }catch(e){this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':'FAILED',

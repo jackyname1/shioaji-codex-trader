@@ -7,7 +7,7 @@ import { TradingCalendar } from './calendar.js';
 import { addDays, SettingsSchema, twDay, type Settings } from './models.js';
 import { validateDataset, type HistoryDataset, type HistoryPoint } from './backtest-data.js';
 import { BrokerHealthSchema, marketReady } from '../broker/health.js';
-import { largestStockScanner } from '../broker/scanner.js';
+import { cachedUniverse } from './universe-cache.js';
 import type { BacktestRequest, BacktestProgress } from './backtest.js';
 
 export async function shioajiDataset(request:BacktestRequest,settings:Settings,cacheRoot:string,signal:AbortSignal,
@@ -26,19 +26,26 @@ export async function shioajiDataset(request:BacktestRequest,settings:Settings,c
       if(year<2020)continue;
       if(!store.session(`${year}-01-01`)){report('CALENDAR',`讀取 ${year} 官方交易日曆`);await calendar.refresh(year,signal);}
     }
-    let seedDate:string|undefined;
+    let dailyUniverse:HistoryDataset['daily_universe'];
     let pool:{code:string;name:string}[];
     if(request.symbols.length) {
       pool=request.symbols.map(code=>({code,name:code}));
       report('UNIVERSE',`使用指定的 ${pool.length} 檔歷史測試股票`);
     } else {
-      try{seedDate=calendar.next(request.start,-1);}catch{
-        const year=Number(request.start.slice(0,4))-1;
-        await calendar.refresh(year,signal);seedDate=calendar.next(request.start,-1);
+      dailyUniverse={};const all=new Map<string,{code:string;name:string}>();
+      for(let day=request.start;day<=request.end;day=addDays(day,1)){
+        signal.throwIfAborted();if(!calendar.isOpen(day))continue;
+        let asof:string;
+        try{asof=calendar.next(day,-1);}catch{
+          await calendar.refresh(Number(day.slice(0,4))-1,signal);asof=calendar.next(day,-1);
+        }
+        report('UNIVERSE',`${day}：讀取前一交易日 ${asof} 成交金額排行`);
+        const ranks=(await cachedUniverse(broker,cacheRoot,asof,signal)).slice(0,settings.candidate_pool_size);
+        dailyUniverse[day]={asof,symbols:ranks.map(r=>r.code)};
+        for(const row of ranks)all.set(row.code,{code:row.code,name:row.name});
+        if(all.size>100)throw new Error('回測每日股票池聯集超過 100 檔；請縮短日期區間或縮小股票池，不能截斷後冒充完整排行');
       }
-      report('UNIVERSE',`讀取 ${seedDate} 歷史成交金額排行，建立本次歷史資料池`);
-      const ranks=await largestStockScanner(broker,'AmountRank',seedDate,200);
-      const seen=new Set<string>();pool=ranks.filter(x=>{if(!/^[1-9]\d{3}$/.test(x.code)||seen.has(x.code))return false;seen.add(x.code);return true;}).slice(0,20);
+      pool=[...all.values()];
     }
     if(!pool.length)throw new Error('回測無法取得起始日前歷史股票池；不使用今日排行替代');
     for(const row of pool) {
@@ -53,9 +60,10 @@ export async function shioajiDataset(request:BacktestRequest,settings:Settings,c
       if(points.length>3000000)throw new Error('回測歷史資料超過 300 萬筆，請分段測試或縮小股票池');
     }
     const verifiedCalendar=(store.db.prepare('SELECT value FROM sessions ORDER BY day').all() as {value:string}[]).map(r=>JSON.parse(r.value) as import('./models.js').SessionDay);
-    return validateDataset({source:`Shioaji 歷史分鐘 K 線；${seedDate ? `${seedDate} 成交金額排行普通股前 ${pool.length} 檔` : `指定 ${pool.length} 檔股票`}`,synthetic:false,frequency:'MINUTE',points,names,normalization,calendar:verifiedCalendar,
-      limitations:[seedDate ? '資料池由起始日前的歷史排行建立，之後以當時已完成日 K 動態排序；沒有涵蓋全部上市櫃股票' : '使用指定股票池，以當時已完成日 K 動態排序；沒有涵蓋全部上市櫃股票',
+    return validateDataset({source:`Shioaji 歷史分鐘 K 線；${dailyUniverse ? `每日以前一交易日排行更新，上限 ${settings.candidate_pool_size} 檔（聯集 ${pool.length} 檔）` : `指定 ${pool.length} 檔股票`}`,synthetic:false,frequency:'MINUTE',points,names,normalization,calendar:verifiedCalendar,daily_universe:dailyUniverse,
+      limitations:[dailyUniverse ? '每日資料池依前一交易日歷史成交金額排行更新；只有當日成員與既有持倉可供策略使用，不提前展示未來入池股票；沒有涵蓋全市場' : '使用指定固定股票池，以當時已完成日 K 動態排序；沒有涵蓋全部上市櫃股票',
         '契約名稱與交易所由目前契約表核對，可能有存活者偏差；未涵蓋當時已退市或改碼股票',
         'Shioaji 分鐘 K 線來自普通股票市場；它不是零股歷史五檔，零股成交只能近似估計']});
   }finally {signal.removeEventListener('abort',cancel);await broker.close();store.close();}
 }
+

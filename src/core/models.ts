@@ -66,10 +66,18 @@ export const SmartSchema = z.strictObject({
 }).refine(s => s.take_profit === null || d(s.take_profit).gt(s.stop_price), '停利必須高於停損')
   .refine(s => (s.trailing_activate === null) === (s.trailing_fraction === null), '移動停損欄位必須成對');
 export type SmartSpec = z.infer<typeof SmartSchema>;
+export const ConditionFieldSchema=z.enum(['LAST','BID','ASK','MA5','MA20','MA60','RSI14','ATR14','SUPPORT20','RESISTANCE20','VOLUME_RATIO20','RETURN20']);
+// All guards are ANDed with the price trigger. No executable expressions or prose parsing.
+export const ConditionSchema=z.strictObject({
+  left:ConditionFieldSchema,operator:z.enum(['GT','GTE','LT','LTE']),
+  right:z.enum(['VALUE',...ConditionFieldSchema.options]),value:decimal.nullable(),
+}).refine(c=>c.right==='VALUE'?c.value!==null:c.value===null,'常數需要 value；指標比較的 value 必須 null');
+export type Condition=z.infer<typeof ConditionSchema>;
 export const DecisionSchema = z.strictObject({
   symbol, action: z.enum(['BUY', 'SELL', 'HOLD']), shares: quantity.max(999000),
   limit_price: nonnegative, entry_when: z.enum(['IMMEDIATE', 'BELOW', 'ABOVE']),
   trigger_price: nonnegative, smart: SmartSchema.nullable(), reason: z.string().min(1).max(1500),
+  conditions:z.array(ConditionSchema).max(12).nullable().optional(),
 }).refine(x => x.action === 'HOLD' || (x.shares > 0 && d(x.limit_price).gt(0)), '委託需要價格與股數')
   .refine(x => x.action !== 'BUY' || (x.smart !== null && d(x.smart.stop_price).lt(x.limit_price)
     && (x.smart.take_profit === null || d(x.smart.take_profit).gt(x.limit_price))), '買進保護價不合法')

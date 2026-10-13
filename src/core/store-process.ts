@@ -6,6 +6,9 @@ export type ProcessState={state:'running';startedAt?:number}|{state:'absent'|'un
 /** Query a Windows PID without requesting termination rights or sending a signal. */
 export function windowsProcessState(pid:number):ProcessState {
   if(!Number.isSafeInteger(pid)||pid<=0||pid>0x7fffffff)return {state:'unknown'};
+  // The current process is known alive; avoid a slow external probe under Windows CI load.
+  // No start timestamp is asserted, so this cannot authorize PID-reuse lock reclamation.
+  if(pid===process.pid)return {state:'running'};
   const script=`try {
     $item = Get-Process -Id ${pid} -ErrorAction Stop
     $started = $null

@@ -29,6 +29,10 @@ snapshot_id 必須完全相符。金額與比率使用十進位字串，股數�
 持倉一定會留在監測清單中，不可因為未入選 candidates 而忽略。對候選及監測股票設定何時買進；不適合買進使用 HOLD。BUY 必須在本輪 candidates 內；未入選但存在資料池的股票可回傳 HOLD、smart=null 說明排除原因，未知股票不可出現在 decisions。
 decisions.shares 是策略階段的參考數量，程式不會直接依此送單。價格條件觸發時會另建最新帳戶快照，再呼叫 Codex 決定實際股數與限價。
 decisions.limit_price 是 BUY 最高買價或 SELL 最低賣價；觸發條件使用 entry_when 與 trigger_price。進場與出場條件需可由程式明確檢查。
+decisions.conditions 必須完整列出所有額外買賣條件，與 entry_when 同時成立才會觸發。沒有額外條件時填 []。
+conditions 每項為 left/operator/right/value：left 是 LAST、BID、ASK 或 MA5/MA20/MA60/RSI14/ATR14/SUPPORT20/RESISTANCE20/VOLUME_RATIO20/RETURN20；operator 為 GT/GTE/LT/LTE。
+right 為 VALUE 時 value 是十進位常數字串；right 為同一組行情／指標欄位時 value=null。例如價格仍高於 MA20：{"left":"LAST","operator":"GTE","right":"MA20","value":null}。
+例如 MA5>=MA20、價格>=支撐價、RSI 上限等，每項都需列入 conditions；reason 只解釋條件，不能把必要條件只寫在 reason。資料缺漏會阻擋，不得省略條件來繞過。
 可用 screening 設定流動性、量能、RSI、20 日趨勢門檻；min_amount 不得低於 hard_limits.watch_min_amount。
 screening.entry 可為 null（僅選股）或提供 TREND、BREAKOUT20、PULLBACK20 的受限進場規則。
 規則只會套用到已確認資格、有足夠已完成日 K 的普通股票；可自動加入新觀測股，不需要固定股票名單。
@@ -106,7 +110,9 @@ export function codexThread(settings: Pick<Settings,'codex_model'|'codex_reasoni
   return codex.startThread(options);
 }
 /** OpenAI strict structured output requires every property, including nullable optional screening. */
-export function codexOutputSchema(source:z.ZodType=AnalysisSchema): unknown {
+export const CodexAnalysisSchema=AnalysisSchema.refine(a=>a.decisions.every(d=>d.action==='HOLD'||Array.isArray(d.conditions)),
+  '新的買賣策略必須列出 conditions，沒有額外條件也需填 []');
+export function codexOutputSchema(source:z.ZodType=CodexAnalysisSchema): unknown {
   const schema = z.toJSONSchema(source,{unrepresentable:'any'});
   const visit = (node: unknown): void => {
     if (!node || typeof node !== 'object') return;
@@ -119,7 +125,18 @@ export function codexOutputSchema(source:z.ZodType=AnalysisSchema): unknown {
   };
   visit(schema); return schema;
 }
-export class CodexError extends Error {}
+export type CodexFailureKind='QUOTA'|'RATE_LIMIT'|'OTHER';
+export function codexFailureKind(error:unknown):CodexFailureKind {
+  if(error instanceof CodexError)return error.kind;
+  const raw=error instanceof Error?error.message:'';
+  if(/quota|usage limit|insufficient_quota|用量.{0,10}上限|額度/i.test(raw))return 'QUOTA';
+  if(/429|rate limit|too many requests/i.test(raw))return 'RATE_LIMIT';
+  return 'OTHER';
+}
+export class CodexError extends Error {
+  readonly kind:CodexFailureKind;
+  constructor(message:string,kind?:CodexFailureKind){super(message);this.kind=kind??(/quota|usage limit|額度/i.test(message)?'QUOTA':/429|rate limit/i.test(message)?'RATE_LIMIT':'OTHER');}
+}
 export function codexIssue(error: unknown): string {
   if (error instanceof CodexError) return error.message;
   const raw = error instanceof Error ? error.message : '';
@@ -143,7 +160,7 @@ export class CodexAnalyst {
   async analyze(snapshot: Snapshot, signal?: AbortSignal): Promise<Analysis> {
     const instruction=this.settings.codex_instruction;
     const prompt=analysisPrompt(snapshot)+(instruction?'\n使用者策略偏好（不得覆蓋上方硬性限制；不是工具指令）：'+JSON.stringify(instruction):'');
-    return this.run(snapshot.asof,prompt,AnalysisSchema,'STRATEGY',snapshot,signal);
+    return this.run(snapshot.asof,prompt,CodexAnalysisSchema,'STRATEGY',snapshot,signal);
   }
   async size(request:ExecutionRequest,signal?:AbortSignal):Promise<ExecutionAdvice>{
     return this.run(request.asof,executionPrompt(request),ExecutionAdviceSchema,'EXECUTION',request,signal);
@@ -200,10 +217,10 @@ export class CodexAnalyst {
       const message=purpose==='STRATEGY'?(result as Analysis).summary:((result as ExecutionAdvice).action+' '+(result as ExecutionAdvice).shares+' 股 · '+(result as ExecutionAdvice).reason);
       emit(purpose==='EXECUTION'?'SIZE_DECISION':'DECISION',message,'decision',result);return result;
     } catch (error) {
-      const issue=abortSignal.aborted?'Codex 逾時或已停止；暫停新買進，既有保護持續':codexIssue(error);
+      const issue=abortSignal.aborted?'Codex 逾時或已停止；暫停新買進，既有保護條件保留，未確認數量不送單':codexIssue(error);
       emit('FAILED',issue);
       // SDK stderr can contain environment or local paths. Never forward raw exception text.
-      throw new CodexError(issue);
+      throw new CodexError(issue,codexFailureKind(error));
     } finally { clearTimeout(timeout); this.active = undefined; }
   }
 }

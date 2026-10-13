@@ -451,8 +451,13 @@ async function smokeTest(): Promise<void> {
   backtest.start({start:'2026-10-01',end:'2026-10-08',source:'sample',strategy:'demo',initial_cash:'100000',strategy_schedule:'interval',comparison_intervals:[120,180]},service.engine.settings);
   await backtest.wait();
   if(!backtest.report||backtest.report.status!=='COMPLETED'||!backtest.report.metrics.filled_orders)throw new Error('打包後歷史模擬未通過');
+  const metrics=backtest.report.metrics;
+  if(!metrics.total_costs||!metrics.gross_pnl||backtest.report.quality.execution_model!=='APPROXIMATE'
+    ||Math.abs(Number(metrics.gross_pnl)-Number(metrics.total_costs)-Number(metrics.net_pnl))>.02)throw new Error('打包後成本拆分與近似成交標示未通過');
   if(backtest.comparisons.length!==2)throw new Error('打包後排程比較未通過');
   await verifyRenderer();
+  const qualityUi=await window.webContents.executeJavaScript(`({quality:document.querySelector('#bt-quality').textContent,cost:document.querySelector('#bt-cost').textContent})`);
+  if(!qualityUi.quality.includes('近似成交')||!qualityUi.quality.includes('固定股票池')||!qualityUi.cost.includes('費用前損益'))throw new Error('打包後回測品質與成本介面未通過');
   const expectedStock=await window.webContents.executeJavaScript(`(()=>{const buttons=[...document.querySelectorAll('#overview-watch td button')];buttons[1]?.click();buttons[2]?.click();return buttons[2]?.textContent;})()`);
   await new Promise(resolve=>setTimeout(resolve,1800));
   const selected=await window.webContents.executeJavaScript(`document.querySelector('#chart-name').textContent`);

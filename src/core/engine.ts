@@ -4,10 +4,11 @@ import { TradingCalendar } from './calendar.js';
 import { Risk, alignedPrice, fee } from './risk.js';
 import { evaluate, updateProtection } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
+import { conditionIssue } from './conditions.js';
 import { experienceContext } from './experience.js';
 import { emptyWatch, selectWatchlist, watchEligibility, ruleEntry, type WatchState } from './watchlist.js';
 import { nextStrategy } from './schedule.js';
-import { active, ageSeconds, d, equity, remaining, twDay, type Account, type Analysis, type Candidate, type Features,
+import { active, ageSeconds, d, equity, remaining, twDay, twClock, type Account, type Analysis, type Candidate, type Features,
   type Instrument, type Order, type Plan, type Quote, type Settings, type Snapshot, type SmartSpec } from './models.js';
 import { NoSubmissionError, type Broker } from '../broker/types.js';
 import { brokerIssue } from '../broker/health.js';
@@ -165,7 +166,8 @@ export class Engine {
     const pending = [...symbols];
     await Promise.all(Array.from({length:3},async () => {
       for (;;) { const symbol = pending.shift(); if (!symbol) break;
-        const key = `history_v2_${twDay(now)}_${symbol}`;
+        // A morning cache must never hide the completed current-day bar at review time.
+        const key = `history_v3_${twDay(now)}_${twClock(now)>='13:40'?'POST':'PRE'}_${symbol}`;
         let issue='';
         let bars = this.store.get<import('./models.js').Bar[]>(key);
         if (!bars) { try { bars = await this.broker.history(symbol,now); if (bars.length) this.store.set(key,bars); }
@@ -332,6 +334,8 @@ export class Engine {
       if (decision.action === 'BUY' && decision.smart && d(q.ask).lte(decision.smart.stop_price)) {
         state('BLOCKED','已跌破進場計畫停損，等待新策略');this.logOnce('BLOCK',`${decision.symbol} 已跌破進場計畫停損，等待新計畫`); continue;
       }
+      const guardIssue=conditionIssue(decision,q,this.watchFeatures[decision.symbol],now);
+      if(guardIssue){state('WAIT',guardIssue);continue;}
       const id = createHash('sha256').update(`${plan.id}:${decision.symbol}:${decision.action}`).digest('hex').slice(0,32);
       const prior=this.store.orders().find(o=>o.local_id===id);
       if(prior){state(prior.status,`${prior.filled}/${prior.shares} 股；本輪已執行，不重送`);continue;}
@@ -394,7 +398,7 @@ export class Engine {
     }
     const c=ticket.condition;
     if(!c||c.entry_when==='BELOW'&&d(q.last).gt(c.trigger_price)||c.entry_when==='ABOVE'&&d(q.last).lt(c.trigger_price))return '買賣觸發條件目前已不成立';
-    return '';
+    return conditionIssue(c,q,this.watchFeatures[c.symbol],now);
   }
   private async executionInputs(now:Date):Promise<void>{
     for(const q of this.broker.quotes(now))this.quotes.set(`${q.symbol}:${q.odd}`,q);
@@ -546,3 +550,4 @@ export class Engine {
     return lines.join('\n');
   }
 }
+
