@@ -17,6 +17,7 @@ export const HistoryPointSchema = z.strictObject({
 }).refine(x => d(x.high).gte(x.open) && d(x.high).gte(x.close) && d(x.low).lte(x.open) && d(x.low).lte(x.close), 'OHLC 範圍不符')
   .refine(x => (x.bid === undefined) === (x.ask === undefined) && (!x.bid || d(x.bid).lte(x.ask!)), '買賣報價不符');
 export type HistoryPoint = z.infer<typeof HistoryPointSchema>;
+export const MAX_HISTORY_POINTS=3000000;
 export const DailyUniverseSchema=z.record(z.string().refine(validDay),z.strictObject({
   asof:z.string().refine(validDay),symbols:z.array(z.string().regex(/^[1-9]\d{3}$/)).min(1).max(100)
     .refine(s=>new Set(s).size===s.length,'每日股票池不可重複'),
@@ -27,6 +28,25 @@ export interface HistoryDataset {
   calendar?:SessionDay[];
   normalization?:{duplicates:number;revisions:number};
   daily_universe?:z.infer<typeof DailyUniverseSchema>;
+  /** One completed daily OHLCV aggregate before each symbol's first replay membership. Never minute events. */
+  daily_history?:HistoryPoint[];
+  minute_starts?:Record<string,string>;
+}
+/** Compact only pre-entry history; all later minutes remain available, including after the symbol leaves the pool. */
+export function partitionReplayHistory(input:HistoryPoint[],minuteStart:string):{points:HistoryPoint[];daily_history:HistoryPoint[]} {
+  if(!validDay(minuteStart))throw new Error('回測分鐘行情起日不合法');
+  const points:HistoryPoint[]=[],days=new Map<string,HistoryPoint>();
+  for(const p of normalizeHistoryPoints(input).points){
+    const day=twDay(new Date(p.at));if(day>=minuteStart){points.push(p);continue;}
+    const key=p.symbol+':'+day,old=days.get(key),volume=d(old?.volume_shares??0).plus(p.volume_shares);
+    if(volume.gt(Number.MAX_SAFE_INTEGER))throw new Error('歷史每日成交量超過可處理範圍');
+    const aggregate:HistoryPoint={symbol:p.symbol,at:p.at,open:old?.open??p.open,
+      high:old&&d(old.high).gt(p.high)?old.high:p.high,low:old&&d(old.low).lt(p.low)?old.low:p.low,
+      close:p.close,volume_shares:volume.toNumber()};
+    if(p.amount_twd!==undefined&&(!old||old.amount_twd!==undefined))aggregate.amount_twd=d(old?.amount_twd??0).plus(p.amount_twd).toFixed();
+    days.set(key,aggregate);
+  }
+  return {points,daily_history:[...days.values()].sort((a,b)=>a.at.localeCompare(b.at)||a.symbol.localeCompare(b.symbol))};
 }
 /** One closed bar per stock/instant. Provider revisions replace a bar, never add its volume twice. */
 export function normalizeHistoryPoints(input:HistoryPoint[],conflicts:'reject'|'latest'='reject'):{points:HistoryPoint[];duplicates:number;revisions:number} {
@@ -43,11 +63,21 @@ export function normalizeHistoryPoints(input:HistoryPoint[],conflicts:'reject'|'
   return {points:[...unique.values()].sort((a,b)=>a.at.localeCompare(b.at)||a.symbol.localeCompare(b.symbol)),duplicates,revisions};
 }
 export function validateDataset(input: HistoryDataset): HistoryDataset {
-  if (!input.points.length || input.points.length > 3000000) throw new Error('回測資料必須有 1–3,000,000 筆行情');
-  if (new Set(input.points.map(p => p.symbol)).size > 100) throw new Error('回測資料聯集最多 100 個普通股票；請縮短日期區間或縮小每日資料池');
+  if (!input.points.length || input.points.length+(input.daily_history?.length??0)>MAX_HISTORY_POINTS) throw new Error('回測資料必須有可重播行情，且行情與暖機日 K 合計不超過 300 萬筆；請分段測試');
   const normalized=normalizeHistoryPoints(input.points);
-  const normalization={duplicates:(input.normalization?.duplicates??0)+normalized.duplicates,revisions:(input.normalization?.revisions??0)+normalized.revisions};
-  return {...input,points:normalized.points,normalization,...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{}),
+  const minuteStarts=input.minute_starts?z.record(z.string().regex(/^[1-9]\d{3}$/),z.string().refine(validDay)).parse(input.minute_starts):undefined;
+  const dailyNormalized=input.daily_history?normalizeHistoryPoints(input.daily_history):undefined,dailyHistory=dailyNormalized?.points;
+  if(dailyHistory){
+    if(input.frequency!=='MINUTE')throw new Error('回測暖機日 K 只能搭配分鐘行情');
+    const first=new Map<string,string>(),days=new Set<string>();
+    for(const p of normalized.points){const day=twDay(new Date(p.at));if(!first.has(p.symbol))first.set(p.symbol,day);
+      if(minuteStarts?.[p.symbol]&&day<minuteStarts[p.symbol]!)throw new Error('回測分鐘行情不能早於該股票的入池起日');}
+    for(const p of dailyHistory){const day=twDay(new Date(p.at)),key=p.symbol+':'+day,boundary=minuteStarts?.[p.symbol]??first.get(p.symbol);
+      if(!boundary||day>=boundary)throw new Error('回測暖機日 K 不得包含入池當日或未來資料');
+      if(days.has(key))throw new Error('回測暖機日 K 每檔每日只能有一筆');days.add(key);}
+  }
+  const normalization={duplicates:(input.normalization?.duplicates??0)+normalized.duplicates+(dailyNormalized?.duplicates??0),revisions:(input.normalization?.revisions??0)+normalized.revisions};
+  return {...input,points:normalized.points,normalization,...(dailyHistory?{daily_history:dailyHistory}:{}),...(minuteStarts?{minute_starts:minuteStarts}:{}),...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{}),
     ...(input.daily_universe?{daily_universe:DailyUniverseSchema.parse(input.daily_universe)}:{})};
 }
 export function csvDataset(text: string): HistoryDataset {
@@ -89,8 +119,10 @@ export class HistoricalMarket implements Broker {
   private watched=new Set<string>(); private wholeLots=false;
   private bySymbol=new Map<string,HistoryPoint[]>(); private daily=new Map<string,Bar[]>();
   private dailyLast=new Map<string,string>();
+  private firstQuote=new Map<string,string>();
   constructor(readonly dataset:HistoryDataset,readonly participation:string) {
-    for(const p of dataset.points) {const rows=this.bySymbol.get(p.symbol)??[];rows.push(p);this.bySymbol.set(p.symbol,rows);}
+    for(const p of dataset.points)if(!this.firstQuote.has(p.symbol))this.firstQuote.set(p.symbol,p.at);
+    for(const p of [...(dataset.daily_history??[]),...dataset.points]) {const rows=this.bySymbol.get(p.symbol)??[];rows.push(p);this.bySymbol.set(p.symbol,rows);}
     for(const [symbol,rows] of this.bySymbol) {
       const days=new Map<string,Bar>();
       for(const p of rows) {const day=twDay(new Date(p.at)),old=days.get(day);
@@ -122,6 +154,7 @@ export class HistoricalMarket implements Broker {
   async subscribe(symbols:string[],wholeLots:boolean):Promise<void>{symbols.forEach(s=>this.watched.add(s));this.wholeLots=wholeLots;}
   quotes(now:Date):Quote[] {
     return [...this.watched].flatMap(symbol=>{const p=this.latest(symbol,now);if(!p||p.at!==now.toISOString())return [];
+      if(this.dataset.daily_history&&(!this.firstQuote.has(symbol)||p.at<this.firstQuote.get(symbol)!))return [];
       const last=roundPrice(p.close), tick=tickSize(last), bid=p.bid??roundPrice(d(last).minus(tick)),ask=p.ask??roundPrice(d(last).plus(tick),false);
       const depth=Math.floor(d(p.volume_shares).times(this.participation).toNumber());
       return (this.wholeLots?[true,false]:[true]).map(odd=>({symbol,last,bid,ask,odd,simulated:false,
@@ -157,5 +190,10 @@ export class HistoricalMarket implements Broker {
   }
   async submit():Promise<Order>{throw new Error('歷史行情源禁止真實委託');}
   async cancel():Promise<Order>{throw new Error('歷史行情源禁止真實撤單');}
+}
+/** This CSV contains retained minute rows only; JSON is the complete replay dataset including membership and daily history. */
+export function replayMinutesCsv(dataset:HistoryDataset):string {
+  const columns=['symbol','at','open','high','low','close','volume_shares','amount_twd'] as const;
+  return '\uFEFF'+columns.join(',')+'\r\n'+dataset.points.map(p=>columns.map(k=>String(p[k]??'')).join(',')).join('\r\n');
 }
 

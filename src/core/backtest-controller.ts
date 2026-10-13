@@ -129,7 +129,11 @@ export class BacktestController {
     const request=ChartRequestSchema.parse(raw);
     const cutoff=this.progress.running?this.frame?.at:this.report?.asof;
     if(!cutoff)throw new Error('回測尚未提供可查看的模擬時間');
-    const dataset=await this.marketData();return buildChart(dataset.points,request,cutoff,dataset.names[request.symbol]?.name,dataset.source);
+    const dataset=await this.marketData(),points=request.interval==='1d'?[...(dataset.daily_history??[]),...dataset.points]:dataset.points;
+    const chart=buildChart(points,request,cutoff,dataset.names[request.symbol]?.name,dataset.source);
+    const start=dataset.minute_starts?.[request.symbol];
+    if(request.interval!=='1d'&&start&&request.start<start)chart.issue=[chart.issue,`${start} 前僅有暖機日 K；分鐘圖顯示入池後行情`].filter(Boolean).join('；');
+    return chart;
   }
   cancel():string{this.abort?.abort();return '已要求停止測試，保存已完成結果';}
   async wait():Promise<void>{await this.task;}

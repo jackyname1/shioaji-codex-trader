@@ -116,8 +116,9 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   if(dataset.calendar)store.saveSessions(dataset.calendar);store.set('experience_scope','backtest:'+id);store.saveSettings(settings);
   store.set('historical_real_data',!dataset.synthetic);
   store.set('historical_replay',true);
-  const observedDays=new Set(dataset.points.map(p=>twDay(new Date(p.at)))),sessions=[];
-  for(let day=twDay(new Date(dataset.points[0]!.at));day<=addDays(request.end,1);day=addDays(day,1))
+  const allHistory=[...(dataset.daily_history??[]),...dataset.points],observedDays=new Set(allHistory.map(p=>twDay(new Date(p.at)))),sessions=[];
+  const firstAt=[dataset.points[0]!.at,...(dataset.daily_history?.length?[dataset.daily_history[0]!.at]:[])].sort()[0]!;
+  for(let day=twDay(new Date(firstAt));day<=addDays(request.end,1);day=addDays(day,1))
     if(!store.session(day))sessions.push({day,open:observedDays.has(day),source:dataset.source,verified_at:new Date().toISOString()});
   if(sessions.length)store.saveSessions(sessions);
   const market=new HistoricalMarket(dataset,request.participation),broker=new PaperBroker(store,market,settings,calendar,true),engine=new Engine(store,broker,settings,calendar);
@@ -133,7 +134,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   if(!marketTimes.length){store.close();throw new Error('回測日期區間沒有可用行情');}
   const coveredDays=[...new Set(marketTimes.map(at=>twDay(new Date(at))))],expectedDays:string[]=[];
   for(let day=request.start;day<=request.end;day=addDays(day,1))if(calendar.isOpen(day))expectedDays.push(day);
-  const warmup:Record<string,number>={};for(const symbol of new Set(dataset.points.map(p=>p.symbol)))
+  const warmup:Record<string,number>={};for(const symbol of new Set(allHistory.map(p=>p.symbol)))
     warmup[symbol]=(await market.history(symbol,new Date(request.start+'T08:00:00+08:00'))).length;
   if(!Object.values(warmup).some(n=>n>=20)){store.close();throw new Error('回測暖機不足：至少一檔需要開始日前 20 個已完成交易日，建議提供 60 日');}
   const calendarVerified=expectedDays.every(day=>store.session(day)?.source.startsWith('https://www.twse.com.tw/'));
