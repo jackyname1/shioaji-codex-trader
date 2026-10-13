@@ -318,9 +318,9 @@ function registerIpc(): void {
     if(connectionBusy)throw new Error('目前連線或模式切換仍在進行');
     if(!service)throw new Error('回測需要有效的本機設定');
     const request=BacktestRequestSchema.parse(value);let csv:string|undefined;
-    if(!smoke&&(!nativeConnection.connected||request.source!=='shioaji'||!['codex','rules'].includes(request.strategy)))
+    if(!smoke&&(!nativeConnection.connected||request.source!=='shioaji'||request.strategy!=='codex'))
       throw new Error('回測需要連接 Shioaji 真實行情；請先完成 API 設定');
-    if(!smoke&&request.strategy==='codex'&&!await codexLogin.check())throw new CodexError('Codex 尚未登入，請先按登入；快速程式模擬可直接執行');
+    if(!smoke&&request.strategy==='codex'&&!await codexLogin.check())throw new CodexError('Codex 尚未登入，請先按登入');
     if(request.source==='csv'){
       const result=await dialog.showOpenDialog(window!,{title:'匯入歷史行情 CSV（含至少 20 個交易日暖機資料）',properties:['openFile'],filters:[{name:'CSV',extensions:['csv']}]});
       if(result.canceled)return '已取消匯入';const path=result.filePaths[0]!;
@@ -582,6 +582,17 @@ async function smokeTest(): Promise<void> {
     const reset=await view();if(reset.scale!==1||reset.offset!==reset.maximum)throw new Error('圖表雙擊重設未通過');
     const result=await window!.webContents.executeJavaScript(`({strategy:document.querySelector('#bt-strategy').value,flow:document.querySelectorAll('[data-replay-stage]').length,workflow:document.querySelectorAll('#bt-workflow tbody tr').length})`);
     if(result.strategy!=='codex'||result.flow!==6||result.workflow<5)throw new Error('每日 Codex 模擬流程與完整步驟報表未通過');
+    const replayControls=await window!.webContents.executeJavaScript(`(async()=>{
+      const direct=document.querySelector('#replay-direct'),slider=document.querySelector('#replay-speed'),number=document.querySelector('#replay-speed-number');
+      direct.checked=false;direct.dispatchEvent(new Event('change'));number.value='437';number.dispatchEvent(new Event('change'));
+      await new Promise(resolve=>setTimeout(resolve,100));const precise=(await window.trader.state()).replay_speed;
+      slider.value='619';slider.dispatchEvent(new Event('input'));await new Promise(resolve=>setTimeout(resolve,100));const sliding=(await window.trader.state()).replay_speed;
+      direct.checked=true;direct.dispatchEvent(new Event('change'));await new Promise(resolve=>setTimeout(resolve,100));const fast=(await window.trader.state()).replay_speed;
+      return {precise,sliding,fast,numeric:number.value,range:slider.type,strategyType:document.querySelector('#bt-strategy').type,
+        monitor:document.querySelector('#bt-monitor').value,readonly:document.querySelector('#bt-monitor').readOnly};
+    })()`);
+    if(replayControls.precise!==437||replayControls.sliding!==619||replayControls.fast!==0||replayControls.numeric!=='619'||replayControls.range!=='range'||replayControls.strategyType!=='hidden'||replayControls.monitor!=='5'||!replayControls.readonly)
+      throw new Error('完整 Codex 策略、五分鐘條件檢查、拉桿與精確倍速切換未通過');
     for(const rsi of [true,false]){await window!.webContents.executeJavaScript(`(()=>{const input=document.querySelector('#chart-rsi');input.checked=${rsi};input.dispatchEvent(new Event('input'));})()`);await pause();
       const panes=await window!.webContents.executeJavaScript(`(()=>{const host=document.querySelector('#market-chart'),bottom=n=>{const b=n.getBBox();return b.y+b.height;},time=Math.min(...[...host.querySelectorAll('[data-pane="time"]')].map(n=>n.getBBox().y));
         return {time,volume:Math.max(...[...host.querySelectorAll('[data-pane="volume"]')].map(bottom)),rsi:host.querySelector('[data-pane="rsi"]')?bottom(host.querySelector('[data-pane="rsi"]')):0};})()`);

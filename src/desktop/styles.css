@@ -69,3 +69,8 @@ input[type=range]{accent-color:var(--sky)}
 dialog{background:#151d29}.card{background:#101824}.analyst-event{background:#111a26}
 .analyst-event.failed{background:var(--coral-bg)}
 #diagnostic-workspace{padding:8px 0;color:var(--amber);white-space:pre-wrap;overflow-wrap:anywhere}
+
+
+.replay-toolbar #replay-speed{width:110px;min-width:60px;padding:0;accent-color:var(--accent)}.replay-toolbar #replay-speed-number{width:72px;font-size:11px}.replay-toolbar label{white-space:nowrap;font-size:10px}.replay-toolbar output{font-size:10px;white-space:nowrap}
+
+.replay-toolbar{flex-wrap:wrap}.replay-toolbar>strong:first-child{flex:1 1 100px}.simulation-fields .replay-strategy{font-size:10px;white-space:nowrap;align-self:center;color:var(--muted)}

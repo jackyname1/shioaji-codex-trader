@@ -109,7 +109,7 @@ export class BacktestController {
     return intervals.length>1?`已啟動 ${intervals.length} 組自動比較；Codex 呼叫上限為整批共用`:'已啟動全自動歷史測試，交易監控持續';
   }
   control(command:ReplayCommand):string{if(!this.task)throw new Error('回測尚未執行');this.clock.command(command);return command==='pause'?'目前步驟完成後暫停，保留尚未執行的事件':command==='step'?'完整執行下一個觸發事件後暫停':'依序繼續全部模擬步驟';}
-  speed(value:number):string{this.clock.setSpeed(value);return value?'時間快進 '+value+'×；每個步驟仍完整執行':'直接前進至觸發點；逐次等待 Codex、送單與核對完成';}
+  speed(value:number):string{this.clock.setSpeed(value);return value?'時間快進 '+value+'×；每個步驟仍完整執行':'每五分鐘完整檢查，直到條件觸發或下一輪 Codex；確認股數與核對完成後才繼續';}
   async marketData():Promise<HistoryDataset>{
     if(this.dataset)return this.dataset;
     const id=this.report?.dataset_id;if(!id||! /^[a-f0-9-]{36}$/.test(id))throw new Error('回測舊版報表沒有保存原始行情，請重新執行');
@@ -126,3 +126,4 @@ export class BacktestController {
   text():string{const p=this.progress;return `${p.phase} | ${p.day} | ${p.points}/${p.total_points} | Codex ${p.codex_calls}\n${p.message}`+
       (this.report?'\n\n'+formatBacktestReport(this.report):'');}
 }
+

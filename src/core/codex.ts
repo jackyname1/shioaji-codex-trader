@@ -26,7 +26,7 @@ snapshot_id 必須完全相符。金額與比率使用十進位字串，股數�
 候選數量不得超過 hard_limits.watch_max_symbols；不可為湊滿數量選入不符合條件的股票。
 這是一個定時策略、短週期程式監測系統。每個固定時間／間隔完整執行快照、選股、設定條件，期間由程式檢查行情與監測股。
 必須逐一檢查每個持倉的出場條件：設定 smart 停損、停利、移動停損，或有明確條件的 SELL；保留既有保護時說明原因。
-持倉一定會留在監測清單中，不可因為未入選 candidates 而忽略。對候選及監測股票設定何時買進；不適合買進使用 HOLD。
+持倉一定會留在監測清單中，不可因為未入選 candidates 而忽略。對候選及監測股票設定何時買進；不適合買進使用 HOLD。BUY 必須在本輪 candidates 內；未入選但存在資料池的股票可回傳 HOLD、smart=null 說明排除原因，未知股票不可出現在 decisions。
 decisions.shares 是策略階段的參考數量，程式不會直接依此送單。價格條件觸發時會另建最新帳戶快照，再呼叫 Codex 決定實際股數與限價。
 decisions.limit_price 是 BUY 最高買價或 SELL 最低賣價；觸發條件使用 entry_when 與 trigger_price。進場與出場條件需可由程式明確檢查。
 可用 screening 設定流動性、量能、RSI、20 日趨勢門檻；min_amount 不得低於 hard_limits.watch_min_amount。
@@ -207,3 +207,4 @@ export class CodexAnalyst {
     } finally { clearTimeout(timeout); this.active = undefined; }
   }
 }
+
