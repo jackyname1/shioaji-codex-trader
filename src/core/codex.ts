@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { AnalysisSchema, type Analysis, type Settings, type Snapshot } from './models.js';
 import { ExecutionAdviceSchema, executionPrompt, type ExecutionAdvice, type ExecutionRequest } from './execution.js';
 import { resolveCodexSelection, type CodexSelection } from './codex-models.js';
-import {CodexError,diagnoseCodexFailure,codexFailureMessage,codexNetworkContext} from './codex-failure.js';
+import {CodexError,diagnoseCodexFailure,codexFailureMessage,codexNetworkContext,codexEventError} from './codex-failure.js';
 export {CodexError,codexFailureKind,diagnoseCodexFailure,shouldHaltCodex,type CodexFailureKind,type CodexFailureDetail} from './codex-failure.js';
 
 export function codexEnvironment(source: NodeJS.ProcessEnv, analysisHome: string): Record<string,string> {
@@ -141,7 +141,7 @@ export function codexIssue(error: unknown): string {
   if (/schema|output format/i.test(raw)) return 'Codex 輸出格式未通過，請重新測試連線';
   if (/sandbox|CreateProcess|os error|permission denied|access.{0,10}denied/i.test(raw)) return 'Codex 本機執行環境未能啟動，請重開程式後測試連線';
   if (/invalid output|SyntaxError|JSON|未產生完整有效/.test(raw)) return 'Codex 沒有回傳完整分析結果，請重新測試連線';
-  return 'Codex 執行未完成，請按測試連線查看登入與模型狀態';
+  return 'Codex 未回傳可用結果，請匯出完整紀錄核對錯誤代碼';
 }
 export class CodexAnalyst {
   private active?: AbortController;
@@ -174,7 +174,7 @@ export class CodexAnalyst {
       if(ready)emit('DATA',`股票池 ${ready.pool_count} 檔 · 歷史已就緒 ${ready.history_ready} 檔 · 基本資格與流動性合格 ${ready.eligible_symbols.length} 檔`,'data',ready);
     }
     const controller = new AbortController(); this.active = controller;
-    let timedOut=false;
+    let timedOut=false,toolRejected=false;
     const timeout = setTimeout(() => {timedOut=true;controller.abort();},this.settings.codex_timeout_seconds * 1000);
     const abortSignal = signal ? AbortSignal.any([signal,controller.signal]) : controller.signal;
     try {
@@ -193,27 +193,31 @@ export class CodexAnalyst {
         if (abortSignal.aborted) throw new Error('Codex 已停止');
         if ('item' in event) {
           if (['command_execution','file_change','mcp_tool_call','web_search'].includes(event.item.type)) {
-            controller.abort(); throw new Error('Codex 嘗試使用工具；本輪不採用');
+            toolRejected=true;controller.abort();throw new CodexError('Codex 嘗試使用工具；本輪不採用','RUNTIME',{kind:'RUNTIME',code:'TOOL_REJECTED'});
           }
           if (event.type === 'item.completed' && event.item.type === 'agent_message') response = event.item.text;
           if(event.item.type==='reasoning'&&event.item.text)emit('REASONING',event.item.text,'reasoning:'+event.item.id);
           if(event.item.type==='agent_message'&&event.item.text)emit('OUTPUT',event.item.text,'output:'+event.item.id);
           if(event.item.type==='todo_list')emit('PLAN',event.item.items.map(x=>(x.completed?'✓ ':'○ ')+x.text).join('\n'),'todo:'+event.item.id);
-          if (event.item.type === 'error') throw new Error(event.item.message);
+          if (event.item.type === 'error') throw codexEventError(event.item.message,'ITEM_ERROR');
         }
-        if (event.type === 'turn.failed') throw new Error(event.error.message);
-        if (event.type === 'error') throw new Error(event.message);
+        if (event.type === 'turn.failed') throw codexEventError(event.error.message,'TURN_FAILED');
+        if (event.type === 'error') throw codexEventError(event.message,'STREAM_ERROR');
         if (event.type === 'turn.completed') { completed = true;emit('USAGE',`輸入 ${event.usage.input_tokens} · 快取 ${event.usage.cached_input_tokens} · 輸出 ${event.usage.output_tokens} tokens`,'usage',event.usage);
           emit('VALIDATING','Codex 輸出已收到，正在驗證結構、快照與交易條件'); }
       }
-      if (!completed || !response || response.length > 200000) throw new Error('Codex 未產生完整有效結果');
+      abortSignal.throwIfAborted();
+      if(!completed)throw new CodexError(codexFailureMessage({kind:'NETWORK',code:'STREAM_INTERRUPTED'}),'NETWORK',{kind:'NETWORK',code:'STREAM_INTERRUPTED'});
+      if(!response)throw new CodexError(codexFailureMessage({kind:'RUNTIME',code:'EMPTY_OUTPUT'}),'RUNTIME',{kind:'RUNTIME',code:'EMPTY_OUTPUT'});
+      if(response.length>200000)throw new Error('Codex 未產生完整有效結果');
       const result=schema.parse(JSON.parse(response));
       const message=purpose==='STRATEGY'?(result as Analysis).summary:((result as ExecutionAdvice).action+' '+(result as ExecutionAdvice).shares+' 股 · '+(result as ExecutionAdvice).reason);
       emit(purpose==='EXECUTION'?'SIZE_DECISION':'DECISION',message,'decision',result);return result;
     } catch (error) {
       const diagnostic={...diagnoseCodexFailure(error),...codexNetworkContext(process.env)};
-      if(abortSignal.aborted){diagnostic.kind=timedOut&&!signal?.aborted?'TIMEOUT':'CANCELLED';diagnostic.code=diagnostic.kind==='TIMEOUT'?'CODEX_TIMEOUT':'CODEX_CANCELLED';}
-      const issue=abortSignal.aborted?codexFailureMessage(diagnostic):codexIssue(error);
+      if(diagnostic.kind==='OTHER'&&diagnostic.code==='OTHER'){diagnostic.kind='RUNTIME';diagnostic.code='SDK_FAILURE';}
+      if(abortSignal.aborted&&!toolRejected){diagnostic.kind=timedOut&&!signal?.aborted?'TIMEOUT':'CANCELLED';diagnostic.code=diagnostic.kind==='TIMEOUT'?'CODEX_TIMEOUT':'CODEX_CANCELLED';}
+      const issue=codexFailureMessage(diagnostic)||codexIssue(error);
       emit('FAILED',issue,'failure',diagnostic);
       // SDK stderr can contain environment or local paths. Never forward raw exception text.
       throw new CodexError(issue,diagnostic.kind,diagnostic);

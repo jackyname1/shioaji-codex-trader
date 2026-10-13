@@ -5,6 +5,7 @@ import { bundledCodexPath, codexEnvironment, prepareCodexProfile, codexThread, c
 import type { Settings } from '../core/models.js';
 import type { ThreadEvent } from '@openai/codex-sdk';
 import { resolveCodexSelection,clearCodexModels,codexModels,type CodexModel,type CodexSelection } from '../core/codex-models.js';
+import {codexEventError,codexFailureMessage} from '../core/codex-failure.js';
 
 export interface CodexLoginState {
   state:'checking'|'signed_out'|'pending'|'ready'|'error'; message:string; can_open:boolean; device_code:string; testing:boolean;
@@ -106,7 +107,8 @@ export class CodexLogin {
   async test(settings:Settings):Promise<string>{
     if(this.status.testing||this.task)throw new CodexError('Codex 登入或連線測試仍在進行');
     this.probeSettings=this.settingsKey(settings);
-    this.status.testing=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
+    let timedOut=false,toolRejected=false;
+    this.status.testing=true;const controller=new AbortController(),timer=setTimeout(()=>{timedOut=true;controller.abort();},60000);
     this.testAbort=controller;
     try{
       if(!await this.verify())throw new CodexError('Codex 尚未登入，請先按登入');
@@ -120,18 +122,24 @@ export class CodexLogin {
         signal:controller.signal,outputSchema:{type:'object',properties:{ok:{type:'boolean'}},required:['ok'],additionalProperties:false}})).events;
       let response='',complete=false;
       for await(const event of events){
-        if('item' in event && ['command_execution','file_change','mcp_tool_call','web_search'].includes(event.item.type)){controller.abort();throw new CodexError('Codex 連線測試嘗試使用工具，已停止');}
+        if('item' in event && ['command_execution','file_change','mcp_tool_call','web_search'].includes(event.item.type)){toolRejected=true;controller.abort();throw new CodexError('Codex 連線測試嘗試使用工具，已停止','RUNTIME',{kind:'RUNTIME',code:'TOOL_REJECTED'});}
         if(event.type==='item.completed'&&event.item.type==='agent_message')response=event.item.text;
-        if('item' in event&&event.item.type==='error')throw new Error(event.item.message);
-        if(event.type==='turn.failed')throw new Error(event.error.message);if(event.type==='error')throw new Error(event.message);
+        if('item' in event&&event.item.type==='error')throw codexEventError(event.item.message,'ITEM_ERROR');
+        if(event.type==='turn.failed')throw codexEventError(event.error.message,'TURN_FAILED');if(event.type==='error')throw codexEventError(event.message,'STREAM_ERROR');
         if(event.type==='turn.completed')complete=true;
       }
-      if(!complete||JSON.parse(response).ok!==true)throw new Error('invalid output');
+      controller.signal.throwIfAborted();
+      if(!complete)throw new CodexError(codexFailureMessage({kind:'NETWORK',code:'STREAM_INTERRUPTED'}),'NETWORK',{kind:'NETWORK',code:'STREAM_INTERRUPTED'});
+      if(!response)throw new CodexError(codexFailureMessage({kind:'RUNTIME',code:'EMPTY_OUTPUT'}),'RUNTIME',{kind:'RUNTIME',code:'EMPTY_OUTPUT'});
+      if(JSON.parse(response)?.ok!==true)throw new Error('invalid output');
       this.status.test_state='connected';this.status.message='Codex 連線測試成功 · '+selection.model+' · '+selection.reasoning;return this.status.message;
-    }catch(error){this.status.test_state='failed';this.status.message=controller.signal.aborted?'Codex 連線測試逾時，請檢查網路後重試':codexIssue(error);
+    }catch(error){
+      const diagnostic=diagnoseCodexFailure(error);
+      if(diagnostic.kind==='OTHER'&&diagnostic.code==='OTHER'){diagnostic.kind='RUNTIME';diagnostic.code='SDK_FAILURE';}
+      if(controller.signal.aborted&&!toolRejected){diagnostic.kind=timedOut?'TIMEOUT':'CANCELLED';diagnostic.code=timedOut?'CODEX_TIMEOUT':'CODEX_CANCELLED';}
+      this.status.test_state='failed';this.status.message=codexFailureMessage(diagnostic)||codexIssue(error);
       if(/尚未登入|登入已過期/.test(this.status.message))this.status.state='error';
-      if(controller.signal.aborted)throw new CodexError(this.status.message,'TIMEOUT',{kind:'TIMEOUT',code:'CODEX_TIMEOUT'});
-      throw new CodexError(this.status.message,undefined,diagnoseCodexFailure(error));}
+      throw new CodexError(this.status.message,diagnostic.kind,diagnostic);}
     finally{clearTimeout(timer);this.status.testing=false;this.testAbort=undefined;}
   }
   async wait():Promise<void>{await this.task;}

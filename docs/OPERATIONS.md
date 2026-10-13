@@ -8,9 +8,9 @@
 
 Codex 控制台顯示官方回傳的推理摘要、分析步驟、原始結構化回覆與 token 用量。完整輸入快照、策略及數量建議、送單結果會保存；「完整紀錄」可搜尋及匯出全部 JSON，重啟後即時紀錄仍可檢視。秘密與原始 CLI 診斷不進入此紀錄。推理內容使用 SDK 提供的正式摘要。
 
-v0.1.9 起，連線失敗的 details 保存允許的分類碼：DNS_FAILURE、TLS_CERTIFICATE、PROXY_AUTH、CONNECTION_REFUSED、CONNECTION_RESET、STREAM_INTERRUPTED、HTTP_SERVER_ERROR、NETWORK_TIMEOUT 等；無法辨識時是 NETWORK_UNSPECIFIED。proxy_configured 與 custom_ca_configured 僅表示有設定，不包含值。這些是診斷線索，並不能單獨證明 VPN、代理或 OpenAI 服務是根因。
+本次重整的 v0.1.0，連線失敗的 details 保存允許的分類碼：DNS_FAILURE、TLS_CERTIFICATE、PROXY_AUTH、CONNECTION_REFUSED、CONNECTION_RESET、STREAM_INTERRUPTED、HTTP_SERVER_ERROR、NETWORK_TIMEOUT 等；無法辨識時是 NETWORK_UNSPECIFIED。子程序退出為 PROCESS_EXIT／PROCESS_SIGNAL，另有 TURN_FAILED、STREAM_ERROR、ITEM_ERROR、STREAM_PROTOCOL、EMPTY_OUTPUT 和 SDK_FAILURE；這些本機或回合故障也會停止自動呼叫。exit_code 只保存數字，exit_signal 只保存已知訊號。proxy_configured 與 custom_ca_configured 僅表示有設定，不包含值。這些是診斷線索，並不能單獨證明 VPN、代理或 OpenAI 服務是根因。
 
-網路、登入、權限、模型、額度、限流與逾時故障會停止自動 Codex 呼叫。即時模式繼續核對帳戶、掛單及持倉出場條件；未確認股數不送單，保留條件不代表斷線時仍能完成停損。修復後按「測試連線」，成功回應才解除故障；日策略失敗時還需重新分析。暫停、緊急停止與實盤授權保持原狀。歷史回放會停止於故障時刻，保存 PARTIAL 結果，其餘比較不執行，恢復後重新開始測試。
+網路、登入、權限、模型、額度、限流、本機執行與逾時故障會停止自動 Codex 呼叫。即時模式繼續核對帳戶、掛單及持倉出場條件；未確認股數不送單，保留條件不代表斷線時仍能完成停損。修復後按「測試連線」，成功回應才解除故障；日策略失敗時還需重新分析。暫停、緊急停止與實盤授權保持原狀。歷史回放會停止於故障時刻，保存 PARTIAL 結果，其餘比較不執行，恢復後重新開始測試。
 
 明確設定的 HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY 及 CODEX_CA_CERTIFICATE／SSL_CERT_FILE 會傳給 Codex，包括大小寫不同的環境變數。需要企業代理或自訂根憑證時，依組織提供的配置處理；不要關閉憑證驗證，也不要把代理帳密或憑證路徑貼在對話中。
 
