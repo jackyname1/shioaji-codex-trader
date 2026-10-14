@@ -37,6 +37,8 @@ snapshot_id 必須完全相符。金額與比率使用十進位字串，股數�
 持倉一定會留在監測清單中，不可因為未入選 candidates 而忽略。對候選及監測股票設定何時買進；不適合買進使用 HOLD。BUY 必須在本輪 candidates 內；未入選但存在資料池的股票可回傳 HOLD、smart=null 說明排除原因，未知股票不可出現在 decisions。
 decisions.shares 是策略階段的參考數量，程式不會直接依此送單。價格條件觸發時會另建最新帳戶快照，再呼叫 Codex 決定實際股數與限價。
 decisions.limit_price 是 BUY 最高買價或 SELL 最低賣價；觸發條件使用 entry_when 與 trigger_price。進場與出場條件需可由程式明確檢查。
+entry_when=REBOUND 可設定先跌至 trigger_price 啟動低點追蹤，再自追蹤低點回升 rebound_fraction（例如 0.02=2%）才提案 BUY；換策略重設低點，反彈後仍受 limit_price 買價上限、conditions 及風控約束。其他 entry_when 的 rebound_fraction=null。
+考慮回檔反彈而非僅跌破即買；只在支撐、趨勢與量能證據足夠時用 REBOUND，反彈幅度必須大於 0 且不超過 0.20，不能把自然波動當作保證反轉。
 decisions.conditions 必須完整列出所有額外買賣條件，與 entry_when 同時成立才會觸發。沒有額外條件時填 []。
 conditions 每項為 left/operator/right/value：left 是 LAST、BID、ASK 或 MA5/MA20/MA60/RSI14/ATR14/SUPPORT20/RESISTANCE20/VOLUME_RATIO20/RETURN20；operator 為 GT/GTE/LT/LTE。
 right 為 VALUE 時 value 是十進位常數字串；right 為同一組行情／指標欄位時 value=null。例如價格仍高於 MA20：{"left":"LAST","operator":"GTE","right":"MA20","value":null}。
@@ -57,10 +59,13 @@ account.daily_baseline_equity、daily_loss_amount、daily_loss_ratio 為程式�
 capital 是程式已計算的金額口徑；單筆本金必須使用 capital.order_limit_twd，不能把 max_order_fraction 自行當成可用現金比例或重複扣現金保留。
 capital.target_exposure_twd、target_gap_twd 與 preferred_order_twd 是配置參考。有合格訊號、未達目標且成本與停損預算通過時，規劃較完整的配置；不要機械地維持少量參考股數。
 目標持倉不是強制買滿；缺少合格標的、有效行情或有利成本結構時應保留現金並說明缺口原因。
-若 min_entry_reward_risk>0，BUY 要有明確停利，按雙邊手續費、賣出稅與停損損失評估淨報酬風險比；小於門檻或單筆停損含費稅超過 max_trade_loss_twd 時不進場。
+若 min_entry_reward_risk>0，BUY 要有明確 take_profit 或 reward_target，按雙邊手續費、賣出稅與停損損失評估淨報酬風險比；小於門檻或單筆停損含費稅超過 max_trade_loss_twd 時不進場。
 缺少基本面、新聞或歷史零股五檔時標明限制，不等於行情登入失敗；可根據可靠行情設定觀測條件，真正送單前程式仍會等待有效行情並核對風控。
 檢查現金保留、持倉集中度、待交割款、未成交委託、日損失及硬性風控。不要要求調高風控。
 BUY 必須有低於進場限價的 stop_price，可設定 take_profit 與成對的 trailing_activate/trailing_fraction。
+smart.stop_price 為優先固定停損；trailing_activate 僅啟動高點追蹤，高點回落 trailing_fraction 才退場。移動退場時通常 take_profit=null，避免剛達啟動價就固定賣出；如設固定停利，需明確說明且高於追蹤啟動價。
+smart.reward_target 是預估實際退場價格（需考量回落幅度），只用於扣費風險報酬核對，不觸發賣出，也不保證會達到；不可拿預估最高點冒充退場目標。take_profit 同時存在時成本採較低目標。無目標填 null。
+smart_tracking 提供低點、高點、是否已啟動及最後觀測時間；不能放鬆既有停損或已啟動的移動保護。程式只按已觀測成交價追蹤，不猜測同根 K 線內高低價順序。
 價格須符合台股跳動單位與今日漲跌停。智慧單是本機條件單，停損不保證成交；今日新增股數不能當日賣出。
 expires_at 使用有時區 ISO 時間，短於 hard_limits.plan_max_minutes；參考 observation.next_strategy_at 設定有效期。
 盤後 review_only=true 時所有決策必須 HOLD、shares=0、smart=null 且 screening.entry 必須 null；檢討不會覆蓋正在使用的策略，保護建議只寫入 summary。

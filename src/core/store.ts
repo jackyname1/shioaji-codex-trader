@@ -3,8 +3,8 @@ import { chmodSync, mkdirSync, openSync, readFileSync, closeSync, unlinkSync, wr
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { ExperienceSchema, ReviewSchema, type Experience, type ExperienceReview } from './experience.js';
-import { AccountSchema, OrderSchema, PlanSchema, ProtectionSchema, SessionSchema, SettingsSchema,
-  active, storedSettings, type Account, type Order, type Plan, type Protection, type SessionDay, type Settings } from './models.js';
+import { AccountSchema, OrderSchema, PlanSchema, ProtectionSchema, EntryTrackSchema, SessionSchema, SettingsSchema,
+  active, storedSettings, type Account, type Order, type Plan, type Protection, type EntryTrack, type SessionDay, type Settings } from './models.js';
 import type { AnalystEvent } from './codex.js';
 import {processState,type ProcessState} from './store-process.js';
 
@@ -167,9 +167,15 @@ export class Store {
     this.db.prepare('INSERT INTO protections VALUES (?,?) ON CONFLICT(symbol) DO UPDATE SET value=excluded.value').run(p.symbol, JSON.stringify(value));
   }
   removeProtection(symbol: string): void { this.db.prepare('DELETE FROM protections WHERE symbol=?').run(symbol); }
+  entryTracks():EntryTrack[]{return (this.get<unknown[]>('entry_tracks')??[]).map(x=>EntryTrackSchema.parse(x));}
+  saveEntryTrack(value:EntryTrack):void {
+    const track=EntryTrackSchema.parse(value),all=this.entryTracks().filter(t=>t.plan_id===track.plan_id
+      &&!(t.symbol===track.symbol&&t.lot===track.lot));
+    this.set('entry_tracks',[...all,track]);
+  }
   activatePlan(plan: Plan, protections: Protection[]): void {
     this.db.exec('BEGIN IMMEDIATE');
-    try { this.set('plan', PlanSchema.parse(plan)); protections.forEach(p => this.saveProtection(p)); this.db.exec('COMMIT'); }
+    try { this.set('plan', PlanSchema.parse(plan)); this.set('entry_tracks',[]);protections.forEach(p => this.saveProtection(p)); this.db.exec('COMMIT'); }
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   saveSessions(days: SessionDay[]): void {

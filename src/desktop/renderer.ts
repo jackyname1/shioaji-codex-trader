@@ -10,6 +10,11 @@ import type { AnalystEvent } from '../core/codex.js';
 import { simulationView,replayView,workspaceCutoff,workspaceRuntime,workspaceEvents } from './workspace.js';
 declare global {interface Window {trader:TraderBridge}}
 const guardText=(decision:Decision):string=>(decision.conditions??[]).map(c=>`${c.left} ${{GT:'>',GTE:'≥',LT:'<',LTE:'≤'}[c.operator]} ${c.right==='VALUE'?c.value:c.right}`).join(' 且 ');
+const triggerText=(d:Decision):string=>d.entry_when==='IMMEDIATE'?'條件檢查後':d.entry_when==='REBOUND'
+  ?`先跌至 ${d.trigger_price}，再自低點回升 ${Number(d.rebound_fraction)*100}%`
+  :`${d.entry_when==='BELOW'?'低於':'高於'} ${d.trigger_price}`;
+// Rounded display hints only; all actual triggers use Decimal in the engine.
+const thresholdHint=(value:number):string=>Number.isFinite(value)?Number(value.toFixed(4)).toString():'—';
 const el=<T extends HTMLElement>(id:string):T=>document.getElementById(id) as T;
 const text=(id:string,value:unknown):void=>{const node=el(id),v=String(value??'—');if(node.textContent!==v)node.textContent=v;};
 const value=(id:string):string=>el<HTMLInputElement>(id).value;
@@ -141,7 +146,7 @@ function renderRuntime(state:DesktopState):void {
   const replaySettings=paper&&!state.backtest_progress.running?state.backtest_result?.request:undefined;
   text('schedule-strategy',paper?(replaySettings?(replaySettings.strategy_schedule==='fixed'?replaySettings.strategy_times.join(' / '):replaySettings.decision_interval_minutes+' 分鐘'):
     value('bt-schedule')==='fixed'?value('bt-times'):value('bt-interval')+' 分鐘'):s.strategy_schedule==='fixed'?s.strategy_times.join(' / '):s.decision_interval_minutes+' 分鐘');text('analysis-status',paper?phase[state.backtest_progress.phase]??state.backtest_progress.phase:r.sizing?'確認股數':r.analyzing?'條件分析中':valid?'監測中':'等待策略');
-  text('schedule-monitor',(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
+  text('schedule-monitor',paper&&state.backtest_result?.version==='0.2.1'?'300 秒／智慧逐筆':(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
   text('schedule-watch',(paper?replaySettings?.watch_refresh_minutes??value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
   el('live-authorization').hidden=r.mode!=='live';
   const live=state.live;
@@ -177,11 +182,12 @@ function renderRuntime(state:DesktopState):void {
   text('strategy-stance',r.plan?stance[r.plan.analysis.stance]:'等待第一輪策略');text('strategy-summary',r.plan?.analysis.summary??'取得有效策略後，程式會依條件執行。');
   text('strategy-expiry',r.plan?`有效至 ${stamp(r.plan.analysis.expires_at)}${valid?'':' · 已到期'}`:'');
   const rule=r.plan?.analysis.screening?.entry;
-  text('rule-summary',rule?`自動規則 ${rule.signal} · 每檔配置 ${pct(rule.allocation_fraction)} · 停損 ${pct(rule.stop_fraction)} · 停利 ${pct(rule.take_profit_fraction)} · 移動停損 ${rule.trailing_fraction?pct(rule.trailing_fraction):'關閉'}`:'依 Codex 個股決策執行；新加入股票等待授權條件');
+  text('rule-summary',rule?`自動規則 ${rule.signal} · 每檔配置 ${pct(rule.allocation_fraction)} · 停損 ${pct(rule.stop_fraction)} · ${rule.trailing_fraction?'預估收益':'固定停利'} ${pct(rule.take_profit_fraction)} · 移動停損 ${rule.trailing_fraction?pct(rule.trailing_fraction):'關閉'}`:'依 Codex 個股決策執行；新加入股票等待授權條件');
   table('decisions',['股票','方向','參考股數','限價界線','觸發','策略理由'],(r.plan?.analysis.decisions??[]).map(d=>[d.symbol,action[d.action]??d.action,d.shares,d.limit_price,
-    (d.entry_when==='IMMEDIATE'?'條件檢查後':`${d.entry_when==='BELOW'?'低於':'高於'} ${d.trigger_price}`)+(guardText(d)?' 且 '+guardText(d):''),d.reason]),'本輪無個股委託；可能使用規則選股或全部觀望');
+    triggerText(d)+(guardText(d)?' 且 '+guardText(d):''),d.reason]),'本輪無個股委託；可能使用規則選股或全部觀望');
   text('watch-policy',`上限 ${s.watch_max_symbols} · 持倉必留`);el('watch-policy').title=`候選上限 ${s.watch_max_symbols}；持倉與掛單持續監測；連續 ${s.watch_remove_after_scans} 次不符才移除`;
-  text('risk-summary',`現金保留 ${pct(s.min_cash_fraction)} · 單筆 ${pct(s.max_order_fraction)}（${s.order_budget_basis==='EQUITY'?'淨資產':'扣除保留後'}） · 單檔 ${pct(s.max_symbol_fraction)} · 日損失 ${pct(s.daily_loss_fraction)} 停止新買進`);
+  const riskSettings=paper&&state.backtest_result?{...s,...state.backtest_result.settings} as Settings:s;
+  text('risk-summary',`現金保留 ${pct(riskSettings.min_cash_fraction)} · 單筆 ${pct(riskSettings.max_order_fraction)}（${riskSettings.order_budget_basis==='EQUITY'?'淨資產':'扣除保留後'}） · 單檔 ${pct(riskSettings.max_symbol_fraction)} · 日損失 ${pct(riskSettings.daily_loss_fraction)} 停止新買進`);
 }
 function renderBacktest(state:DesktopState):void {
   const p=state.backtest_progress,r=state.backtest_result;renderReplay(state);
@@ -307,8 +313,13 @@ function renderStockDetails():void {
   for(const [label,v] of rows){const cell=document.createElement('div');cell.className='detail-cell';const l=document.createElement('span'),n=document.createElement('strong');l.textContent=label;n.textContent=v;cell.append(l,n);host.append(cell);}
   const plan=frame?.plan??(replay?null:r?.plan),decision=plan?.analysis.decisions.find(d=>d.symbol===selectedSymbol),protection=(frame?.protections??(replay?[]:r?.protections))?.find(p=>p.symbol===selectedSymbol);
   const spec=protection?.spec??decision?.smart;const rules=plan?.analysis.screening?.entry;
-  const conditions:[string,string][]=[['方向',decision? (action[decision.action]??decision.action):plan?plan.analysis.stance:'等待有效策略'],['進場限價',decision?.limit_price??'—'],['觸發條件',decision?.entry_when==='IMMEDIATE'?'即時檢查':decision?`${decision.entry_when==='BELOW'?'低於':'高於'} ${decision.trigger_price}`:rules?.signal??'—'],
-    ['額外必要條件',decision?guardText(decision)||'無':'—'],['停損',spec?.stop_price??'—'],['停利',spec?.take_profit??'—'],['移動停損',spec?.trailing_fraction?pct(spec.trailing_fraction):rules?.trailing_fraction?pct(rules.trailing_fraction):'—']];
+  const tracking=(replay?frame?.entry_tracks:r?.entry_tracks)?.find(t=>t.plan_id===plan?.id&&t.symbol===selectedSymbol&&t.lot===(quote?.odd===false?'COMMON':'ODD'));
+  const armed=protection?.trailing_armed??(!!spec?.trailing_activate&&Number(protection?.high_water)>=Number(spec.trailing_activate));
+  const conditions:[string,string][]=[['方向',decision? (action[decision.action]??decision.action):plan?plan.analysis.stance:'等待有效策略'],['進場限價',decision?.limit_price??'—'],['觸發條件',decision?triggerText(decision):rules?.signal??'—'],
+    ['反彈追蹤',decision?.entry_when==='REBOUND'?tracking?.armed?`低點 ${tracking.low_water} → ${thresholdHint(Number(tracking.low_water)*(1+Number(decision.rebound_fraction)))}`:'尚未跌至門檻':'—'],
+    ['額外必要條件',decision?guardText(decision)||'無':'—'],['優先停損',spec?.stop_price??'—'],['固定停利',spec?.take_profit??'未啟用'],['收益目標（不觸發）',spec?.reward_target??spec?.take_profit??'—'],
+    ['追蹤啟動價',spec?.trailing_activate??'—'],['高點回落',spec?.trailing_fraction?`${pct(spec.trailing_fraction)} · ${armed?'已啟動':'待啟動'}`:'—'],
+    ['移動退場價',armed&&spec?.trailing_fraction?`高點 ${protection!.high_water} → ${thresholdHint(Number(protection!.high_water)*(1-Number(spec.trailing_fraction)))}`:'—']];
   conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後，再由 Codex 按目前現金確認股數，送單前重新核對風控。':'等待 Codex 分析或模擬策略'));
 }
 function conditionList(id:string,rows:[string,string][],note=''):void {

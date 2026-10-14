@@ -122,7 +122,7 @@ export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|un
   const stop=roundPrice(d(limit).times(d(1).minus(rule.stop_fraction))),take=roundPrice(d(limit).times(d(1).plus(rule.take_profit_fraction)));
   if(!d(stop).gt(0)||!d(stop).lt(limit)||!d(take).gt(limit))return {reason:'跳動單位使保護價不合法'};
   return {reason:'策略條件成立，送單前仍須通過硬性風控',decision:{symbol:w.symbol,action:'BUY',shares,limit_price:limit,
-    entry_when:'IMMEDIATE',trigger_price:'0',smart:{stop_price:stop,take_profit:take,
+    entry_when:'IMMEDIATE',trigger_price:'0',smart:{stop_price:stop,take_profit:rule.trailing_fraction?null:take,reward_target:take,
       trailing_activate:rule.trailing_fraction?roundPrice(d(limit).times(d(1).plus(d(rule.take_profit_fraction).div(2)))):null,
       trailing_fraction:rule.trailing_fraction},reason:`Codex 規則 ${rule.signal}；${w.reason}；單輪每檔限一次進場`}};
 }

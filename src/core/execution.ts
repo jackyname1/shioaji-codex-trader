@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import { active, d, equity, remaining, type Account, type Decision, type Features, type Instrument,
   type Order, type Quote, type Settings, type SmartSpec } from './models.js';
 import { Risk, fee, roundPrice } from './risk.js';
-import {entryRiskIssues,entryQualityIssues,roundTripEstimate} from './costs.js';
+import {entryRiskIssues,entryQualityIssues,roundTripEstimate,rewardTarget} from './costs.js';
 export {roundTripEstimate} from './costs.js';
 
 export const ExecutionAdviceSchema=z.strictObject({
@@ -83,7 +83,7 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     else {let first=1;while(first<units&&entryQualityIssues(first*step,price,ticket.smart,s).length)first++;minimum=first*step;}
   }
   return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,min_shares:minimum,max_shares:units*step,reasons,
-    ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,ticket.smart?.take_profit??null,s,ticket.smart?.stop_price??null)}:{})};
+    ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,rewardTarget(ticket.smart),s,ticket.smart?.stop_price??null)}:{})};
 }
 export function executionPrompt(request:ExecutionRequest):string {
   return `你是台灣現股交易數量確認器。本次已由程式確認 Codex 先前設定的條件觸發。
@@ -96,7 +96,7 @@ capital.order_limit_twd 是程式已算好的單筆本金上限，不要另扣�
 有合格訊號且未達目標持倉時，優先以配置參考與單筆停損預算選擇股數，縮小部位須說明具體風險，不要只沿用策略階段的小額參考股數。
 目標持倉是軟性參考，訊號、成本或風險不合格仍應 HOLD。縮小股數仍需達到 min_entry_reward_risk，停損含費稅不得超過 capital.max_trade_loss_twd（null 表示未啟用）。
 cost_at_max_shares 是該上限數量按目前買價與停利目標估算的雙邊手續費、賣出稅與淨價差，不代表保證獲利；縮小數量時最低手續費未必同比減少。
-BUY 必須再按你選定股數估算成本，不能只看價格百分比；若目標價差不足覆蓋成本或資料不足，應 HOLD 並說明。停利目標為 null 時不得編造目標或預期獲利。
+BUY 必須再按你選定股數估算成本，不能只看價格百分比；若目標價差不足覆蓋成本或資料不足，應 HOLD 並說明。reward_target 是預估實際退場價（含回落的考量），不會觸發賣出；與固定 take_profit 同時存在時成本採較低者。兩者都 null 時不得編造預期獲利。
 SELL 只能使用目前 sellable 的可賣庫存；今日新增零股不得當沖，不能借券、融資或賣空。
 SELL 的觸發可能是停損、停利、移動停損或定時策略減碼；清楚說明本次數量理由。
 禁止現金不足時改用槓桿、要求降低風控或把尚未可用的賣出交割款當現金。

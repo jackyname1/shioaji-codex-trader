@@ -15,7 +15,7 @@ export function workspaceRuntime(state: DesktopState): RuntimeView | null {
   // All panes use one historical scope. In particular do not borrow present-day
   // quotes, metadata, indicators, strategy expiry, or decisions from the live service.
   return { ...runtime, account, quotes: frame?.quotes ?? [], features: {}, metadata: {},
-    plan: frame?.plan ?? null, protections: frame?.protections ?? [], orders: account?.orders.filter(o=>!['FILLED','CANCELLED','REJECTED'].includes(o.status)) ?? [],
+    plan: frame?.plan ?? null, protections: frame?.protections ?? [], entry_tracks:frame?.entry_tracks??[],orders: account?.orders.filter(o=>!['FILLED','CANCELLED','REJECTED'].includes(o.status)) ?? [],
     watch: frame?.watch ?? { ...runtime.watch, entries: [], changes: report?.watch_changes ?? [],
       asof: report?.asof ?? '', healthy: false, issue: report ? '已載入保存的模擬結果' : '等待開始模擬' },
     decisions: frame?.decisions??(frame?.plan?.analysis.decisions ?? []).map(d => ({ symbol: d.symbol, state: 'WAIT', reason: d.reason, source: 'REPLAY' })),

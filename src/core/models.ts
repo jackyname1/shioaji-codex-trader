@@ -63,7 +63,10 @@ export const equity = (a: Account): Decimal => d(a.cash).minus(a.settlement_debi
 export const SmartSchema = z.strictObject({
   stop_price: positive, take_profit: positive.nullable(), trailing_activate: positive.nullable(),
   trailing_fraction: positive.refine(v => d(v).lt(1)).nullable(),
+  // A forecast exit price for cost checks, NOT an executable take-profit order.
+  reward_target:positive.nullable().optional(),
 }).refine(s => s.take_profit === null || d(s.take_profit).gt(s.stop_price), '停利必須高於停損')
+  .refine(s => !s.reward_target || d(s.reward_target).gt(s.stop_price), '收益目標必須高於停損')
   .refine(s => (s.trailing_activate === null) === (s.trailing_fraction === null), '移動停損欄位必須成對');
 export type SmartSpec = z.infer<typeof SmartSchema>;
 export const ConditionFieldSchema=z.enum(['LAST','BID','ASK','MA5','MA20','MA60','RSI14','ATR14','SUPPORT20','RESISTANCE20','VOLUME_RATIO20','RETURN20']);
@@ -75,12 +78,16 @@ export const ConditionSchema=z.strictObject({
 export type Condition=z.infer<typeof ConditionSchema>;
 export const DecisionSchema = z.strictObject({
   symbol, action: z.enum(['BUY', 'SELL', 'HOLD']), shares: quantity.max(999000),
-  limit_price: nonnegative, entry_when: z.enum(['IMMEDIATE', 'BELOW', 'ABOVE']),
+  limit_price: nonnegative, entry_when: z.enum(['IMMEDIATE', 'BELOW', 'ABOVE', 'REBOUND']),
   trigger_price: nonnegative, smart: SmartSchema.nullable(), reason: z.string().min(1).max(1500),
+  rebound_fraction:positiveFraction.refine(v=>d(v).lte('.20')).nullable().optional(),
   conditions:z.array(ConditionSchema).max(12).nullable().optional(),
 }).refine(x => x.action === 'HOLD' || (x.shares > 0 && d(x.limit_price).gt(0)), '委託需要價格與股數')
   .refine(x => x.action !== 'BUY' || (x.smart !== null && d(x.smart.stop_price).lt(x.limit_price)
-    && (x.smart.take_profit === null || d(x.smart.take_profit).gt(x.limit_price))), '買進保護價不合法')
+    && (x.smart.take_profit === null || d(x.smart.take_profit).gt(x.limit_price))
+    && (!x.smart.reward_target || d(x.smart.reward_target).gt(x.limit_price))), '買進保護價不合法')
+  .refine(x => x.entry_when==='REBOUND'?x.action==='BUY'&&!!x.rebound_fraction:!x.rebound_fraction,
+    '反彈條件僅供買進且需反彈幅度；其他條件不得帶入反彈幅度')
   .refine(x => x.entry_when === 'IMMEDIATE' || d(x.trigger_price).gt(0), '條件單需要觸發價');
 export type Decision = z.infer<typeof DecisionSchema>;
 // A bounded rule authorizes the deterministic engine, never model-generated executable code.
@@ -111,8 +118,14 @@ export const PlanSchema = z.strictObject({ id: z.string(), created_at: timestamp
 export type Plan = z.infer<typeof PlanSchema>;
 export const ProtectionSchema = z.strictObject({
   symbol, spec: SmartSchema, high_water: nonnegative, triggered: z.string(), plan_id: z.string(),
+  trailing_armed:z.boolean().optional(),observed_at:timestamp.nullable().optional(),
 });
 export type Protection = z.infer<typeof ProtectionSchema>;
+export const EntryTrackSchema=z.strictObject({
+  symbol,plan_id:z.string(),lot:z.enum(['ODD','COMMON']),armed:z.boolean(),low_water:nonnegative,
+  observed_at:timestamp.nullable(),
+});
+export type EntryTrack=z.infer<typeof EntryTrackSchema>;
 export const SettingsSchema = z.strictObject({
   mode: z.enum(['demo', 'paper', 'readonly', 'live']).default('paper'),
   auto_execute: z.boolean().default(false), whole_lots: z.boolean().default(false),
@@ -185,6 +198,7 @@ export interface Snapshot {
     daily_baseline_equity?:string|null;daily_loss_amount?:string|null;daily_loss_ratio?:string|null };
   universe: Candidate[]; features: Record<string, Features>; hard_limits: Record<string, unknown>;
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
+  smart_tracking?:{entries:EntryTrack[];protections:Protection[]};
   capital?:import('./capital.js').CapitalSnapshot;
   news: unknown[]; data_limitations: string[];
   instruments?:Record<string,Instrument>;

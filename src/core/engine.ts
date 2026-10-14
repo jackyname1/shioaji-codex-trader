@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Risk, alignedPrice, fee } from './risk.js';
-import { evaluate, updateProtection } from './smart.js';
+import { evaluate, updateProtection,trackEntry,entryReady,reboundExit } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
 import { conditionIssue } from './conditions.js';
 import {capitalSnapshot} from './capital.js';
@@ -226,6 +226,7 @@ export class Engine {
         eligible_symbols:bundle.pool.filter(c=>!watchEligibility(c,bundle.features[c.symbol],bundle.metadata[c.symbol],this.settings,undefined,now).length).map(c=>c.symbol),
         history_issues:Object.entries(bundle.features).flatMap(([symbol,f])=>f.issue?[{symbol,issue:f.issue}]:[])},
       existing_protection:Object.fromEntries(this.store.protections().map(p => [p.symbol,p.spec])),
+      smart_tracking:{entries:this.store.entryTracks(),protections:this.store.protections()},
       observation:{symbols:this.watch.entries.map(w=>w.symbol),refresh_minutes:this.settings.watch_refresh_minutes,
         max_symbols:this.settings.watch_max_symbols,next_strategy_at:nextStrategy(now,this.settings,this.calendar)?.at??null},
       experience:experienceContext(this.store,this.settings,now.toISOString()),
@@ -248,7 +249,7 @@ export class Engine {
     }
     const existing = new Map(this.store.protections().map(p => [p.symbol,p]));
     const protections = plan.analysis.decisions.filter(d => d.smart !== null)
-      .map(d => updateProtection(existing.get(d.symbol),d.symbol,d.smart!,plan.id));
+      .map(d => updateProtection(this.account?.positions.some(p=>p.symbol===d.symbol&&p.shares>0)?existing.get(d.symbol):undefined,d.symbol,d.smart!,plan.id));
     if (this.canExecute()) for (const order of this.store.orders(true))
       if (order.purpose === 'ENTRY' && order.plan_id !== plan.id) await this.cancel(order.local_id,now);
     this.store.activatePlan(plan,protections); this.plan = plan; this.entryBlocked = false;
@@ -257,7 +258,18 @@ export class Engine {
     await this.refreshWatch({pool:snapshot.universe,features:snapshot.features,metadata:this.metadata},now);
     this.log('PLAN',`啟用 ${plan.id.slice(0,8)}，有效至 ${plan.analysis.expires_at}；${plan.analysis.screening?.entry?'含自動選股進場規則':'依個股決策執行'}`);
   }
-  async tick(now: Date,evaluateConditions=true): Promise<void> {
+  private observeEntries(now:Date):void {
+    if(!this.plan||Date.parse(this.plan.analysis.expires_at)<=now.getTime())return;
+    for(const decision of this.plan.analysis.decisions.filter(d=>d.entry_when==='REBOUND'))for(const odd of [true,false]){
+      const q=this.quotes.get(`${decision.symbol}:${odd}`);
+      if(!q||q.simulated||!this.calendar.inSession(now,odd?'ODD':'COMMON')||!odd&&!this.settings.whole_lots
+        ||ageSeconds(now,q.trade_at)<0||ageSeconds(now,q.trade_at)>this.settings.quote_max_age)continue;
+      const old=this.store.entryTracks().find(t=>t.plan_id===this.plan!.id&&t.symbol===decision.symbol&&t.lot===(odd?'ODD':'COMMON'));
+      const next=trackEntry(old,decision,this.plan.id,q,this.plan.created_at);
+      if(JSON.stringify(old)!==JSON.stringify(next))this.store.saveEntryTrack(next);
+    }
+  }
+  async tick(now: Date,evaluateConditions=true,smartConditions=false): Promise<void> {
     if (!this.connected) return;
     const resumed = this.lastTick && now.getTime() - this.lastTick.getTime() > 45000;
     const changed = this.generation !== this.broker.generation;
@@ -277,7 +289,8 @@ export class Engine {
       for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.cancel(o.local_id,now);
     for (const q of this.broker.quotes(now)) this.quotes.set(`${q.symbol}:${q.odd}`,q);
     if (['demo','paper'].includes(this.settings.mode)) { await this.reconcile(now); await this.refreshAccount(now); }
-    if (!this.account || !evaluateConditions) return;
+    this.observeEntries(now);
+    if (!this.account || !evaluateConditions&&!smartConditions) return;
     const exitsTriggered=new Set<string>();
     for (const protection of this.store.protections()) {
       const p = this.account.positions.find(p => p.symbol === protection.symbol);
@@ -289,9 +302,11 @@ export class Engine {
       if(!this.calendar.inSession(now,protectionLot))continue;
       const q = this.quotes.get(`${p.symbol}:${protectionLot === 'ODD'}`);
       if (!q || q.simulated || !(ageSeconds(now,q.trade_at) >= 0 && ageSeconds(now,q.trade_at) <= this.settings.quote_max_age)) continue;
-      const trigger = evaluate(protection,q.last); this.store.saveProtection(protection);
+      const trigger = evaluate(protection,q.last,q.trade_at); this.store.saveProtection(protection);
       if (!trigger) continue;
       exitsTriggered.add(p.symbol);
+      if(trigger==='STOP')for(const [id,ticket] of this.pendingExecutions)if(ticket.order.symbol===p.symbol
+        &&(ticket.source!=='PROTECTION'||ticket.trigger!=='STOP'))this.pendingExecutions.delete(id);
       const pending = this.store.orders(true).find(o => o.symbol === p.symbol);
       if(pending?.action==='BUY'&&this.canExecute()){await this.cancel(pending.local_id,now);continue;}
       if (!p.sellable) { this.decisionStates.set(p.symbol,{state:'WAIT',reason:'出場已觸發；今日新增零股不可當沖，等待可賣庫存',source:'PROTECTION'});
@@ -313,7 +328,7 @@ export class Engine {
     if (!this.canExecute() || !this.plan || Date.parse(this.plan.analysis.expires_at) <= now.getTime()) return;
     const plan = this.plan;
     const decisions=[...plan.analysis.decisions];
-    if(this.settings.auto_watchlist&&plan.analysis.screening?.entry)for(const w of this.watch.entries) {
+    if(evaluateConditions&&this.settings.auto_watchlist&&plan.analysis.screening?.entry)for(const w of this.watch.entries) {
       if(decisions.some(d=>d.symbol===w.symbol))continue;
       if(!this.watch.healthy||ageSeconds(now,this.watch.asof)>this.settings.watch_refresh_minutes*120) {
         this.decisionStates.set(w.symbol,{state:'WAIT',reason:'觀測資料更新尚未確認',source:'RULE'});continue;
@@ -324,6 +339,7 @@ export class Engine {
       else this.decisionStates.set(w.symbol,{state:'WAIT',reason:sized.reason,source:'RULE'});
     }
     for (const decision of decisions) {
+      if(!evaluateConditions&&decision.entry_when!=='REBOUND')continue;
       const source=plan.analysis.decisions.includes(decision)?'CODEX':'RULE';
       const state=(state:string,reason:string):void=>{this.decisionStates.set(decision.symbol,{state,reason,source});};
       if(exitsTriggered.has(decision.symbol))continue;
@@ -336,8 +352,13 @@ export class Engine {
       const preferred=this.quotes.get(`${decision.symbol}:${decision.shares<1000}`);
       const q=this.settings.codex_enabled?(preferred??this.quotes.get(`${decision.symbol}:true`)??this.quotes.get(`${decision.symbol}:false`)):preferred;
       const lot=q?.odd===false?'COMMON':'ODD';
-      if (!q || (decision.entry_when === 'BELOW' && d(q.last).gt(decision.trigger_price))
-        || (decision.entry_when === 'ABOVE' && d(q.last).lt(decision.trigger_price))) {state('WAIT',!q?'等待對應市場行情':`等待${decision.entry_when==='BELOW'?'低於':'高於'} ${decision.trigger_price}`);continue;}
+      if(q&&(q.simulated||!this.calendar.inSession(now,lot)||[q.trade_at,q.book_at].some(t=>ageSeconds(now,t)<0||ageSeconds(now,t)>this.settings.quote_max_age))){
+        state('WAIT','等待交易時段內新鮮成交與五檔行情');continue;
+      }
+      const tracking=this.store.entryTracks().find(t=>t.plan_id===plan.id&&t.symbol===decision.symbol&&t.lot===lot);
+      if (!q || !entryReady(decision,q.last,tracking)) {state('WAIT',!q?'等待對應市場行情':decision.entry_when==='REBOUND'
+        ?tracking?.armed?`追蹤低點 ${tracking.low_water}；等待回升至 ${reboundExit(tracking,decision)}`:`等待跌至 ${decision.trigger_price} 啟動反彈追蹤`
+        :`等待${decision.entry_when==='BELOW'?'低於':'高於'} ${decision.trigger_price}`);continue;}
       if (decision.action === 'BUY' && decision.smart && d(q.ask).lte(decision.smart.stop_price)) {
         state('BLOCKED','已跌破進場計畫停損，等待新策略');this.logOnce('BLOCK',`${decision.symbol} 已跌破進場計畫停損，等待新計畫`); continue;
       }
@@ -357,7 +378,9 @@ export class Engine {
     if(this.settings.codex_enabled&&this.advisorIssue){
       this.decisionStates.set(order.symbol,{state:'WAIT',reason:this.advisorIssue+'；先測試連線或重新分析，未送單',source});return false;
     }
-    if(!this.settings.codex_enabled)return this.submit(order,now,source==='RULE'?smart:undefined);
+    // Historical exits use only current sellable inventory; production sizing authority is unchanged.
+    if(!this.settings.codex_enabled||source==='PROTECTION'&&this.store.get('historical_replay')===true&&!this.broker.production
+      &&['demo','paper'].includes(this.settings.mode))return this.submit(order,now,source==='RULE'?smart:undefined,undefined,condition);
     const key=`${twDay(now)}:${order.plan_id}:${order.symbol}:${order.purpose}:${trigger}`;
     if(this.executionRetry[key]&&Date.parse(this.executionRetry[key]!)>now.getTime())return false;
     if([...this.pendingExecutions.values()].some(t=>t.order.symbol===order.symbol))return false;
@@ -390,7 +413,7 @@ export class Engine {
     if(ticket.source==='PROTECTION'){
       const p=this.store.protections().find(p=>p.symbol===ticket.order.symbol);
       if(!p||p.plan_id!==ticket.order.plan_id||JSON.stringify(p.spec)!==JSON.stringify(ticket.protection_spec))return '持倉出場條件已更新';
-      if(evaluate(structuredClone(p),q.last)!==ticket.trigger)return '出場條件目前已不成立';
+      if(evaluate(structuredClone(p),q.last,q.trade_at)!==ticket.trigger)return '出場條件目前已不成立';
       if(!this.account.positions.some(p=>p.symbol===ticket.order.symbol&&p.sellable>0))return '今日新增零股不可當沖，等待可賣庫存';
       return '';
     }
@@ -408,7 +431,9 @@ export class Engine {
       return result.decision?'':result.reason;
     }
     const c=ticket.condition;
-    if(!c||c.entry_when==='BELOW'&&d(q.last).gt(c.trigger_price)||c.entry_when==='ABOVE'&&d(q.last).lt(c.trigger_price))return '買賣觸發條件目前已不成立';
+    this.observeEntries(now);
+    const track=c?this.store.entryTracks().find(t=>t.plan_id===ticket.order.plan_id&&t.symbol===c.symbol&&t.lot===(q.odd?'ODD':'COMMON')):undefined;
+    if(!c||!entryReady(c,q.last,track))return '買賣觸發條件目前已不成立';
     return conditionIssue(c,q,this.watchFeatures[c.symbol],now);
   }
   private async executionInputs(now:Date):Promise<void>{
@@ -491,12 +516,20 @@ export class Engine {
     return {local_id:id,broker_id:'',tag:id.slice(0,6),symbol,action,shares,limit_price:limitPrice,lot,
       status:'PREPARED',filled:0,created_at:now.toISOString(),plan_id:planId,purpose};
   }
-  async submit(order: Order, suppliedNow: Date,smart?:SmartSpec,executionId?:string): Promise<boolean> {
-    if (!this.canExecute()) return false;
+  async submit(order: Order, suppliedNow: Date,smart?:SmartSpec,executionId?:string,condition?:import('./models.js').Decision): Promise<boolean> {
+    if (!this.canExecute()||this.settings.codex_enabled&&this.advisorIssue) return false;
     await this.reconcile(suppliedNow,true); const account = await this.refreshAccount(suppliedNow);
     const now = this.broker.production ? new Date() : suppliedNow;
-    if(!this.canExecute())return false;
+    if(!this.canExecute()||this.settings.codex_enabled&&this.advisorIssue)return false;
     for(const q of this.broker.quotes(now))this.quotes.set(`${q.symbol}:${q.odd}`,q);
+    this.observeEntries(now);
+    const quote=this.quotes.get(`${order.symbol}:${order.lot==='ODD'}`);
+    if(condition){const t=this.store.entryTracks().find(t=>t.plan_id===order.plan_id&&t.symbol===order.symbol&&t.lot===order.lot);
+      if(!quote||!entryReady(condition,quote.last,t)||conditionIssue(condition,quote,this.watchFeatures[order.symbol],now))return false;}
+    if(order.purpose==='PROTECTION'){
+      const p=this.store.protections().find(p=>p.symbol===order.symbol);
+      if(!p||p.plan_id!==order.plan_id||!quote||!evaluate(structuredClone(p),quote.last,quote.trade_at))return false;
+    }
     if(executionId){
       const ticket=this.pendingExecutions.get(executionId);
       if(!ticket)return false;
@@ -520,7 +553,7 @@ export class Engine {
       this.store.recordExperience({id:`risk:${refusal}`,at:now.toISOString(),mode:this.store.get<string>('experience_scope') ?? this.settings.mode,
         kind:'RISK_REFUSAL',symbol:order.symbol,action:order.action,shares:order.shares,price:null,fee:null,tax:null,
         realized_pnl:null,note:reasons.join('；')}); return false; }
-    const protection=smart?updateProtection(this.store.protections().find(p=>p.symbol===order.symbol),order.symbol,smart,order.plan_id):undefined;
+    const protection=smart?updateProtection(account.positions.some(p=>p.symbol===order.symbol&&p.shares>0)?this.store.protections().find(p=>p.symbol===order.symbol):undefined,order.symbol,smart,order.plan_id):undefined;
     if (!this.store.prepareIntent(order,protection)) { this.logOnce('BLOCK','委託識別已存在或短標籤碰撞，禁止重送'); return false; }
     order.status = 'SUBMITTING'; this.store.saveOrder(order);
     try {
