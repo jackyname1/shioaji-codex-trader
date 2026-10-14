@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { TradingService } from '../core/service.js';
-import { SettingsSchema,active, type Settings } from '../core/models.js';
+import { SettingsSchema,active,d, type Settings } from '../core/models.js';
 import { demoAnalysis } from '../core/strategy.js';
 import { Store } from '../core/store.js';
 import { loopbackOrigin,ShioajiHttpBroker } from '../broker/http.js';
@@ -219,7 +219,7 @@ function registerIpc(): void {
     codex_auth:{...codexLogin.status},broker_diagnostics:diagnosticSnapshot(),
     runtime:service?{mode,auto:service.engine.settings.auto_execute,paused:service.engine.pausedEntries,killed:service.engine.killed,
       blocked:service.engine.entryBlocked,connected:connected(),session:service.calendar.inSession(new Date()),account:service.engine.account??null,
-      plan:service.engine.plan??null,protections:service.store.protections(),orders:service.store.orders(true),quotes:[...service.engine.quotes.values()],
+      plan:service.engine.plan??null,protections:service.store.protections(),entry_tracks:service.store.entryTracks(),orders:service.store.orders(true),quotes:[...service.engine.quotes.values()],
       watch:service.engine.watch,next_strategy_at:service.nextStrategyAt(),analyzing:service.analyzing,scanning:service.scanning,
       analysis_status:service.analysisStatus,last_monitor_at:service.lastMonitorAt,
       sizing:service.sizing,execution_queue:[...service.engine.pendingExecutions.values()].map(t=>({symbol:t.order.symbol,action:t.order.action,state:t.state,trigger:t.trigger})),
@@ -523,6 +523,30 @@ async function smokeTest(): Promise<void> {
     if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('不截斷')||!realtime.summary.includes('資料就緒')||!realtime.summary.includes('歷史已就緒 18 檔')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源、資料就緒與完整摘要未通過');
     await capture(`SYNTHETIC-ui-realtime-${width}.png`,width,height);
   }
+  // Real renderer capture of isolated, explicitly labelled stateful-condition fixtures.
+  const smartSnapshot=await service.engine.snapshot(virtual),smartAnalysis=demoAnalysis(smartSnapshot,service.engine.settings,virtual);
+  const smartSymbol=smartSnapshot.universe[0]!.symbol,smartPrice=d(smartSnapshot.universe[0]!.last);
+  const smartSpec={stop_price:smartPrice.times('.90').toFixed(2),take_profit:null,reward_target:smartPrice.times('1.15').toFixed(2),
+    trailing_activate:smartPrice.times('1.05').toFixed(2),trailing_fraction:'0.03'};
+  smartAnalysis.decisions=[{symbol:smartSymbol,action:'BUY',shares:30,limit_price:smartPrice.times('1.01').toFixed(2),entry_when:'REBOUND',
+    trigger_price:smartPrice.times('.99').toFixed(2),rebound_fraction:'0.02',smart:smartSpec,conditions:[],reason:'隔離智慧條件介面測試，不是股票建議'}];
+  await service.engine.activate(smartAnalysis,smartSnapshot,virtual);
+  service.store.saveEntryTrack({symbol:smartSymbol,plan_id:service.engine.plan!.id,lot:'ODD',armed:true,
+    low_water:smartPrice.times('.97').toFixed(2),observed_at:virtual.toISOString()});
+  service.store.saveProtection({symbol:smartSymbol,plan_id:service.engine.plan!.id,spec:smartSpec,high_water:smartPrice.times('1.10').toFixed(2),
+    trailing_armed:true,observed_at:virtual.toISOString(),triggered:''});
+  await window.webContents.executeJavaScript(`(()=>{document.querySelector('#chart-symbol').value=${JSON.stringify(smartSymbol)};
+    document.querySelector('#chart-form').requestSubmit();document.querySelector('.conditions-details').open=true;})()`);
+  for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
+    await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+    await new Promise(resolve=>setTimeout(resolve,1400));await verifyLayout('paper','realtime');
+    const smartUi=await window.webContents.executeJavaScript(`(()=>{const node=document.querySelector('#stock-conditions');return {text:node.textContent,
+      open:document.querySelector('.conditions-details').open,overflow:document.documentElement.scrollWidth>innerWidth};})()`);
+    if(!smartUi.open||smartUi.overflow||!['低點','高點','已啟動','收益目標（不觸發）','優先停損'].every(v=>smartUi.text.includes(v)))
+      throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
+    await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
+  }
+  await window.webContents.executeJavaScript(`document.querySelector('.conditions-details').open=false`);
   await window.webContents.executeJavaScript(`document.querySelector('#open-diagnostics').click()`);await new Promise(resolve=>setTimeout(resolve,400));
   const diag=await window.webContents.executeJavaScript(`(async()=>{const s=await window.trader.state();return {open:document.querySelector('#diagnostics-dialog').open,
     text:document.querySelector('#diagnostic-endpoints').textContent,data:JSON.stringify(s.broker_diagnostics)};})()`);

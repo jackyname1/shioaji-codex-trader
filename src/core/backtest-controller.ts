@@ -44,7 +44,7 @@ export class BacktestController {
   }
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
-      if(['0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
+      if(['0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
       else this.progress.message='上一版報表仍保留在本機；新版請重新執行測試';
     }catch{/* New profile. */}
     await this.loadHistory();
@@ -55,7 +55,7 @@ export class BacktestController {
       const result:BacktestSummary[]=[];
       for(const f of files.sort((a,b)=>b.time-a.time).slice(0,30))try {
         const r=JSON.parse(await readFile(join(this.root,f.name),'utf8')) as BacktestReport;
-        if(['0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
+        if(['0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
       }catch{/* A damaged report cannot affect trading. */}
       this.history=result;
     }catch{this.history=[];}
@@ -64,7 +64,7 @@ export class BacktestController {
     if(this.task)throw new Error('回測執行中不能切換報表');
     if(!/^[a-f0-9-]{36}$/.test(id)||!this.history.some(r=>r.id===id))throw new Error('回測報表識別不合法');
     const r=JSON.parse(await readFile(join(this.root,`report-${id}.json`),'utf8')) as BacktestReport;
-    if(r.id!==id||!['0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
+    if(r.id!==id||!['0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
     this.useReport(r);this.dataset=undefined;return '已載入測試結果';
   }
   private async save(report:BacktestReport):Promise<void>{
@@ -119,7 +119,7 @@ export class BacktestController {
     return intervals.length>1?`已啟動 ${intervals.length} 組自動比較；Codex 呼叫上限為整批共用`:'已啟動全自動歷史測試，交易監控持續';
   }
   control(command:ReplayCommand):string{if(!this.task)throw new Error('回測尚未執行');this.clock.command(command);return command==='pause'?'目前步驟完成後暫停，保留尚未執行的事件':command==='step'?'完整執行下一個觸發事件後暫停':'依序繼續全部模擬步驟';}
-  speed(value:number):string{this.clock.setSpeed(value);return value?'加速播放 '+value+'×；模擬秒數連續前進，每五分鐘檢查條件':'每五分鐘完整檢查，直到條件觸發或下一輪 Codex；確認股數與核對完成後才繼續';}
+  speed(value:number):string{this.clock.setSpeed(value);return value?'加速播放 '+value+'×；一般條件每五分鐘，智慧條件逐筆分鐘行情':'一般條件每五分鐘、智慧條件逐筆行情；直到觸發或下一輪策略，確認與核對完成後才繼續';}
   async marketData():Promise<HistoryDataset>{
     if(this.dataset)return this.dataset;
     const id=this.report?.dataset_id;if(!id||! /^[a-f0-9-]{36}$/.test(id))throw new Error('回測舊版報表沒有保存原始行情，請重新執行');
