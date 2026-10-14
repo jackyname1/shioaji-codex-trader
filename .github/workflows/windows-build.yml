@@ -65,9 +65,17 @@ jobs:
         shell: pwsh
         run: |
           node -e "require('electron')"
+          $env:TRADER_SMOKE_OUTPUT = Join-Path (Get-Location) 'release'
+          $resultPath = Join-Path $env:TRADER_SMOKE_OUTPUT 'SMOKE-RESULT.json'
+          Remove-Item $resultPath -Force -ErrorAction SilentlyContinue
           $process = Start-Process -FilePath (Resolve-Path node_modules/electron/dist/electron.exe).Path -ArgumentList @('.', '--smoke-test') -PassThru -NoNewWindow
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Electron smoke test timed out' }
+          $finished = $process.WaitForExit(300000)
+          if (Test-Path $resultPath) { Get-Content $resultPath -Raw | Write-Host }
+          if (-not $finished) { $process.Kill(); throw 'Electron smoke test timed out; see stage report' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+          $result = Get-Content $resultPath -Raw | ConvertFrom-Json
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($result.status -ne 'PASSED' -or $result.packaged -or $result.version -ne $version) { throw 'Source GUI checks did not complete' }
       - name: Save verified Windows captures in Git
         if: runner.os == 'Windows' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
@@ -92,6 +100,11 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/electron-builder/Cache
+          key: electron-builder-windows-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-builder-windows-
       - run: npm run prepare:broker -- --platform=win32 --arch=x64
       - run: npm run build
       - run: node scripts/package-windows.mjs
@@ -105,10 +118,17 @@ jobs:
         shell: pwsh
         run: |
           $env:TRADER_SMOKE_OUTPUT = (Resolve-Path release).Path
+          $resultPath = Join-Path $env:TRADER_SMOKE_OUTPUT 'SMOKE-RESULT.json'
+          Remove-Item $resultPath -Force -ErrorAction SilentlyContinue
           $exe = Get-ChildItem release/Shioaji-Codex-Trader-*-Windows-x64.exe | Select-Object -First 1
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -PassThru
-          if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Packaged app smoke test timed out' }
+          $finished = $process.WaitForExit(360000)
+          if (Test-Path $resultPath) { Get-Content $resultPath -Raw | Write-Host }
+          if (-not $finished) { $process.Kill(); throw 'Packaged app smoke test timed out; see stage report' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+          $result = Get-Content $resultPath -Raw | ConvertFrom-Json
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($result.status -ne 'PASSED' -or -not $result.packaged -or $result.version -ne $version) { throw 'Packaged GUI checks did not complete' }
       - name: Publish verified Windows pre-release
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
