@@ -517,10 +517,10 @@ export class Engine {
       status:'PREPARED',filled:0,created_at:now.toISOString(),plan_id:planId,purpose};
   }
   async submit(order: Order, suppliedNow: Date,smart?:SmartSpec,executionId?:string,condition?:import('./models.js').Decision): Promise<boolean> {
-    if (!this.canExecute()) return false;
+    if (!this.canExecute()||this.settings.codex_enabled&&this.advisorIssue) return false;
     await this.reconcile(suppliedNow,true); const account = await this.refreshAccount(suppliedNow);
     const now = this.broker.production ? new Date() : suppliedNow;
-    if(!this.canExecute())return false;
+    if(!this.canExecute()||this.settings.codex_enabled&&this.advisorIssue)return false;
     for(const q of this.broker.quotes(now))this.quotes.set(`${q.symbol}:${q.odd}`,q);
     this.observeEntries(now);
     const quote=this.quotes.get(`${order.symbol}:${order.lot==='ODD'}`);

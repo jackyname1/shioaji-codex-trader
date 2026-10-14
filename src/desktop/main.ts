@@ -524,17 +524,17 @@ async function smokeTest(): Promise<void> {
     await capture(`SYNTHETIC-ui-realtime-${width}.png`,width,height);
   }
   // Real renderer capture of isolated, explicitly labelled stateful-condition fixtures.
-  const smartSnapshot=await service.engine.snapshot(virtual),smartAnalysis=demoAnalysis(smartSnapshot,service.engine.settings,virtual);
+  const smartNow=new Date(),smartSnapshot=await service.engine.snapshot(smartNow),smartAnalysis=demoAnalysis(smartSnapshot,service.engine.settings,smartNow);
   const smartSymbol=smartSnapshot.universe[0]!.symbol,smartPrice=d(smartSnapshot.universe[0]!.last);
   const smartSpec={stop_price:smartPrice.times('.90').toFixed(2),take_profit:null,reward_target:smartPrice.times('1.15').toFixed(2),
     trailing_activate:smartPrice.times('1.05').toFixed(2),trailing_fraction:'0.03'};
   smartAnalysis.decisions=[{symbol:smartSymbol,action:'BUY',shares:30,limit_price:smartPrice.times('1.01').toFixed(2),entry_when:'REBOUND',
     trigger_price:smartPrice.times('.99').toFixed(2),rebound_fraction:'0.02',smart:smartSpec,conditions:[],reason:'隔離智慧條件介面測試，不是股票建議'}];
-  await service.engine.activate(smartAnalysis,smartSnapshot,virtual);
+  await service.engine.activate(smartAnalysis,smartSnapshot,smartNow);
   service.store.saveEntryTrack({symbol:smartSymbol,plan_id:service.engine.plan!.id,lot:'ODD',armed:true,
-    low_water:smartPrice.times('.97').toFixed(2),observed_at:virtual.toISOString()});
+    low_water:smartPrice.times('.97').toFixed(2),observed_at:smartNow.toISOString()});
   service.store.saveProtection({symbol:smartSymbol,plan_id:service.engine.plan!.id,spec:smartSpec,high_water:smartPrice.times('1.10').toFixed(2),
-    trailing_armed:true,observed_at:virtual.toISOString(),triggered:''});
+    trailing_armed:true,observed_at:smartNow.toISOString(),triggered:''});
   await window.webContents.executeJavaScript(`(()=>{document.querySelector('#chart-symbol').value=${JSON.stringify(smartSymbol)};
     document.querySelector('#chart-form').requestSubmit();document.querySelector('.conditions-details').open=true;})()`);
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){

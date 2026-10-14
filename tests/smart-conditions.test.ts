@@ -11,6 +11,8 @@ import {runBacktest,type ReplayFrame} from '../src/core/backtest.js';
 import {syntheticDataset,type HistoryPoint} from '../src/core/backtest-data.js';
 import {rig,now,quote,testSize} from './helpers.js';
 import {analysisPrompt,codexOutputSchema} from '../src/core/codex.js';
+import {workspaceRuntime} from '../src/desktop/workspace.js';
+import type {DesktopState,RuntimeView} from '../src/desktop/shared.js';
 
 const spec:SmartSpec={stop_price:'95',take_profit:null,reward_target:'115',trailing_activate:'110',trailing_fraction:'0.03'};
 const decision:Decision={symbol:'9001',action:'BUY',shares:30,limit_price:'101',entry_when:'REBOUND',trigger_price:'100',
@@ -159,6 +161,24 @@ test('historical direct protection cannot bypass model failure halt, kill switch
       assert.equal(r.engine.pendingExecutions.size,block==='production'?1:0);
     }finally{await dispose(r);}
   }
+});
+test('a model failure arriving in the final simulated account refresh blocks a direct protective intent',async()=>{
+  const store=heldStore();store.set('historical_replay',true);const r=await rig(store);
+  try{r.engine.setSettings({...r.s,codex_enabled:true});r.market.marketPrice='28.5';
+    const refresh=r.engine.refreshAccount.bind(r.engine);let reads=0;
+    r.engine.refreshAccount=async date=>{const a=await refresh(date);if(++reads===3)r.engine.setAdvisorIssue('isolated halt during final refresh');return a;};
+    await r.engine.tick(at(1));assert.equal(r.engine.advisorIssue,'isolated halt during final refresh');assert.equal(r.store.orders().length,0);
+  }finally{await dispose(r);}
+});
+test('replay tracking panes never borrow current lows when displaying an old report or a legacy frame',()=>{
+  const current=trackEntry(undefined,decision,'current',q('96',1),now.toISOString());
+  const historical={...current,plan_id:'historical',low_water:'90'};
+  const state={runtime:{mode:'paper',entry_tracks:[current],watch:{entries:[],changes:[]}} as unknown as RuntimeView,
+    workspace_mode:'paper',simulation_scope:'replay',replay:{entry_tracks:[historical],at:now.toISOString(),plan:null},
+    backtest_result:null,backtest_progress:{running:false,phase:'COMPLETED'},replay_paused:false} as unknown as DesktopState;
+  assert.deepEqual(workspaceRuntime(state)!.entry_tracks,[historical]);
+  delete state.replay!.entry_tracks;assert.deepEqual(workspaceRuntime(state)!.entry_tracks,[]);
+  state.replay=null;assert.deepEqual(workspaceRuntime(state)!.entry_tracks,[]);
 });
 test('a fresh unheld plan discards an old sold position high; subsequent holding updates retain an armed high',async()=>{
   const store=new Store(':memory:');store.saveProtection({symbol:'9001',spec:{stop_price:'29',take_profit:'40',trailing_activate:'33',trailing_fraction:'0.03'},
