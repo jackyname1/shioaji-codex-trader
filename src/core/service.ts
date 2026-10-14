@@ -323,7 +323,7 @@ export class TradingService {
     await this.enqueue(async () => {
       if (s.mode === 'live' && s.auto_execute && !this.liveAuthorized) throw new Error('實盤自動執行須先確認本次授權');
       if(s.mode==='live'&&['fee_rate','minimum_fee','sell_tax_rate',
-        'min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
+        'min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
         'max_daily_buy_orders','daily_loss_fraction','whole_lots','allow_attention','price_deviation_fraction',
         'max_spread_fraction','quote_max_age','account_max_age','cooldown_seconds'].some(k=>s[k as keyof Settings]!==this.engine.settings[k as keyof Settings])) {
         this.lockLive();s.auto_execute=false;

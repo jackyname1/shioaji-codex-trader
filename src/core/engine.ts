@@ -5,6 +5,8 @@ import { Risk, alignedPrice, fee } from './risk.js';
 import { evaluate, updateProtection } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
 import { conditionIssue } from './conditions.js';
+import {capitalSnapshot} from './capital.js';
+import {entryRiskIssues,entryQualityIssues} from './costs.js';
 import { experienceContext } from './experience.js';
 import { emptyWatch, selectWatchlist, watchEligibility, ruleEntry, type WatchState } from './watchlist.js';
 import { nextStrategy } from './schedule.js';
@@ -206,7 +208,7 @@ export class Engine {
     const baseline=this.baseline(now),loss=baseline?d(baseline).minus(equity(a)):undefined;
     const cash=spendableCash(a,this.settings),minimum=equity(a).times(this.settings.min_cash_fraction),room=d(cash.available).minus(minimum);
     this.metadata = {...this.metadata,...bundle.metadata};
-    const limits = Object.fromEntries(['whole_lots','min_cash_fraction','max_order_fraction','max_symbol_fraction',
+    const limits = Object.fromEntries(['whole_lots','min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction',
       'max_exposure_fraction','max_daily_buy_fraction','max_daily_buy_orders','daily_loss_fraction',
       'price_deviation_fraction','minimum_fee','fee_rate','sell_tax_rate','plan_max_minutes','watch_min_amount','watch_max_symbols'].map(k => [k,this.settings[k as keyof Settings]]));
     return {snapshot_id:randomUUID(),asof:now.toISOString(),synthetic:this.settings.mode === 'demo',review_only:review,
@@ -218,7 +220,7 @@ export class Engine {
         daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
-      universe:bundle.pool,features:bundle.features,hard_limits:limits,
+      universe:bundle.pool,features:bundle.features,hard_limits:limits,capital:capitalSnapshot(a,this.settings),
       instruments:structuredClone(bundle.metadata),data_readiness:{pool_count:bundle.pool.length,
         history_ready:bundle.pool.filter(c=>bundle.features[c.symbol]?.sufficient).length,
         eligible_symbols:bundle.pool.filter(c=>!watchEligibility(c,bundle.features[c.symbol],bundle.metadata[c.symbol],this.settings,undefined,now).length).map(c=>c.symbol),
@@ -239,6 +241,7 @@ export class Engine {
   async activate(analysis: Analysis, snapshot: Snapshot, now: Date): Promise<void> {
     const plan = validateAnalysis(analysis,snapshot,now,this.settings);
     if(snapshot.review_only) {
+      if(analysis.decisions.some(d=>d.smart!==null))this.log('REVIEW_NOTE','盤後 HOLD 附帶的智慧單已轉為說明資料；檢討不更新交易保護');
       if(this.settings.experience_enabled)this.store.saveReview({id:plan.id,at:now.toISOString(),
         mode:this.store.get<string>('experience_scope')??this.settings.mode,summary:plan.analysis.summary,sample_count:snapshot.experience?.sample_count??0});
       this.log('REVIEW',plan.analysis.summary);return;
@@ -436,7 +439,8 @@ export class Engine {
         open_orders:a.orders.filter(active).map(o=>({symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price})),
         daily_buy_count:a.daily_buy_count,daily_buy_amount:a.daily_buy_amount},
       lots,features:this.watchFeatures[ticket.order.symbol],instrument:structuredClone(m),
-      hard_limits:Object.fromEntries(['min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
+      capital:capitalSnapshot(a,this.settings),
+      hard_limits:Object.fromEntries(['min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
         'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','whole_lots'].map(k=>[k,this.settings[k as keyof Settings]])),
       historical_replay:!!this.store.get('historical_replay')};
   }
@@ -462,7 +466,12 @@ export class Engine {
     const m=this.metadata[advice.symbol];if(!m){this.finishExecution(id,'BLOCKED','商品資料未確認',now);return false;}
     const last=this.store.orders().filter(o=>o.symbol===advice.symbol&&(active(o)||o.filled>0)).at(-1)?.created_at;
     const bounds=executionLot(ticket,q!,this.account!,m,this.risk,now,this.baseline(now),last);
-    if(advice.shares>bounds.max_shares||advice.shares%bounds.step!==0||d(advice.limit_price).lt(bounds.min_price)||d(advice.limit_price).gt(bounds.max_price)
+    if(advice.action==='BUY'){
+      const issues=[...entryRiskIssues(advice.shares,advice.limit_price,ticket.smart,this.account!,this.settings),
+        ...entryQualityIssues(advice.shares,advice.limit_price,ticket.smart,this.settings)];
+      if(issues.length){this.finishExecution(id,'BLOCKED',issues.join('；')+'；未送單',now);return false;}
+    }
+    if(advice.shares<(bounds.min_shares??bounds.step)||advice.shares>bounds.max_shares||advice.shares%bounds.step!==0||d(advice.limit_price).lt(bounds.min_price)||d(advice.limit_price).gt(bounds.max_price)
       ||ticket.allocation_fraction&&d(advice.limit_price).times(advice.shares).plus(fee(d(advice.limit_price).times(advice.shares),this.settings)).gt(equity(this.account!).times(ticket.allocation_fraction))
       ||ticket.smart&&advice.action==='BUY'&&(d(advice.limit_price).lte(ticket.smart.stop_price)||ticket.smart.take_profit&&d(advice.limit_price).gte(ticket.smart.take_profit))){
       this.finishExecution(id,'BLOCKED','目前現金、可賣庫存、限價或股數不符合條件，數量建議未採用',now);return false;
@@ -499,6 +508,12 @@ export class Engine {
     const last = this.store.orders().filter(o => o.symbol === order.symbol && (active(o) || o.filled > 0)).at(-1)?.created_at;
     const reasons = this.risk.check(order,account,this.quotes.get(`${order.symbol}:${order.lot === 'ODD'}`),this.metadata[order.symbol],
       now,this.baseline(now),this.killed || (this.pausedEntries && order.action === 'BUY'),last);
+    if(order.action==='BUY'){
+      const spec=smart??(executionId?this.pendingExecutions.get(executionId)?.smart:undefined)
+        ??this.plan?.analysis.decisions.find(d=>d.symbol===order.symbol)?.smart??undefined;
+      reasons.push(...entryRiskIssues(order.shares,order.limit_price,spec,account,this.settings),
+        ...entryQualityIssues(order.shares,order.limit_price,spec,this.settings));
+    }
     if (reasons.length) { this.decisionStates.set(order.symbol,{state:'BLOCKED',reason:reasons.join('；'),source:order.purpose});
       this.logOnce('RISK',`${order.symbol} ${order.action}：${reasons.join('；')}`);
       const refusal=order.purpose==='PROTECTION'?createHash('sha256').update(`${twDay(now)}:${order.symbol}:${reasons.join(';')}`).digest('hex'):order.local_id;

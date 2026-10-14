@@ -2,6 +2,7 @@ import { active, ageSeconds, d, equity, marketValue, remaining, twDay, type Acco
   type Instrument, type Order, type Plan, type Protection, type Quote, type Settings } from './models.js';
 import { Decimal } from 'decimal.js';
 import { roundPrice, fee } from './risk.js';
+import {orderBudget} from './capital.js';
 
 export interface WatchEntry {
   symbol:string; name:string; state:'OBSERVE'|'RETAINED'; source:'CODEX'|'SCANNER';
@@ -110,7 +111,7 @@ export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|un
   const held=a.positions.find(p=>p.symbol===w.symbol),symbolHeld=held?d(held.last_price).times(held.shares):d(0);
   const symbolReserved=buys.filter(o=>o.symbol===w.symbol).reduce((sum,o)=>sum.plus(d(o.limit_price).times(remaining(o))),d(0));
   const spend=Decimal.min(e.times(rule.allocation_fraction).minus(s.minimum_fee),
-    e.times(d(1).minus(s.min_cash_fraction)).times(s.max_order_fraction),cashRoom.minus(s.minimum_fee),
+    orderBudget(e,s),cashRoom.minus(s.minimum_fee),
     e.times(s.max_symbol_fraction).minus(symbolHeld).minus(symbolReserved),e.times(s.max_exposure_fraction).minus(marketValue(a)).minus(reservedAmount),
     e.times(s.max_daily_buy_fraction).minus(a.daily_buy_amount));
   let shares=Math.min(999000,Math.max(0,Math.floor(spend.div(limit).toNumber())));
