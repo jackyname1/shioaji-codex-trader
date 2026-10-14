@@ -80,3 +80,5 @@ dialog{background:#151d29}.card{background:#101824}.analyst-event{background:#11
 /* Expanded smart conditions take the instrument pane; close to restore quotes/book. */
 .instrument-panel:has(.conditions-details[open]) .detail-grid,.instrument-panel:has(.conditions-details[open]) .book-heading,.instrument-panel:has(.conditions-details[open]) .order-book{display:none}
 .instrument-panel .conditions-details[open]{margin-top:0}
+
+tr[data-chart-symbol]{cursor:pointer}tr[data-chart-symbol]:hover{background:var(--hover)}tr[data-chart-symbol].selected{background:var(--selected)}tr[data-chart-symbol]:focus-visible{outline:2px solid var(--sky);outline-offset:-2px}.positions-panel td .quiet{padding:0;min-height:20px;color:var(--sky);font-weight:600}

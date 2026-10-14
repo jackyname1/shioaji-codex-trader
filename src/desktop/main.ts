@@ -488,6 +488,7 @@ async function smokeTest(): Promise<void> {
     await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-form').requestSubmit();})()`);
     await new Promise(resolve=>setTimeout(resolve,1800));
     await verifyLayout('paper','replay');
+    if(width===1600)await verifyPositionSelection('replay');
     if(!await window.webContents.executeJavaScript(`(()=>{const note=document.querySelector('#bt-progress-message');return note.getBoundingClientRect().height>0&&getComputedStyle(note).visibility!=='hidden'&&note.textContent.includes('近似成交');})()`))throw new Error('精簡與寬版回測近似成交警示不可見');
     if(width===1600)await verifyChartInteraction();
     await capture(`SYNTHETIC-ui-paper-${width}.png`,width,height);
@@ -498,7 +499,7 @@ async function smokeTest(): Promise<void> {
         return {profile:profile.value,options:[...profile.options].map(o=>o.value),metrics:document.querySelector('#bt-capital').textContent,
           basis:document.querySelector('#s-order-basis').value};
       })()`);
-      if(capital.profile!=='balanced'||capital.options.join(',')!=='balanced,custom'||!capital.metrics.includes('持倉')
+      if(capital.profile!=='active'||capital.options.join(',')!=='active,balanced,custom'||!capital.metrics.includes('持倉')
         ||!['EQUITY','AFTER_RESERVE'].includes(capital.basis))throw new Error('回測資金配置、持倉比例與單筆計算基準介面未通過');
       await capture('SYNTHETIC-ui-capital-profile.png',width,height);
       await window.webContents.executeJavaScript(`document.querySelector('#replay-settings-dialog').close()`);
@@ -515,6 +516,7 @@ async function smokeTest(): Promise<void> {
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
     await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
     await new Promise(resolve=>setTimeout(resolve,1300));await verifyLayout('paper','realtime');
+    if(width===1600)await verifyPositionSelection('realtime');
     const realtime=await window.webContents.executeJavaScript(`(async()=>{const state=await window.trader.state();return {cash:Number(document.querySelector('#cash').textContent.replaceAll(',','')),
       runtimeCash:Number(state.runtime.account.cash),replayCash:Number(state.backtest_result.metrics.final_cash),source:document.querySelector('#chart-source').value,
       model:document.querySelector('#codex-effective-model').textContent,summary:document.querySelector('#analyst-stream').textContent,
@@ -575,6 +577,7 @@ async function smokeTest(): Promise<void> {
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
     await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
     await new Promise(resolve=>setTimeout(resolve,1300));await verifyLayout('live','realtime');
+    if(width===1600)await verifyPositionSelection('realtime');
     await capture(width===1600?'SYNTHETIC-ui-live.png':`SYNTHETIC-ui-live-${width}.png`,width,height);
   }
   const liveUi=await window.webContents.executeJavaScript(`(async()=>({ack:!!document.querySelector('#ack'),button:document.querySelector('#start-live').textContent,
@@ -613,6 +616,28 @@ async function smokeTest(): Promise<void> {
   async function capture(name:string,width:number,height:number):Promise<void>{
     const shot=await window!.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:false,clip:{x:0,y:0,width,height,scale:1}}) as {data:string};
     writeFileSync(join(artifacts,name),Buffer.from(shot.data,'base64'));
+  }
+  async function verifyPositionSelection(source:'replay'|'realtime'):Promise<void>{
+    const expected=await window!.webContents.executeJavaScript(`(()=>{
+      const rows=[...document.querySelectorAll('#positions tbody tr[data-chart-symbol]')];
+      const row=rows.at(-1);if(!row)return null;
+      row.querySelector('td:nth-child(2)').click();return row.dataset.chartSymbol;
+    })()`);
+    await new Promise(resolve=>setTimeout(resolve,1400));
+    const selected=await window!.webContents.executeJavaScript(`({symbol:document.querySelector('#chart-symbol').value,
+      title:document.querySelector('#chart-name').textContent,source:document.querySelector('#chart-source').value,
+      selected:document.querySelector('#positions tr.selected')?.dataset.chartSymbol,
+      cutoff:document.querySelector('#market-chart').dataset.endAt})`);
+    if(!expected||selected.symbol!==expected||!selected.title.includes(expected)||selected.selected!==expected
+      ||selected.source!==(source==='replay'?'replay':'live')||source==='replay'&&Date.parse(selected.cutoff)>Date.parse(backtest.report!.asof))
+      throw new Error('持倉整列點選、主圖與工作台行情來源未同步：'+JSON.stringify(selected));
+    const keyboard=await window!.webContents.executeJavaScript(`(()=>{
+      const row=document.querySelector('#positions tr[data-chart-symbol]');row.focus();row.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));return row.dataset.chartSymbol;
+    })()`);
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    if(!await window!.webContents.executeJavaScript(`document.querySelector('#chart-name').textContent.includes(${JSON.stringify(keyboard)})&&document.querySelector('#positions tr.selected')?.dataset.chartSymbol===${JSON.stringify(keyboard)}`))
+      throw new Error('持倉鍵盤切換主圖未通過');
+    console.log('Electron positions click and keyboard chart selection, '+source+' cutoff: PASS');
   }
   async function verifyChartInteraction():Promise<void>{
     const pause=()=>new Promise(resolve=>setTimeout(resolve,120));

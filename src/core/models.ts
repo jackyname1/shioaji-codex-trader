@@ -199,6 +199,8 @@ export interface Snapshot {
   universe: Candidate[]; features: Record<string, Features>; hard_limits: Record<string, unknown>;
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
   smart_tracking?:{entries:EntryTrack[];protections:Protection[]};
+  quotes?:Quote[];
+  entry_feedback?:{plan_id:string;asof:string;signals:{symbol:string;window:import('./entry-window.js').EntryWindow;state:string;reason:string}[]};
   capital?:import('./capital.js').CapitalSnapshot;
   news: unknown[]; data_limitations: string[];
   instruments?:Record<string,Instrument>;

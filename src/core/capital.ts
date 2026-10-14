@@ -21,7 +21,10 @@ export function capitalSnapshot(a:Account,s:Settings){
     min_entry_reward_risk:s.min_entry_reward_risk};
 }
 export type CapitalSnapshot=ReturnType<typeof capitalSnapshot>;
-export function replayCapitalSettings(base:Settings,profile:'balanced'|'custom'):Settings{
+export function replayCapitalSettings(base:Settings,profile:'active'|'balanced'|'custom'):Settings{
+  if(profile==='active')return SettingsSchema.parse({...base,order_budget_basis:'EQUITY',max_order_fraction:'0.20',
+    min_cash_fraction:'0.20',max_symbol_fraction:'0.25',max_exposure_fraction:'0.80',max_daily_buy_fraction:'0.60',
+    max_daily_buy_orders:8,target_exposure_fraction:'0.70',min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.0125',watch_max_symbols:16});
   return profile==='custom'?base:SettingsSchema.parse({...base,order_budget_basis:'EQUITY',max_order_fraction:'0.15',
     max_daily_buy_fraction:'0.40',target_exposure_fraction:'0.50',min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.01'});
 }
