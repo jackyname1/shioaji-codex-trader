@@ -540,9 +540,12 @@ async function smokeTest(): Promise<void> {
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
     await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
     await new Promise(resolve=>setTimeout(resolve,1400));await verifyLayout('paper','realtime');
-    const smartUi=await window.webContents.executeJavaScript(`(()=>{const node=document.querySelector('#stock-conditions');return {text:node.textContent,
+    const smartUi=await window.webContents.executeJavaScript(`(()=>{const node=document.querySelector('#stock-conditions'),pane=document.querySelector('.instrument-panel');
+      if(innerHeight<900)pane.scrollTop=pane.scrollHeight;else pane.scrollTop=0;
+      const box=pane.getBoundingClientRect(),rows=[...node.querySelectorAll('.condition-item')].filter(n=>['反彈追蹤','優先停損','移動退場價'].includes(n.querySelector('span').textContent));
+      return {text:node.textContent,allVisible:rows.length===3&&rows.every(n=>{const r=n.getBoundingClientRect();return r.top>=box.top&&r.bottom<=box.bottom&&r.right<=box.right}),
       open:document.querySelector('.conditions-details').open,overflow:document.documentElement.scrollWidth>innerWidth};})()`);
-    if(!smartUi.open||smartUi.overflow||!['低點','高點','已啟動','收益目標（不觸發）','優先停損'].every(v=>smartUi.text.includes(v)))
+    if(!smartUi.open||smartUi.overflow||height>=900&&!smartUi.allVisible||!['低點','高點','已啟動','收益目標（不觸發）','優先停損'].every(v=>smartUi.text.includes(v)))
       throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }

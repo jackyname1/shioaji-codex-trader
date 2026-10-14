@@ -76,3 +76,7 @@ dialog{background:#151d29}.card{background:#101824}.analyst-event{background:#11
 .replay-toolbar{flex-wrap:wrap}.replay-toolbar>strong:first-child{flex:1 1 100px}.simulation-fields .replay-strategy{font-size:10px;white-space:nowrap;align-self:center;color:var(--muted)}
 
 .replay-toolbar #replay-mode{width:105px}.replay-toolbar input:disabled{opacity:.4}
+
+/* Expanded smart conditions take the instrument pane; close to restore quotes/book. */
+.instrument-panel:has(.conditions-details[open]) .detail-grid,.instrument-panel:has(.conditions-details[open]) .book-heading,.instrument-panel:has(.conditions-details[open]) .order-book{display:none}
+.instrument-panel .conditions-details[open]{margin-top:0}
