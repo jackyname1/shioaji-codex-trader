@@ -9,6 +9,8 @@ permissions:
   contents: read
 jobs:
   test:
+    permissions:
+      contents: write
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -66,14 +68,21 @@ jobs:
           $process = Start-Process -FilePath (Resolve-Path node_modules/electron/dist/electron.exe).Path -ArgumentList @('.', '--smoke-test') -PassThru -NoNewWindow
           if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Electron smoke test timed out' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
-      - uses: actions/upload-artifact@v4
-        if: runner.os == 'Windows' && github.event_name == 'pull_request'
-        with:
-          name: Workbench-screenshots
-          path: release/SYNTHETIC-ui-*.png
-          if-no-files-found: error
-          retention-days: 1
+      - name: Save verified Windows captures in Git
+        if: runner.os == 'Windows' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CAPTURE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha }}
+          CAPTURE_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: node scripts/save-windows-captures.mjs
   windows:
+    needs: test
+    permissions:
+      contents: write
+    concurrency:
+      group: release-build-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -100,53 +109,10 @@ jobs:
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -PassThru
           if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Packaged app smoke test timed out' }
           if ($process.ExitCode -ne 0) { exit $process.ExitCode }
-      - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        with:
-          name: Shioaji-Codex-Trader-Windows-x64
-          path: |
-            release/Shioaji-Codex-Trader-*-Windows-x64.exe
-            release/README.md
-            release/RELEASE_NOTES.md
-            release/WINDOWS-SIGNATURE.json
-            release/SYNTHETIC-*
-          if-no-files-found: error
-          retention-days: 1
-  publish:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [test, windows]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      actions: write
-    concurrency:
-      group: release-publish-main
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: Shioaji-Codex-Trader-Windows-x64
-          path: release
       - name: Publish verified Windows pre-release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: node scripts/publish-release.mjs
-      - name: Remove temporary Windows artifact after verified release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          ids="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | select(.name == "Shioaji-Codex-Trader-Windows-x64") | .id')"
-          if [ -n "$ids" ]; then
-            while IFS= read -r id; do
-              if ! gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"; then
-                echo "::warning::Could not remove the temporary artifact $id; it will expire after one day."
-              fi
-            done <<< "$ids"
-          fi
-
