@@ -1,67 +1,77 @@
 {
-  "app_version": "0.2.0",
+  "app_version": "0.2.1",
   "platform": "Windows x64",
   "fixture": "isolated synthetic GUI smoke test; no user credentials or brokerage orders",
-  "source_commit": "0995e60198df7d32520a040b3bdfda30674c6023",
-  "workflow_run_id": 38491136632,
-  "workflow_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/38491136632",
-  "artifact_id": 11861986546,
+  "source_commit": "3557550e3ca70168a00c74f0a2c9164a32125b23",
+  "source_tree": "096df61f3ca022155bf94bf4a95d9b3c2320475a",
+  "workflow_run_id": 38499720463,
+  "workflow_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/38499720463",
+  "artifact_id": 11864939630,
   "artifact_name": "Workbench-screenshots",
-  "artifact_zip_sha256": "ac2541a8f64b6612ab4b0939e57a3f8d90e17af4db132f45175d9a572b392fa0",
+  "artifact_zip_sha256": "b278699bb105941bc95b3984db81e9d94ececa1cb22ac47be96ad68af87957a9",
   "images": [
     {
-      "path": "docs/screenshots/workbench-v0.2.0.png",
+      "path": "docs/screenshots/workbench-v0.2.1.png",
       "source_file": "SYNTHETIC-ui-paper-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 247522,
-      "sha256": "f57d192ea81efb5fc094d4b05652e72b7bf4d75b32479195a3a1e4cf8bb572cb",
-      "git_blob_sha": "ffb3256acab6673c3c517539e367e08ac9deb1a5"
+      "size_bytes": 248740,
+      "sha256": "6557017c71949c847e05caeb755e1d33b627efd6201e7b0d228521757bdbf31f",
+      "git_blob_sha": "02b93dffd3324fac1bf64711854be593eb247711"
     },
     {
-      "path": "docs/screenshots/capital-profile-v0.2.0.png",
+      "path": "docs/screenshots/capital-profile-v0.2.1.png",
       "source_file": "SYNTHETIC-ui-capital-profile.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 289620,
-      "sha256": "66a677f53e7472183dccbe8cc728fed047695a5cb18d2deead291c614f7e7c17",
-      "git_blob_sha": "f0a3c852370a859fb8555bbecf1133f0044f2dda"
+      "size_bytes": 295354,
+      "sha256": "ff7db86b0b03dc0a0697aabcf16a9f472e967da8abd2510b51e5c6d8f15ad019",
+      "git_blob_sha": "c04ff99e80e75a2ba6885b54120855a66d1cd007"
     },
     {
-      "path": "docs/screenshots/realtime-v0.2.0.png",
+      "path": "docs/screenshots/realtime-v0.2.1.png",
       "source_file": "SYNTHETIC-ui-realtime-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 246872,
-      "sha256": "63b89c76b40e29c8ca6cc55f3bd82454427bc659e372350419c421cf2346b160",
-      "git_blob_sha": "7d3cd98531fbda2e9906134871e0d5ea3910252f"
+      "size_bytes": 246578,
+      "sha256": "bd522c15cf6ec59d7b1644b0338378bc7f311880d653afb9420957650f73b1e7",
+      "git_blob_sha": "091657b18fe70d3784241979dee4a7b7e767ac6b"
     },
     {
-      "path": "docs/screenshots/live-v0.2.0.png",
+      "path": "docs/screenshots/live-v0.2.1.png",
       "source_file": "SYNTHETIC-ui-live.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 241627,
-      "sha256": "0da2b18a9d9d634e2e91249fe08a1bf864293e6992efb68d371522be7e3b1ff6",
-      "git_blob_sha": "fb8369da91e88ee3d96d0d7b518f18fe7adb67c9"
+      "size_bytes": 246432,
+      "sha256": "2f819e8336d4b3e92c885c4991820d7bd91db8ea36e3da334d56295125d0e155",
+      "git_blob_sha": "863f3b8673abcac0246eb2118f17ad02d4b20f62"
     },
     {
-      "path": "docs/screenshots/connection-v0.2.0.png",
+      "path": "docs/screenshots/connection-v0.2.1.png",
       "source_file": "SYNTHETIC-ui-connection.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 227720,
-      "sha256": "9a3a7f6c5c139677dcff1fbb5f71b2b67b09830995bb85df793ea0c0a917262e",
-      "git_blob_sha": "295fb97242017620eb78ba2aa774934d1871f331"
+      "size_bytes": 228736,
+      "sha256": "369f3e2328d4593566f7571bba85d84e1f9a8b807fa57d0801767e4449bc8793",
+      "git_blob_sha": "47e2bbf8a8b3059e4023ca1f3097bcec30d8bb97"
     },
     {
-      "path": "docs/screenshots/codex-history-v0.2.0.png",
+      "path": "docs/screenshots/codex-history-v0.2.1.png",
       "source_file": "SYNTHETIC-ui-codex-history.png",
       "width": 1920,
       "height": 1080,
-      "size_bytes": 317475,
-      "sha256": "4367cea7e7f368e00d18f60841866381714a1469cebce325cc1394fa7158522a",
-      "git_blob_sha": "f81f87c593cfd1ca675668cbe236baaeb104dd76"
+      "size_bytes": 321457,
+      "sha256": "653ac457f0d749d6a1912c74603c07f910fcc25880c5442f4891c7181bdca67a",
+      "git_blob_sha": "39fefe89fef0c1aeefb9fe33b0dc3776188c9c08"
+    },
+    {
+      "path": "docs/screenshots/smart-conditions-v0.2.1.png",
+      "source_file": "SYNTHETIC-ui-smart-conditions-1600.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 261627,
+      "sha256": "4955d8bf5a1ab3bd32515f656e86a4f431a6b94113bc0cace3eca68431d0c0f7",
+      "git_blob_sha": "4db4f00e60d973c67cd4e8e076f34ce687c9bff5"
     }
   ]
 }
