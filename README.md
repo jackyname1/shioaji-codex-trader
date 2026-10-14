@@ -19,20 +19,24 @@
 
 歷史回放：日期、本金、播放時鐘、圖表、每日選股、費稅與成交紀錄集中在同一工作台。
 
-![v0.1.1 歷史回放工作台，隔離測試資料](docs/screenshots/workbench-v0.1.1.png)
+![v0.2.0 歷史回放工作台，隔離測試資料](docs/screenshots/workbench-v0.2.0.png)
+
+回測資金配置：平衡配置、計算基準與成本門檻可直接查看。
+
+![v0.2.0 回測資金配置，隔離測試資料](docs/screenshots/capital-profile-v0.2.0.png)
 
 即時模擬：以真實行情與虛擬資金演練策略、條件檢查、股數確認及委託核對。
 
-![v0.1.1 即時模擬版面，隔離測試資料](docs/screenshots/realtime-v0.1.1.png)
+![v0.2.0 即時模擬版面，隔離測試資料](docs/screenshots/realtime-v0.2.0.png)
 
 實盤帳戶及 API／CA 設定：截圖使用隔離資料展示欄位。
 
-![v0.1.1 實盤帳戶版面，隔離測試資料](docs/screenshots/live-v0.1.1.png)
-![v0.1.1 API 與 CA 設定，隔離測試資料](docs/screenshots/connection-v0.1.1.png)
+![v0.2.0 實盤帳戶版面，隔離測試資料](docs/screenshots/live-v0.2.0.png)
+![v0.2.0 API 與 CA 設定，隔離測試資料](docs/screenshots/connection-v0.2.0.png)
 
 完整 Codex 紀錄可搜尋及匯出 JSON，包含快照、正式推理摘要、結構化回覆、用量、核對結果與安全故障代碼。
 
-![v0.1.1 完整 Codex 紀錄，隔離測試資料](docs/screenshots/codex-history-v0.1.1.png)
+![v0.2.0 完整 Codex 紀錄，隔離測試資料](docs/screenshots/codex-history-v0.2.0.png)
 
 ## 開始使用
 

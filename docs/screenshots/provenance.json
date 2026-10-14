@@ -1,66 +1,67 @@
 {
-  "app_version": "0.1.1",
+  "app_version": "0.2.0",
   "platform": "Windows x64",
-  "data": "isolated synthetic fixtures",
-  "source_commit": "372ca1089d2b81f00134b7c634799ca202ee03ce",
-  "workflow_run": 38411725657,
-  "artifact_id": 11822641981,
-  "artifact_sha256": "180c9d81fb8e799739defcc859ca0bc023a6b58963aa1947338304d5110b3a77",
+  "fixture": "isolated synthetic GUI smoke test; no user credentials or brokerage orders",
+  "source_commit": "0995e60198df7d32520a040b3bdfda30674c6023",
+  "workflow_run_id": 38491136632,
+  "workflow_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/38491136632",
+  "artifact_id": 11861986546,
+  "artifact_name": "Workbench-screenshots",
+  "artifact_zip_sha256": "ac2541a8f64b6612ab4b0939e57a3f8d90e17af4db132f45175d9a572b392fa0",
   "images": [
     {
-      "path": "docs/screenshots/workbench-v0.1.1.png",
+      "path": "docs/screenshots/workbench-v0.2.0.png",
       "source_file": "SYNTHETIC-ui-paper-1600.png",
-      "bytes": 244240,
-      "sha256": "ecb0510a76fa20362d929c321fbc8be1e9808ac844da147077c0a45c8f3cdf76",
-      "git_sha": "52e3687efdb1ed3e80b1d424fd62ec6f06df33c3",
-      "dimensions": [
-        1600,
-        960
-      ]
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 247522,
+      "sha256": "f57d192ea81efb5fc094d4b05652e72b7bf4d75b32479195a3a1e4cf8bb572cb",
+      "git_blob_sha": "ffb3256acab6673c3c517539e367e08ac9deb1a5"
     },
     {
-      "path": "docs/screenshots/realtime-v0.1.1.png",
+      "path": "docs/screenshots/capital-profile-v0.2.0.png",
+      "source_file": "SYNTHETIC-ui-capital-profile.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 289620,
+      "sha256": "66a677f53e7472183dccbe8cc728fed047695a5cb18d2deead291c614f7e7c17",
+      "git_blob_sha": "f0a3c852370a859fb8555bbecf1133f0044f2dda"
+    },
+    {
+      "path": "docs/screenshots/realtime-v0.2.0.png",
       "source_file": "SYNTHETIC-ui-realtime-1600.png",
-      "bytes": 242721,
-      "sha256": "3292f807bdd2658232d63d7d717e2137686255f42f8b87a3baacab181a99a300",
-      "git_sha": "500700d6184cef743b1244538e5d596eacba964e",
-      "dimensions": [
-        1600,
-        960
-      ]
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 246872,
+      "sha256": "63b89c76b40e29c8ca6cc55f3bd82454427bc659e372350419c421cf2346b160",
+      "git_blob_sha": "7d3cd98531fbda2e9906134871e0d5ea3910252f"
     },
     {
-      "path": "docs/screenshots/live-v0.1.1.png",
+      "path": "docs/screenshots/live-v0.2.0.png",
       "source_file": "SYNTHETIC-ui-live.png",
-      "bytes": 240792,
-      "sha256": "7f4d7a12e1606683431cd52df5e438e03bac748a3c78538d7c4c641a7bde3b1c",
-      "git_sha": "f15fe1b7536a10ae38e35be14318c9a03b3ff1b1",
-      "dimensions": [
-        1600,
-        960
-      ]
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 241627,
+      "sha256": "0da2b18a9d9d634e2e91249fe08a1bf864293e6992efb68d371522be7e3b1ff6",
+      "git_blob_sha": "fb8369da91e88ee3d96d0d7b518f18fe7adb67c9"
     },
     {
-      "path": "docs/screenshots/connection-v0.1.1.png",
+      "path": "docs/screenshots/connection-v0.2.0.png",
       "source_file": "SYNTHETIC-ui-connection.png",
-      "bytes": 225837,
-      "sha256": "d18214b0051938efff9d370cea2186b988e32c4886d53cd16518ce243b97f19f",
-      "git_sha": "d999158a76c631bc91465875f4734762f02e6d73",
-      "dimensions": [
-        1600,
-        960
-      ]
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 227720,
+      "sha256": "9a3a7f6c5c139677dcff1fbb5f71b2b67b09830995bb85df793ea0c0a917262e",
+      "git_blob_sha": "295fb97242017620eb78ba2aa774934d1871f331"
     },
     {
-      "path": "docs/screenshots/codex-history-v0.1.1.png",
+      "path": "docs/screenshots/codex-history-v0.2.0.png",
       "source_file": "SYNTHETIC-ui-codex-history.png",
-      "bytes": 317029,
-      "sha256": "fb191c62573085152542efea463e7d8e678272d31790e457baffbc3d30b8ea56",
-      "git_sha": "21cd273f39a12a6750369e5ac71a5b773e04a840",
-      "dimensions": [
-        1920,
-        1080
-      ]
+      "width": 1920,
+      "height": 1080,
+      "size_bytes": 317475,
+      "sha256": "4367cea7e7f368e00d18f60841866381714a1469cebce325cc1394fa7158522a",
+      "git_blob_sha": "f81f87c593cfd1ca675668cbe236baaeb104dd76"
     }
   ]
 }
