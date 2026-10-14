@@ -90,7 +90,7 @@ export const ScreeningSchema = z.strictObject({
   return20_min: decimal.refine(v => d(v).gte(-1) && d(v).lte(2)),
   entry: z.strictObject({
     signal: z.enum(['TREND', 'BREAKOUT20', 'PULLBACK20']),
-    allocation_fraction: positiveFraction.refine(v => d(v).lte('.10')),
+    allocation_fraction: positiveFraction.refine(v => d(v).lte('.20')),
     max_ma20_distance: positiveFraction.refine(v => d(v).lte('.10')),
     stop_fraction: positiveFraction.refine(v => d(v).gte('.02') && d(v).lte('.15')),
     take_profit_fraction: positiveFraction.refine(v => d(v).gte('.03') && d(v).lte('.50')),
@@ -120,6 +120,10 @@ export const SettingsSchema = z.strictObject({
   manage_quote_subscriptions: z.boolean().default(true),
   stock_account_index: quantity.max(50).default(0),
   min_cash_fraction: fraction.default('0.25'), max_order_fraction: positiveFraction.default('0.10'),
+  order_budget_basis:z.enum(['EQUITY','AFTER_RESERVE']).default('EQUITY'),
+  target_exposure_fraction:fraction.default('0.50'),
+  min_entry_reward_risk:nonnegative.refine(v=>d(v).lte(10)).default('0'),
+  max_trade_risk_fraction:fraction.default('0'),
   max_symbol_fraction: positiveFraction.default('0.20'), max_exposure_fraction: positiveFraction.default('0.75'),
   max_daily_buy_fraction: positiveFraction.default('0.20'), max_daily_buy_orders: quantity.min(1).max(100).default(5),
   daily_loss_fraction: positiveFraction.default('0.02'), price_deviation_fraction: positiveFraction.default('0.03'),
@@ -155,6 +159,8 @@ export function storedSettings(raw: unknown): Settings {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return SettingsSchema.parse({});
   const value = { ...raw } as Record<string, unknown>;
   delete value.fee_verified; delete value.settlement_debit_sign;
+  // Preserve the effective limit of pre-0.2 saved profiles; the replay preset is separate.
+  if(value.order_budget_basis===undefined)value.order_budget_basis='AFTER_RESERVE';
   return SettingsSchema.parse(value);
 }
 export const SessionSchema = z.strictObject({
@@ -179,6 +185,7 @@ export interface Snapshot {
     daily_baseline_equity?:string|null;daily_loss_amount?:string|null;daily_loss_ratio?:string|null };
   universe: Candidate[]; features: Record<string, Features>; hard_limits: Record<string, unknown>;
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
+  capital?:import('./capital.js').CapitalSnapshot;
   news: unknown[]; data_limitations: string[];
   instruments?:Record<string,Instrument>;
   data_readiness?:{pool_count:number;history_ready:number;eligible_symbols:string[];history_issues:{symbol:string;issue:string}[]};

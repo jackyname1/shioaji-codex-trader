@@ -4,6 +4,7 @@ import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {resetRelease} from './reset-release.mjs';
 import {validateSignatureReport} from './signature-report.mjs';
+import {verifyPublishedRelease} from './verify-published-release.mjs';
 
 const repository = 'jackyname1/shioaji-codex-trader';
 const commit = process.env.RELEASE_COMMIT;
@@ -59,8 +60,9 @@ if (tagObject && (tagObject.type !== 'commit' || tagObject.sha !== commit)) {
 }
 if (existing && !existing.draft) {
   if (!tagObject) throw new Error('The published release has no verifiable Git tag. Create a new version.');
-  // An identical rerun is read-only. Published tags, notes and download files are never replaced.
-  await verifyAssets(existing);
+  // Windows builds and screenshot/demo timestamps can differ on a same-commit rerun.
+  // Verify the existing immutable release against its own manifest; never replace it.
+  verifyPublishedRelease(existing,{gh,repository,names,version:packageJson.version,executable});
   console.log(`Verified existing ${tag}; no published assets changed.`);
 } else {
 if (existing?.immutable) throw new Error('The release draft is immutable. Create a new version.');

@@ -3,6 +3,8 @@ import { Decimal } from 'decimal.js';
 import { active, d, equity, remaining, type Account, type Decision, type Features, type Instrument,
   type Order, type Quote, type Settings, type SmartSpec } from './models.js';
 import { Risk, fee, roundPrice } from './risk.js';
+import {entryRiskIssues,entryQualityIssues,roundTripEstimate} from './costs.js';
+export {roundTripEstimate} from './costs.js';
 
 export const ExecutionAdviceSchema=z.strictObject({
   request_id:z.string().min(1),symbol:z.string().regex(/^[0-9A-Z]{4,8}$/),
@@ -18,17 +20,8 @@ export interface ExecutionTicket {
 }
 export interface ExecutionLot {
   lot:'ODD'|'COMMON';quote:Quote;limit_price:string;min_price:string;max_price:string;
-  step:number;max_shares:number;reasons:string[];
+  step:number;min_shares?:number;max_shares:number;reasons:string[];
   cost_at_max_shares?:ReturnType<typeof roundTripEstimate>;
-}
-export function roundTripEstimate(shares:number,buyPrice:string,targetPrice:string|null,s:Settings){
-  const entry=d(buyPrice).times(shares),buyFee=fee(entry,s);
-  const target=targetPrice===null?null:d(targetPrice).times(shares);
-  const sellFee=target===null?null:fee(target,s),tax=target===null?null:target.times(s.sell_tax_rate).ceil();
-  const costs=sellFee===null?null:d(buyFee).plus(sellFee).plus(tax!);
-  return {shares,buy_price:buyPrice,target_price:targetPrice,buy_fee:buyFee.toFixed(),
-    estimated_sell_fee:sellFee?.toFixed()??null,estimated_sell_tax:tax?.toFixed()??null,
-    estimated_total_costs:costs?.toFixed()??null,estimated_net_target_gain:target===null?null:target.minus(entry).minus(costs!).toFixed()};
 }
 export interface ExecutionRequest {
   request_id:string;asof:string;triggered_at:string;symbol:string;action:'BUY'|'SELL';purpose:Order['purpose'];
@@ -38,6 +31,7 @@ export interface ExecutionRequest {
     open_orders:{symbol:string;action:string;shares:number;limit_price:string}[];daily_buy_count:number;daily_buy_amount:string};
   lots:ExecutionLot[];features?:Features;instrument:Instrument;hard_limits:Record<string,unknown>;
   historical_replay:boolean;
+  capital?:import('./capital.js').CapitalSnapshot;
 }
 export const executionSettingsKey=(s:Settings):string=>JSON.stringify(Object.entries(s)
   .filter(([key])=>!['start_minimized','keep_awake'].includes(key)).sort(([a],[b])=>a.localeCompare(b)));
@@ -68,6 +62,7 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     const reasons=risk.check({...ticket.order,lot,shares,limit_price:price},account,q,instrument,now,baseline,false,lastTrade);
     if(ticket.allocation_fraction&&d(price).times(shares).plus(fee(d(price).times(shares),s)).gt(equity(account).times(ticket.allocation_fraction)))
       reasons.push('超過 Codex 本輪配置上限');
+    if(ticket.order.action==='BUY')reasons.push(...entryRiskIssues(shares,price,ticket.smart,account,s));
     return reasons;
   };
   const reasons=test(step);
@@ -79,16 +74,27 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     let lo=1,hi=q.odd?999:999;
     while(lo<=hi){const mid=Math.floor((lo+hi)/2);if(!test(mid*step).length){units=mid;lo=mid+1;}else hi=mid-1;}
   }
-  return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,max_shares:units*step,reasons,
-    ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,ticket.smart?.take_profit??null,s)}:{})};
+  let minimum=units?step:0;
+  if(ticket.order.action==='BUY'&&units&&d(s.min_entry_reward_risk).gt(0)){
+    const atMaximum=entryQualityIssues(units*step,price,ticket.smart,s);
+    // Fee/tax rounding can make adjacent quantities differ: examine actual lot units.
+    while(units&&entryQualityIssues(units*step,price,ticket.smart,s).length)units--;
+    if(!units){minimum=0;reasons.push(...atMaximum);}
+    else {let first=1;while(first<units&&entryQualityIssues(first*step,price,ticket.smart,s).length)first++;minimum=first*step;}
+  }
+  return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,min_shares:minimum,max_shares:units*step,reasons,
+    ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,ticket.smart?.take_profit??null,s,ticket.smart?.stop_price??null)}:{})};
 }
 export function executionPrompt(request:ExecutionRequest):string {
   return `你是台灣現股交易數量確認器。本次已由程式確認 Codex 先前設定的條件觸發。
 只能根據這份當前快照決定交易股數及限價，不得使用任何工具、查詢外部資料、改變策略、股票或買賣方向。
 request_id、symbol 必須完全相符。action 只能沿用指定 BUY / SELL，或 HOLD 放棄本次行動。
 shares 一律是股數，不是張數；一張=1000股。ODD 是 1–999 股；COMMON 只能使用 1000 股倍數且必須有可用 COMMON 範圍。
-股數不得超過所選 lots.max_shares；限價必須在 min_price / max_price 內並符合台股跳動單位。
+股數須介於所選 lots.min_shares 與 max_shares；限價必須在 min_price / max_price 內並符合台股跳動單位。
 max_shares 是硬性風控上限，不是要求用滿；根據目前現金、保留現金、交割款、掛單占用、持倉集中度與風險決定較合適數量。
+capital.order_limit_twd 是程式已算好的單筆本金上限，不要另扣一次現金保留；capital.preferred_order_twd 是目標持倉不足時的配置參考。
+有合格訊號且未達目標持倉時，優先以配置參考與單筆停損預算選擇股數，縮小部位須說明具體風險，不要只沿用策略階段的小額參考股數。
+目標持倉是軟性參考，訊號、成本或風險不合格仍應 HOLD。縮小股數仍需達到 min_entry_reward_risk，停損含費稅不得超過 capital.max_trade_loss_twd（null 表示未啟用）。
 cost_at_max_shares 是該上限數量按目前買價與停利目標估算的雙邊手續費、賣出稅與淨價差，不代表保證獲利；縮小數量時最低手續費未必同比減少。
 BUY 必須再按你選定股數估算成本，不能只看價格百分比；若目標價差不足覆蓋成本或資料不足，應 HOLD 並說明。停利目標為 null 時不得編造目標或預期獲利。
 SELL 只能使用目前 sellable 的可賣庫存；今日新增零股不得當沖，不能借券、融資或賣空。

@@ -31,6 +31,12 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
   if (!(expiry > now.getTime() && expiry <= now.getTime() + settings.plan_max_minutes * 60000)) throw new Error('計畫有效期限不符');
   const universe = new Set(snapshot.universe.map(x => x.symbol));
   const candidates = new Set(a.candidates), held = new Set(snapshot.account.positions.map(x => x.symbol));
+  if(snapshot.review_only){
+    if(a.decisions.some(d=>d.action!=='HOLD'))throw new Error('盤後檢討不得產生交易委託');
+    // A review has no execution authority. Discard valid-shaped protection commentary only.
+    // Unknown symbols and malformed fields still fail validation below / in the schema.
+    for(const decision of a.decisions)if(universe.has(decision.symbol)||held.has(decision.symbol))decision.smart=null;
+  }
   if (a.candidates.some(x => !universe.has(x))) throw new Error('候選包含資料範圍以外的股票');
   if(a.candidates.length>settings.watch_max_symbols)throw new Error('候選超過本機觀測股上限');
   // An empty HOLD_ONLY plan is a valid decision. Never force unqualified stocks into a strategy.

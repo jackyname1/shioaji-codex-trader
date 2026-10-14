@@ -81,7 +81,7 @@ test('rule sizing uses Decimal budget and stock ticks, odd-lot default and expli
   assert.equal(ruleEntry(p,w,b.features[w.symbol],{...quote(),simulated:true},a,s,now).decision,undefined);
 });
 test('automatic size fits investable assets, reserved cash and hard symbol/exposure/day budgets before risk recheck',()=>{
-  const st=new Store(':memory:');try{const s=settings(),b=bundle(),p=plan();p.analysis.screening!.entry!.allocation_fraction='0.10';
+  const st=new Store(':memory:');try{const s={...settings(),order_budget_basis:'AFTER_RESERVE' as const},b=bundle(),p=plan();p.analysis.screening!.entry!.allocation_fraction='0.10';
     const a=account(),w=selectWatchlist(emptyWatch(),b,s,p,a,[],[],now).entries[0]!,decision=ruleEntry(p,w,b.features[w.symbol],quote(),a,s,now).decision!;
     assert.ok(Number(decision.limit_price)*decision.shares<=7500);
     assert.deepEqual(new Risk(s,new TradingCalendar(st)).check(order({shares:decision.shares,limit_price:decision.limit_price}),a,quote(),instrument(),now,'100000'),[]);

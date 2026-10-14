@@ -13,8 +13,13 @@ import {createRequire,syncBuiltinESMExports} from 'node:module';
 import {readFileSync,readdirSync,statSync,appendFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 const kind=process.argv[2],commit=process.env.RELEASE_COMMIT;let created=false;
-const assets=()=>readdirSync('release').map(name=>({name,size:statSync('release/'+name).size,
-  digest:'sha256:'+createHash('sha256').update(readFileSync('release/'+name)).digest('hex')}));
+const data=name=>{
+  if(name==='SHA256SUMS.txt')return readdirSync('release').filter(n=>n!==name).sort().map(n=>createHash('sha256').update(data(n)).digest('hex')+'  '+n).join('\n')+'\n';
+  if(kind==='published-rebuilt'&&name==='SYNTHETIC-demo-backtest.json')return Buffer.from(JSON.stringify({status:'COMPLETED',metrics:{filled_orders:1},created_at:'previous build'}));
+  return readFileSync('release/'+name);
+};
+const assets=()=>readdirSync('release').map((name,index)=>({id:100+index,name,size:Buffer.byteLength(data(name)),
+  digest:'sha256:'+createHash('sha256').update(data(name)).digest('hex')}));
 let release=()=>({id:123,tag_name:'v0.2.1',draft:kind==='new',assets:assets()});
 createRequire(import.meta.url)('node:child_process').execFileSync=(binary,args)=>{
   if(binary!=='gh')throw new Error('External process forbidden');
@@ -28,6 +33,7 @@ createRequire(import.meta.url)('node:child_process').execFileSync=(binary,args)=
       return JSON.stringify({object:{type:'commit',sha:kind==='published-other'?'b'.repeat(40):commit}});
     }
     if(path.endsWith('releases/123'))return JSON.stringify(release());
+    if(path.includes('releases/assets/')){const asset=assets().find(a=>a.id===Number(path.split('/').at(-1)));return data(asset.name).toString('utf8');}
     if(path.endsWith('git/refs')&&args.includes('POST'))return JSON.stringify({object:{type:'commit',sha:commit}});
   }
   if(args[0]==='release'){
@@ -45,9 +51,9 @@ if(kind==='published-modified'){
 await import(process.argv[1]);
 `;
 
-test('new versions publish separately; published tags and differing assets are rejected before any mutation',()=>{
+test('new versions publish separately; same-commit rebuilds verify the published manifest without replacing assets',()=>{
   const script=pathToFileURL(resolve('scripts/publish-release.mjs')).href;
-  for(const kind of ['published-other','published-modified','published-identical','new']){
+  for(const kind of ['published-other','published-modified','published-identical','published-rebuilt','new']){
     const root=mkdtempSync(join(tmpdir(),'release-policy-'));mkdirSync(join(root,'release'));
     const executable=join(root,'release','Shioaji-Codex-Trader-0.2.1-Windows-x64.exe');
     const fd=openSync(executable,'w');ftruncateSync(fd,50*1024*1024+1);closeSync(fd);
@@ -63,11 +69,11 @@ test('new versions publish separately; published tags and differing assets are r
         env:{PATH:process.env.PATH,SystemRoot:process.env.SystemRoot,GH_REPO:'jackyname1/shioaji-codex-trader',GITHUB_REF:'refs/heads/main',RELEASE_COMMIT:'a'.repeat(40)}});
       const calls=readFileSync(join(root,'calls.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line) as string[]);
       const mutations=calls.filter(args=>args.includes('--method')||args[0]==='release'&&['create','upload','edit'].includes(args[1]!));
-      if(kind.startsWith('published-')&&kind!=='published-identical'){
+      if(kind.startsWith('published-')&&!['published-identical','published-rebuilt'].includes(kind)){
         assert.notEqual(result.status,0);assert.equal(mutations.length,0);assert.match(result.stderr,/Increment the package version|asset verification failed/);
       }else{
         assert.equal(result.status,0,result.stderr);
-        if(kind==='published-identical')assert.equal(mutations.length,0);
+        if(kind.startsWith('published-'))assert.equal(mutations.length,0);
         else{assert.ok(mutations.some(args=>args[1]==='create'&&args[2]==='v0.2.1'));assert.equal(mutations.length,4);}
       }
       assert.ok(!calls.some(args=>args.some(a=>a.includes('force=true')||a.includes('v0.2.0'))));

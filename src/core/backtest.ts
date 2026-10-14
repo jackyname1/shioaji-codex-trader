@@ -18,11 +18,13 @@ import { codexIssue,codexFailureKind,shouldHaltCodex,diagnoseCodexFailure } from
 import type {CodexFailureDetail} from './codex-failure.js';
 import type { AnalystEvent } from './codex.js';
 import type { ExecutionRequest,ExecutionAdvice } from './execution.js';
+import {replayCapitalSettings} from './capital.js';
 
 export const BacktestRequestSchema = z.strictObject({
   start:z.string().refine(validDay),end:z.string().refine(validDay),
   initial_cash:z.string().regex(/^\d+(?:\.\d+)?$/).refine(v=>d(v).gte(100)&&d(v).lte('1000000000')).default('100000'),
   source:z.enum(['sample','csv','shioaji']).default('shioaji'),strategy:z.enum(['demo','codex','rules']).default('codex'),
+  capital_profile:z.enum(['balanced','custom']).default('custom'),
   start_time:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('09:00'),
   end_time:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).default('23:59'),
   symbols:z.array(z.string().regex(/^[1-9]\d{3}$/)).max(100).refine(v=>new Set(v).size===v.length,'股票代碼不可重複').default([]),
@@ -62,7 +64,8 @@ export interface BacktestReport {
     filled_orders:number;fill_count:number;winning_sell_fill_pct:string|null;codex_calls:number;decision_successes:number;decision_failures:number;
     risk_refusals:number;watch_scans:number;watch_adds:number;watch_removes:number;monitor_checks:number;
     execution_requests?:number;execution_confirmations?:number;execution_failures?:number;
-    gross_pnl?:string;total_costs?:string;cost_drag_pct?:string;sell_orders?:number};
+    gross_pnl?:string;total_costs?:string;cost_drag_pct?:string;sell_orders?:number;
+    average_exposure_pct?:string;max_exposure_pct?:string;exposure_samples?:number};
   quality:BacktestQuality;positions:import('./models.js').Position[];
   strategy_log:{at:string;review:boolean;stance:string;expires_at:string;summary:string;selected:string[]}[];watch_changes:WatchChange[];
   workflow?:ReplayActivity[];failures?:{at:string;review:boolean;stage:string;issue:string;diagnostic?:CodexFailureDetail}[];normalization?:HistoryDataset['normalization'];
@@ -107,7 +110,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   if(!dataset.synthetic&&request.end>twDay(new Date()))throw new Error('回測結束日不能晚於現在');
   const bounds=replayBounds(request);
   if(bounds.start>bounds.end)throw new Error('回測開始時間不能晚於現在');
-  const settings=SettingsSchema.parse({...base,mode:'demo',auto_execute:true,whole_lots:request.whole_lots,demo_cash:request.initial_cash,
+  const settings=SettingsSchema.parse({...replayCapitalSettings(base,request.capital_profile),mode:'demo',auto_execute:true,whole_lots:request.whole_lots,demo_cash:request.initial_cash,
     decision_interval_minutes:request.decision_interval_minutes,strategy_schedule:request.strategy_schedule,strategy_times:request.strategy_times,
     monitor_interval_seconds:request.monitor_interval_seconds,watch_refresh_minutes:request.watch_refresh_minutes,official_facts_enabled:false,
     codex_enabled:request.strategy==='codex'&&base.codex_enabled});
@@ -161,6 +164,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   let status:BacktestReport['status']='COMPLETED',calls=0,successes=0,failures=0,currentDay='',lastTime=events[0]!.at,peak=d(request.initial_cash),drawdown=d(0),steps=0,checks=0,lastMonitor='',nextEvent='',lastError='';
   let sizeRequests=0,sizeConfirmations=0,sizeFailures=0;
   const timeline:NonNullable<BacktestReport['timeline']>=[];
+  let exposureSum=d(0),maxExposure=d(0),exposureSamples=0;
   const daily:BacktestReport['daily_equity']=[],strategyLog:BacktestReport['strategy_log']=[],completedDays=new Set<string>();
   const workflow:ReplayActivity[]=[],failureLog:NonNullable<BacktestReport['failures']>=[];
   const activity=(at:string,stage:string,message:string,details:Partial<ReplayActivity>={}):void=>{
@@ -274,7 +278,9 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         activity(event.at,'RISK',`${symbol}：${state.reason}`,{symbols:[symbol]});
       if(event.close)await finishDay(day);
       const value=equity(engine.account!);if(value.gt(peak))peak=value;const loss=peak.minus(value).div(peak);if(loss.gt(drawdown))drawdown=loss;
-      if(event.market){timeline.push({at:event.at,equity:value.toFixed(2),cash:engine.account!.cash});}
+      const exposure=value.gt(0)?marketValue(engine.account!).div(value).times(100):d(0);
+      if(exposure.gt(maxExposure))maxExposure=exposure;
+      if(event.market){exposureSum=exposureSum.plus(exposure);exposureSamples++;timeline.push({at:event.at,equity:value.toFixed(2),cash:engine.account!.cash});}
       if(visibleEvent||changed.length||broker.fillCount()>fillCount||clock?.paused||clock&&clock.speed>0){
         onFrame?.(frame(now));progress('REPLAY',`${twClock(now)} 事件已完成，${nextEvent?'準備下一觸發點 '+twClock(new Date(nextEvent)):'正在彙整結果'}`);await yieldToEvents();}
       if(quality.halt_reason)break;}
@@ -288,9 +294,9 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     quality.processed_sessions=daily.length;
     if(sales.length<20)limitations.push(`僅 ${new Set(sales.map(f=>f.order_id)).size} 筆有賣出成交的委託（${sales.length} 筆賣出成交明細），小樣本不能證明策略有效；成交比例不是完整交易勝率`);
     nextEvent='';const finalFrame=frame(now);onFrame?.(finalFrame);
-    return {version:'0.1.0',final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
-      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:'structured-conditions-v4',
-      settings:Object.fromEntries(['min_cash_fraction','max_order_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
+    return {version:'0.2.0',final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
+      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:'capital-and-costs-v5',
+      settings:Object.fromEntries(['min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
         'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','plan_max_minutes','experience_enabled',
         'watch_max_symbols','watch_min_amount','watch_remove_after_scans'].map(k=>[k,settings[k as keyof Settings]])),
       metrics:{initial_cash:request.initial_cash,final_cash:account.cash,settlement_credits:account.settlement_credits,stock_value:marketValue(account).toFixed(2),
@@ -302,7 +308,8 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         winning_sell_fill_pct:sales.length?d(sales.filter(f=>d(f.realized_pnl!).gt(0)).length).div(sales.length).times(100).toFixed(2):null,
         codex_calls:calls,decision_successes:successes,decision_failures:failures,risk_refusals:refusals.n,
         watch_scans:engine.watch.scans,watch_adds:engine.watch.adds,watch_removes:engine.watch.removes,monitor_checks:checks,
-        execution_requests:sizeRequests,execution_confirmations:sizeConfirmations,execution_failures:sizeFailures},
+        execution_requests:sizeRequests,execution_confirmations:sizeConfirmations,execution_failures:sizeFailures,
+        average_exposure_pct:exposureSamples?exposureSum.div(exposureSamples).toFixed(4):'0.0000',max_exposure_pct:maxExposure.toFixed(4),exposure_samples:exposureSamples},
       quality,positions:account.positions,strategy_log:strategyLog,workflow,failures:failureLog,normalization:dataset.normalization,watch_changes:engine.watch.changes,daily_equity:daily,fills,orders:store.orders(),
       reviews:store.reviews('backtest:'+id,now.toISOString(),2000),logs:store.logs(2000),limitations};
   }finally{await engine.close();store.close();}
@@ -313,6 +320,7 @@ export function formatBacktestReport(r:BacktestReport):string{const m=r.metrics;
     `起始資金=${m.initial_cash} 期末淨值=${m.final_equity} 現金=${m.final_cash} 待收交割=${m.settlement_credits} 股票市值=${m.stock_value}`,
     `淨損益=${m.net_pnl} 報酬=${m.return_pct}% 已實現=${m.realized_pnl} 未實現=${m.unrealized_pnl}`,`手續費=${m.fees} 交易稅=${m.taxes} 最大回撤=${m.max_drawdown_pct}%`,
     ...(m.gross_pnl!==undefined?[`費用前損益=${m.gross_pnl} 已支付成本=${m.total_costs} 成本占起始資金=${m.cost_drag_pct}%`]:[]),
+    ...(m.average_exposure_pct!==undefined?[`持倉比例：行情時點平均=${m.average_exposure_pct}% 最高=${m.max_exposure_pct}%；配置=${r.request.capital_profile}`]:[]),
     `成交委託=${m.filled_orders} 成交明細=${m.fill_count} 獲利賣出成交比例=${m.winning_sell_fill_pct??'無賣出'}%`,
     `Codex 呼叫=${m.codex_calls} 有效分析／檢討=${m.decision_successes} 分析失敗=${m.decision_failures} 風控拒絕=${m.risk_refusals}`,
     `觀測更新=${m.watch_scans} 加入=${m.watch_adds} 移除=${m.watch_removes} 偵測=${m.monitor_checks}`,

@@ -491,6 +491,18 @@ async function smokeTest(): Promise<void> {
     if(!await window.webContents.executeJavaScript(`(()=>{const note=document.querySelector('#bt-progress-message');return note.getBoundingClientRect().height>0&&getComputedStyle(note).visibility!=='hidden'&&note.textContent.includes('近似成交');})()`))throw new Error('精簡與寬版回測近似成交警示不可見');
     if(width===1600)await verifyChartInteraction();
     await capture(`SYNTHETIC-ui-paper-${width}.png`,width,height);
+    if(width===1600){
+      const capital=await window.webContents.executeJavaScript(`(()=>{
+        const profile=document.querySelector('#bt-capital-profile');
+        document.querySelector('#replay-settings-dialog').showModal();
+        return {profile:profile.value,options:[...profile.options].map(o=>o.value),metrics:document.querySelector('#bt-capital').textContent,
+          basis:document.querySelector('#s-order-basis').value};
+      })()`);
+      if(capital.profile!=='balanced'||capital.options.join(',')!=='balanced,custom'||!capital.metrics.includes('持倉')
+        ||!['EQUITY','AFTER_RESERVE'].includes(capital.basis))throw new Error('回測資金配置、持倉比例與單筆計算基準介面未通過');
+      await capture('SYNTHETIC-ui-capital-profile.png',width,height);
+      await window.webContents.executeJavaScript(`document.querySelector('#replay-settings-dialog').close()`);
+    }
   }
   await service.command('auto off');
   const recordedAt=new Date().toISOString();

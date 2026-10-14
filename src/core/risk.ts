@@ -2,6 +2,9 @@ import { Decimal } from 'decimal.js';
 import { active, ageSeconds, d, equity, marketValue, remaining, twDay,
   type Account, type Instrument, type Order, type Quote, type Settings } from './models.js';
 import { TradingCalendar } from './calendar.js';
+import {orderBudget} from './capital.js';
+import {fee} from './costs.js';
+export {fee} from './costs.js';
 
 export function tickSize(price: Decimal.Value): Decimal {
   const p = d(price);
@@ -10,8 +13,6 @@ export function tickSize(price: Decimal.Value): Decimal {
   return d(5);
 }
 export const alignedPrice = (price: Decimal.Value): boolean => d(price).gt(0) && d(price).mod(tickSize(price)).eq(0);
-export const fee = (amount: Decimal.Value, settings: Settings): Decimal =>
-  Decimal.max(settings.minimum_fee, d(amount).times(settings.fee_rate).ceil());
 export const roundPrice = (price: Decimal.Value, down = true): string => {
   const tick = tickSize(price), units = d(price).div(tick);
   return (down ? units.floor() : units.ceil()).times(tick).toFixed();
@@ -68,7 +69,7 @@ export class Risk {
     const amount = d(order.limit_price).times(order.shares), cost = amount.plus(fee(amount, s));
     if (cost.gt(available)) reasons.push('資金不足，已扣除交割款及掛單占用');
     if (available.minus(cost).lt(e.times(s.min_cash_fraction))) reasons.push('買進後現金保留不足');
-    if (amount.gt(e.times(d(1).minus(s.min_cash_fraction)).times(s.max_order_fraction))) reasons.push('超過單筆投入上限');
+    if (amount.gt(orderBudget(e,s))) reasons.push('超過單筆投入上限');
     const p = account.positions.find(p => p.symbol === order.symbol);
     const held = p ? d(p.last_price).times(p.shares) : d(0);
     const symbolReserved = buys.filter(o => o.symbol === order.symbol).reduce((sum, o) => sum.plus(d(o.limit_price).times(remaining(o))), d(0));
