@@ -39,6 +39,17 @@ let trayTimer:NodeJS.Timeout|undefined,nativeStatusKey='';
 let nativeOverlayClears=0;
 let quitting = false, initialError = '', blocker: number | undefined;
 const smoke = process.argv.includes('--smoke-test');
+let smokeDeadline:NodeJS.Timeout|undefined;
+let smokeChecksCompleted=false;
+const smokeTrace:{stage:string;at:string}[]=[];
+function smokeMark(stage:string,error=''):void{
+  if(!smoke)return;
+  smokeTrace.push({stage,at:new Date().toISOString()});
+  const root=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(root,{recursive:true});
+  writeFileSync(join(root,'SMOKE-RESULT.json'),JSON.stringify({version:app.getVersion(),packaged:app.isPackaged,
+    status:stage==='PASSED'?'PASSED':stage==='FAILED'?'FAILED':'RUNNING',stage,error,trace:smokeTrace},null,2));
+  console.log('GUI smoke stage: '+stage);
+}
 const argsMode = process.argv.find(a => a.startsWith('--mode='))?.slice(7);
 let mode = SettingsSchema.shape.mode.parse(smoke?'demo':argsMode==='live'?'live':'paper');
 let simulationScope:'realtime'|'replay'=smoke?'replay':'realtime';
@@ -65,6 +76,9 @@ else {
   app.on('window-all-closed',() => { /* tray continues */ });
   app.on('before-quit',event => { if (!quitting) { event.preventDefault(); void exit(); } });
   void app.whenReady().then(async () => {
+    if(smoke){smokeMark('INITIALIZING');smokeDeadline=setTimeout(()=>{
+      smokeMark('FAILED','GUI smoke internal deadline at '+smokeTrace.at(-1)?.stage);app.exit(1);
+    },240000);smokeDeadline.unref();}
     dataRoot = smoke ? mkdtempSync(join(tmpdir(),'shioaji-ts-smoke-')) : join(app.getPath('userData'),'state');
     if(!smoke)try{const p=JSON.parse(readFileSync(join(dataRoot,'desktop-settings.json'),'utf8')) as typeof preferences;
       SettingsSchema.shape.mode.parse(p.last_mode);for(const c of Object.values(p.connections))if(c){loopbackOrigin(c.base_url);SettingsSchema.shape.stock_account_index.parse(c.stock_account_index);}
@@ -92,7 +106,8 @@ else {
     if (service?.engine.settings.keep_awake) blocker = powerSaveBlocker.start('prevent-app-suspension');
     if (service?.engine.settings.start_minimized && tray && !smoke) window!.hide();
     if (smoke) await smokeTest();
-  }).catch(error => { console.error(smoke ? error : '桌面啟動失敗'); app.exit(1); });
+  }).catch(error => {if(smoke){if(smokeDeadline)clearTimeout(smokeDeadline);smokeMark('FAILED',error instanceof Error?error.message:'GUI smoke failed');}
+    console.error(smoke ? error : '桌面啟動失敗'); app.exit(1); });
 }
 async function connect(nextMode: Settings['mode'],override?:Settings,start=true): Promise<void> {
   const old=service;service=undefined;initialError='';mode=nextMode;
@@ -436,6 +451,7 @@ function codexModels():string[]{
 async function smokeTest(): Promise<void> {
   if (!window || !service || initialError || mode !== 'demo') throw new Error('桌面測試未啟動');
   if (process.platform === 'win32' && !tray) throw new Error('Windows 系統匣未啟動');
+  smokeMark('CODEX_NATIVE');
   const version = await promisify(execFile)(bundledCodexPath(),['--version'],{timeout:20000,windowsHide:true});
   if (!version.stdout.includes('codex')) throw new Error('Codex 打包執行檔無法啟動');
   const isolatedAuth=join(dataRoot,'smoke-auth');prepareCodexProfile(isolatedAuth,join(dataRoot,'empty-auth'));
@@ -444,25 +460,27 @@ async function smokeTest(): Promise<void> {
   try{await promisify(execFile)(bundledCodexPath(),['-c','cli_auth_credentials_store="file"','login','status'],{env:isolatedEnv,timeout:20000,windowsHide:true});}
   catch(error){const result=error as {code?:number;stdout?:string;stderr?:string};signedOut=result.code===1&&/not logged in/i.test((result.stdout??'')+(result.stderr??''));}
   if(!signedOut)throw new Error('打包後 Codex 隔離登入狀態未通過');
+  smokeMark('SHIOAJI_NATIVE');
   if(!process.argv.includes('--ui-only')||app.isPackaged){const binary=await brokerPath();
     const native=await promisify(execFile)(binary,['--version'],{timeout:20000,windowsHide:true,env:{...process.env,PATH:''}});
     if(!native.stdout.includes('1.7.7'))throw new Error('內建 Shioaji 版本未通過');
     const help=await promisify(execFile)(binary,['server','start','--help'],{timeout:20000,windowsHide:true});
     if(!help.stdout.includes('--no-open'))throw new Error('內建 Shioaji 啟動方式未通過');
   }
+  smokeMark('RENDERER');
   if (!window.webContents.isLoading()) await verifyRenderer();
   else await new Promise<void>((resolve,reject) => {
     window!.webContents.once('did-finish-load',() => { void verifyRenderer().then(resolve,reject); });
     window!.webContents.once('did-fail-load',() => reject(new Error('視窗未載入')));
   });
-  await service.command('auto on'); await service.command('pause');
+  smokeMark('TRADING');await service.command('auto on'); await service.command('pause');
   if (!service.engine.pausedEntries || !service.engine.settings.auto_execute) throw new Error('指令測試失敗');
   await service.command('resume');
   const virtual=new Date('2026-10-08T10:00:00+08:00'),snapshot=await service.engine.snapshot(virtual);
   await service.engine.activate(demoAnalysis(snapshot,service.engine.settings,virtual),snapshot,virtual);
   for(let n=0;n<4;n++)await service.engine.tick(new Date(virtual.getTime()+n*3000));
   if(!service.engine.watch.entries.length||!service.store.orders().some(o=>o.filled>0))throw new Error('打包後動態觀測與條件執行未通過');
-  backtest.start({start:'2026-10-01',end:'2026-10-08',source:'sample',strategy:'demo',initial_cash:'100000',strategy_schedule:'interval',comparison_intervals:[120,180]},service.engine.settings);
+  smokeMark('REPLAY');backtest.start({start:'2026-10-01',end:'2026-10-08',source:'sample',strategy:'demo',initial_cash:'100000',strategy_schedule:'interval',comparison_intervals:[120,180]},service.engine.settings);
   await backtest.wait();
   if(!backtest.report||backtest.report.status!=='COMPLETED'||!backtest.report.metrics.filled_orders)throw new Error('打包後歷史模擬未通過');
   const metrics=backtest.report.metrics;
@@ -481,13 +499,14 @@ async function smokeTest(): Promise<void> {
   const range=await window.webContents.executeJavaScript(`({start:document.querySelector('#chart-start').value,end:document.querySelector('#chart-end').value,schedule:document.querySelector('#schedule-strategy').textContent})`);
   if(range.start!==backtest.report.request.start||range.end!==backtest.report.request.end
     ||range.schedule!==backtest.report.request.decision_interval_minutes+' 分鐘'||backtest.progress.total_runs!==undefined)throw new Error('切換歷史報表日期與排程未通過');
-  window.webContents.debugger.attach('1.3');
+  smokeMark('REPLAY_GUI');window.webContents.debugger.attach('1.3');
   const artifacts=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(artifacts,{recursive:true});
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
     await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
     await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-form').requestSubmit();})()`);
     await new Promise(resolve=>setTimeout(resolve,1800));
     await verifyLayout('paper','replay');
+    if(width===1600)await verifyPositionSelection('replay');
     if(!await window.webContents.executeJavaScript(`(()=>{const note=document.querySelector('#bt-progress-message');return note.getBoundingClientRect().height>0&&getComputedStyle(note).visibility!=='hidden'&&note.textContent.includes('近似成交');})()`))throw new Error('精簡與寬版回測近似成交警示不可見');
     if(width===1600)await verifyChartInteraction();
     await capture(`SYNTHETIC-ui-paper-${width}.png`,width,height);
@@ -498,7 +517,7 @@ async function smokeTest(): Promise<void> {
         return {profile:profile.value,options:[...profile.options].map(o=>o.value),metrics:document.querySelector('#bt-capital').textContent,
           basis:document.querySelector('#s-order-basis').value};
       })()`);
-      if(capital.profile!=='balanced'||capital.options.join(',')!=='balanced,custom'||!capital.metrics.includes('持倉')
+      if(capital.profile!=='active'||capital.options.join(',')!=='active,balanced,custom'||!capital.metrics.includes('持倉')
         ||!['EQUITY','AFTER_RESERVE'].includes(capital.basis))throw new Error('回測資金配置、持倉比例與單筆計算基準介面未通過');
       await capture('SYNTHETIC-ui-capital-profile.png',width,height);
       await window.webContents.executeJavaScript(`document.querySelector('#replay-settings-dialog').close()`);
@@ -512,9 +531,11 @@ async function smokeTest(): Promise<void> {
       n===256?{details:{pool_count:20,history_ready:18,eligible_symbols:['9001'],history_issues:[{symbol:'9002',issue:'隔離歷史測試 HTTP 503'}]}}:{})});
   service.analystEvents=service.store.analystEvents();
   await window.webContents.executeJavaScript(`window.trader.simulationScope('realtime')`);
+  smokeMark('PAPER_GUI');
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
     await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
     await new Promise(resolve=>setTimeout(resolve,1300));await verifyLayout('paper','realtime');
+    if(width===1600)await verifyPositionSelection('realtime');
     const realtime=await window.webContents.executeJavaScript(`(async()=>{const state=await window.trader.state();return {cash:Number(document.querySelector('#cash').textContent.replaceAll(',','')),
       runtimeCash:Number(state.runtime.account.cash),replayCash:Number(state.backtest_result.metrics.final_cash),source:document.querySelector('#chart-source').value,
       model:document.querySelector('#codex-effective-model').textContent,summary:document.querySelector('#analyst-stream').textContent,
@@ -523,6 +544,7 @@ async function smokeTest(): Promise<void> {
     if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('不截斷')||!realtime.summary.includes('資料就緒')||!realtime.summary.includes('歷史已就緒 18 檔')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源、資料就緒與完整摘要未通過');
     await capture(`SYNTHETIC-ui-realtime-${width}.png`,width,height);
   }
+  smokeMark('SMART_GUI');
   // Real renderer capture of isolated, explicitly labelled stateful-condition fixtures.
   const smartNow=new Date(),smartSnapshot=await service.engine.snapshot(smartNow),smartAnalysis=demoAnalysis(smartSnapshot,service.engine.settings,smartNow);
   const smartSymbol=smartSnapshot.universe[0]!.symbol,smartPrice=d(smartSnapshot.universe[0]!.last);
@@ -572,9 +594,11 @@ async function smokeTest(): Promise<void> {
   if(!journal.open||journal.count!==260||journal.full!==260||!journal.first||!journal.detail)throw new Error('超過畫面上限的完整 Codex 紀錄未通過');
   await capture('SYNTHETIC-ui-codex-history.png',1920,1080);await window.webContents.executeJavaScript(`document.querySelector('#analyst-history-dialog').close()`);
   mode='live';
+  smokeMark('LIVE_GUI');
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
     await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
     await new Promise(resolve=>setTimeout(resolve,1300));await verifyLayout('live','realtime');
+    if(width===1600)await verifyPositionSelection('realtime');
     await capture(width===1600?'SYNTHETIC-ui-live.png':`SYNTHETIC-ui-live-${width}.png`,width,height);
   }
   const liveUi=await window.webContents.executeJavaScript(`(async()=>({ack:!!document.querySelector('#ack'),button:document.querySelector('#start-live').textContent,
@@ -613,6 +637,28 @@ async function smokeTest(): Promise<void> {
   async function capture(name:string,width:number,height:number):Promise<void>{
     const shot=await window!.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:false,clip:{x:0,y:0,width,height,scale:1}}) as {data:string};
     writeFileSync(join(artifacts,name),Buffer.from(shot.data,'base64'));
+  }
+  async function verifyPositionSelection(source:'replay'|'realtime'):Promise<void>{
+    const expected=await window!.webContents.executeJavaScript(`(()=>{
+      const rows=[...document.querySelectorAll('#positions tbody tr[data-chart-symbol]')];
+      const row=rows.at(-1);if(!row)return null;
+      row.querySelector('td:nth-child(2)').click();return row.dataset.chartSymbol;
+    })()`);
+    await new Promise(resolve=>setTimeout(resolve,1400));
+    const selected=await window!.webContents.executeJavaScript(`({symbol:document.querySelector('#chart-symbol').value,
+      title:document.querySelector('#chart-name').textContent,source:document.querySelector('#chart-source').value,
+      selected:document.querySelector('#positions tr.selected')?.dataset.chartSymbol,
+      cutoff:document.querySelector('#market-chart').dataset.endAt})`);
+    if(!expected||selected.symbol!==expected||!selected.title.includes(expected)||selected.selected!==expected
+      ||selected.source!==(source==='replay'?'replay':'live')||source==='replay'&&Date.parse(selected.cutoff)>Date.parse(backtest.report!.asof))
+      throw new Error('持倉整列點選、主圖與工作台行情來源未同步：'+JSON.stringify(selected));
+    const keyboard=await window!.webContents.executeJavaScript(`(()=>{
+      const row=document.querySelector('#positions tr[data-chart-symbol]');row.focus();row.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));return row.dataset.chartSymbol;
+    })()`);
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    if(!await window!.webContents.executeJavaScript(`document.querySelector('#chart-name').textContent.includes(${JSON.stringify(keyboard)})&&document.querySelector('#positions tr.selected')?.dataset.chartSymbol===${JSON.stringify(keyboard)}`))
+      throw new Error('持倉鍵盤切換主圖未通過');
+    console.log('Electron positions click and keyboard chart selection, '+source+' cutoff: PASS');
   }
   async function verifyChartInteraction():Promise<void>{
     const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
@@ -696,7 +742,8 @@ async function smokeTest(): Promise<void> {
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
   for(const status of ['ready','active','paused','offline'])if(trayIcon(status).isEmpty())throw new Error('原生狀態圖示未打包');
   if(process.platform==='win32'&&(nativeOverlayClears<2||nativeImage.createFromPath(join(directory,'assets/app.ico')).isEmpty()))throw new Error('Windows 固定主圖示與不重疊狀態驗證未通過');
-  console.log('Electron single workspace at 1366/1600/1920, realtime paper/replay/live, complete model journal, masked saved credentials, built-in Shioaji, chart gestures and native status icons: PASS');await verifyConnectionLifecycle();await exit();
+  console.log('Electron single workspace at 1366/1600/1920, realtime paper/replay/live, complete model journal, masked saved credentials, built-in Shioaji, chart gestures and native status icons: PASS');
+  smokeMark('CONNECTION_GUI');await verifyConnectionLifecycle();smokeChecksCompleted=true;smokeMark('EXIT');await exit();
 }
 async function verifyRenderer(): Promise<void> {
   const result = await window!.webContents.executeJavaScript(`(async () => ({ bridge: typeof window.trader?.state === 'function',
@@ -814,5 +861,8 @@ async function exit(): Promise<void> {
   await service?.close(); service = undefined;await nativeConnection?.close();
   if (blocker !== undefined) powerSaveBlocker.stop(blocker);
   tray?.destroy(); window?.destroy();
-  if (smoke) rmSync(dataRoot,{recursive:true,force:true}); app.quit();
+  if (smoke){rmSync(dataRoot,{recursive:true,force:true});if(smokeDeadline)clearTimeout(smokeDeadline);
+    smokeMark(smokeChecksCompleted?'PASSED':'FAILED',smokeChecksCompleted?'':'GUI checks did not complete');
+    if(!smokeChecksCompleted){app.exit(1);return;}}
+  app.quit();
 }

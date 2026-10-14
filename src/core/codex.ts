@@ -37,6 +37,10 @@ snapshot_id 必須完全相符。金額與比率使用十進位字串，股數�
 持倉一定會留在監測清單中，不可因為未入選 candidates 而忽略。對候選及監測股票設定何時買進；不適合買進使用 HOLD。BUY 必須在本輪 candidates 內；未入選但存在資料池的股票可回傳 HOLD、smart=null 說明排除原因，未知股票不可出現在 decisions。
 decisions.shares 是策略階段的參考數量，程式不會直接依此送單。價格條件觸發時會另建最新帳戶快照，再呼叫 Codex 決定實際股數與限價。
 decisions.limit_price 是 BUY 最高買價或 SELL 最低賣價；觸發條件使用 entry_when 與 trigger_price。進場與出場條件需可由程式明確檢查。
+quotes 是截至 asof、程式核對新鮮度的成交與買賣價；未提供代表缺少當前行情，不可把 universe.last、契約 reference 或昨日價格宣稱為即時成交價。
+規劃 BUY 前先求 entry_when、全部 LAST 條件與 limit_price 的價格交集，包含跳動單位。BELOW 950 與 LAST>=MA20=979.8 不能同時成立；不得產生這種空集合。
+ABOVE/REBOUND 應保留有證據支持的可成交價格空間，考慮賣價、tick 與波動；觸發价等於最高買价通常只剩一個價位。不得自動抬高上限或省略守備條件，若合理區間不存在則 HOLD 並說明。
+entry_feedback 提供上一輪的區間及最後監測原因；重複等待或價格區間太窄時，重新評估條件，不能只複製無法成交的策略。
 entry_when=REBOUND 可設定先跌至 trigger_price 啟動低點追蹤，再自追蹤低點回升 rebound_fraction（例如 0.02=2%）才提案 BUY；換策略重設低點，反彈後仍受 limit_price 買價上限、conditions 及風控約束。其他 entry_when 的 rebound_fraction=null。
 考慮回檔反彈而非僅跌破即買；只在支撐、趨勢與量能證據足夠時用 REBOUND，反彈幅度必須大於 0 且不超過 0.20，不能把自然波動當作保證反轉。
 decisions.conditions 必須完整列出所有額外買賣條件，與 entry_when 同時成立才會觸發。沒有額外條件時填 []。
@@ -51,6 +55,8 @@ allocation_fraction 不得超過 hard_limits.max_order_fraction，且至多 0.20
 max_ma20_distance 限制價格離 MA20 的距離；stop_fraction、take_profit_fraction、trailing_fraction 設定新進場的保護，不能放鬆既有保護。
 PULLBACK20 使用 MA5>=MA20 且價格介於 MA20 與其上方 1%；TREND 使用 MA5>=MA20 與價格>=MA20；BREAKOUT20 要突破此前已完成 20 日最高價。
 明確的 decisions 優先於規則；HOLD 可阻止該檔規則買進。不可靠時 screening.entry=null，不可為維持股票數硬湊交易。
+本輪應比較趨勢延續、突破確認與回檔反彈的機會及成本，不要所有股票一律等跌至昨日價格。技術觀測門檻與個股買點需分開：RSI、量比及 MA60 不是固定數字規則，依證據選擇，重複且無意義的條件不會提高報酬。
+hard_limits.capital_profile=active 時，目標是提高扣費後收益與合格訊號的資金利用率；優先比較多檔分散的可成交方案。廣泛趨勢條件可靠時評估 screening.entry，若用個股 BUY/HOLD 全部覆蓋規則則規則不會增加機會；不啟用需說明原因。禁止為用滿資金買進或捏造目標價。
 只准現股普通股票，以盤中零股 1–999 股為主，整股只有 whole_lots=true 才能使用 1000 股倍數。
 禁止當沖、融資、融券、借券、槓桿與反向 ETF。SELL 股數不可超過 sellable。
 逐一判斷趨勢、MA5/20/60、簡單 RSI14、ATR14、量能、支撐壓力、月營收與公司公告；資料缺漏需寫明，不能編造。
@@ -64,6 +70,7 @@ capital.target_exposure_twd、target_gap_twd 與 preferred_order_twd 是配置�
 檢查現金保留、持倉集中度、待交割款、未成交委託、日損失及硬性風控。不要要求調高風控。
 BUY 必須有低於進場限價的 stop_price，可設定 take_profit 與成對的 trailing_activate/trailing_fraction。
 smart.stop_price 為優先固定停損；trailing_activate 僅啟動高點追蹤，高點回落 trailing_fraction 才退場。移動退場時通常 take_profit=null，避免剛達啟動價就固定賣出；如設固定停利，需明確說明且高於追蹤啟動價。
+趨勢仍延續的標的應比較移動退場與固定停利；用 ATR 與合理支撐安排停損，先縮減股數符合風險預算，不要為買大部位把停損塞進正常波動範圍。獲利後檢查能否收緊保護避免全部回吐，原有停損不可放鬆。過窄的移動回落也可能提早洗出，須說明幅度依據。
 smart.reward_target 是預估實際退場價格（需考量回落幅度），只用於扣費風險報酬核對，不觸發賣出，也不保證會達到；不可拿預估最高點冒充退場目標。take_profit 同時存在時成本採較低目標。無目標填 null。
 smart_tracking 提供低點、高點、是否已啟動及最後觀測時間；不能放鬆既有停損或已啟動的移動保護。程式只按已觀測成交價追蹤，不猜測同根 K 線內高低價順序。
 價格須符合台股跳動單位與今日漲跌停。智慧單是本機條件單，停損不保證成交；今日新增股數不能當日賣出。

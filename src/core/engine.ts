@@ -5,6 +5,7 @@ import { Risk, alignedPrice, fee } from './risk.js';
 import { evaluate, updateProtection,trackEntry,entryReady,reboundExit } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
 import { conditionIssue } from './conditions.js';
+import {entryWindow} from './entry-window.js';
 import {capitalSnapshot} from './capital.js';
 import {entryRiskIssues,entryQualityIssues} from './costs.js';
 import { experienceContext } from './experience.js';
@@ -208,6 +209,10 @@ export class Engine {
     const baseline=this.baseline(now),loss=baseline?d(baseline).minus(equity(a)):undefined;
     const cash=spendableCash(a,this.settings),minimum=equity(a).times(this.settings.min_cash_fraction),room=d(cash.available).minus(minimum);
     this.metadata = {...this.metadata,...bundle.metadata};
+    for(const q of this.broker.quotes(now))this.quotes.set(`${q.symbol}:${q.odd}`,q);
+    const quoteSymbols=new Set([...bundle.pool.map(c=>c.symbol),...a.positions.map(p=>p.symbol)]);
+    const quotes=[...this.quotes.values()].filter(q=>quoteSymbols.has(q.symbol)&&!q.simulated
+      &&[q.trade_at,q.book_at].every(at=>ageSeconds(now,at)>=0&&ageSeconds(now,at)<=this.settings.quote_max_age));
     const limits = Object.fromEntries(['whole_lots','min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction',
       'max_exposure_fraction','max_daily_buy_fraction','max_daily_buy_orders','daily_loss_fraction',
       'price_deviation_fraction','minimum_fee','fee_rate','sell_tax_rate','plan_max_minutes','watch_min_amount','watch_max_symbols'].map(k => [k,this.settings[k as keyof Settings]]));
@@ -220,7 +225,11 @@ export class Engine {
         daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
-      universe:bundle.pool,features:bundle.features,hard_limits:limits,capital:capitalSnapshot(a,this.settings),
+      universe:bundle.pool,features:bundle.features,hard_limits:{...limits,capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
+      quotes:structuredClone(quotes),entry_feedback:this.plan?{plan_id:this.plan.id,asof:now.toISOString(),
+        signals:this.plan.analysis.decisions.filter(d=>d.action==='BUY').map(decision=>({symbol:decision.symbol,
+          window:entryWindow(decision,bundle.features[decision.symbol],now,bundle.metadata[decision.symbol]),
+          state:this.decisionStates.get(decision.symbol)?.state??'WAIT',reason:this.decisionStates.get(decision.symbol)?.reason??'等待進場條件'}))}:undefined,
       instruments:structuredClone(bundle.metadata),data_readiness:{pool_count:bundle.pool.length,
         history_ready:bundle.pool.filter(c=>bundle.features[c.symbol]?.sufficient).length,
         eligible_symbols:bundle.pool.filter(c=>!watchEligibility(c,bundle.features[c.symbol],bundle.metadata[c.symbol],this.settings,undefined,now).length).map(c=>c.symbol),
@@ -345,6 +354,10 @@ export class Engine {
       if(exitsTriggered.has(decision.symbol))continue;
       if([...this.pendingExecutions.values()].some(t=>t.order.symbol===decision.symbol))continue;
       if(decision.action==='HOLD'){state('HOLD',decision.reason);continue;}
+      if(decision.action==='BUY'){
+        const window=entryWindow(decision,this.watchFeatures[decision.symbol],now,this.metadata[decision.symbol]);
+        if(window.issue){state('BLOCKED',window.issue);this.logOnce('BLOCK',`${decision.symbol} ${window.issue}`);continue;}
+      }
       if(decision.action==='BUY'&&(this.entryBlocked||this.pausedEntries)){state('BLOCKED','新買進已暫停，保護監控持續');continue;}
       if(decision.action==='BUY'&&this.settings.auto_watchlist&&(!this.watch.healthy
         ||ageSeconds(now,this.watch.asof)>this.settings.watch_refresh_minutes*120
@@ -431,6 +444,9 @@ export class Engine {
       return result.decision?'':result.reason;
     }
     const c=ticket.condition;
+    if(c&&ticket.order.action==='BUY'){
+      const window=entryWindow(c,this.watchFeatures[c.symbol],now,this.metadata[c.symbol]);if(window.issue)return window.issue;
+    }
     this.observeEntries(now);
     const track=c?this.store.entryTracks().find(t=>t.plan_id===ticket.order.plan_id&&t.symbol===c.symbol&&t.lot===(q.odd?'ODD':'COMMON')):undefined;
     if(!c||!entryReady(c,q.last,track))return '買賣觸發條件目前已不成立';
@@ -525,6 +541,7 @@ export class Engine {
     this.observeEntries(now);
     const quote=this.quotes.get(`${order.symbol}:${order.lot==='ODD'}`);
     if(condition){const t=this.store.entryTracks().find(t=>t.plan_id===order.plan_id&&t.symbol===order.symbol&&t.lot===order.lot);
+      if(order.action==='BUY'&&entryWindow(condition,this.watchFeatures[order.symbol],now,this.metadata[order.symbol]).issue)return false;
       if(!quote||!entryReady(condition,quote.last,t)||conditionIssue(condition,quote,this.watchFeatures[order.symbol],now))return false;}
     if(order.purpose==='PROTECTION'){
       const p=this.store.protections().find(p=>p.symbol===order.symbol);
