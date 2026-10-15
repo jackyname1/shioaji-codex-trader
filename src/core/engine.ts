@@ -360,9 +360,9 @@ export class Engine {
       const protectionShares = protectionLot === 'COMMON' ? Math.floor(p.sellable / 1000) * 1000 : Math.min(999,p.sellable);
       let protectionPrice=q.bid;
       if(!this.broker.production&&['paper','demo'].includes(this.settings.mode)){
-        const tolerance=d(this.settings.exit_slippage_fraction).max(this.settings.simulation_slippage_fraction);
+        const tolerance=d(this.settings.exit_slippage_fraction).gte(this.settings.simulation_slippage_fraction)?d(this.settings.exit_slippage_fraction):d(this.settings.simulation_slippage_fraction);
         const floor=d(q.bid).times(d(1).minus(tolerance)),minimum=this.metadata[p.symbol]?.limit_down;
-        protectionPrice=roundPrice(minimum?floor.max(minimum):floor);
+        protectionPrice=roundPrice(minimum&&floor.lt(minimum)?minimum:floor);
       }
       await this.requestExecution(this.newOrder(p.symbol,'SELL',protectionShares,protectionPrice,protectionLot,now,protection.plan_id,'PROTECTION'),
         now,'PROTECTION',undefined,undefined,trigger,protection.spec);

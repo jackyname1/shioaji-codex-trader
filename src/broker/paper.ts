@@ -108,7 +108,8 @@ export class PaperBroker implements Broker {
         const instrument=this.instrumentCache[q.symbol];
         // Clamp adverse simulated execution to verified exchange bounds, without inventing depth.
         if(instrument&&Date.parse(instrument.verified_at)<=now.getTime()&&twDay(new Date(instrument.verified_at))===twDay(now))
-          candidate=order.action==='BUY'?d(candidate).min(instrument.limit_up):d(candidate).max(instrument.limit_down);
+          candidate=order.action==='BUY'?(candidate.gt(instrument.limit_up)?d(instrument.limit_up):candidate):
+            (candidate.lt(instrument.limit_down)?d(instrument.limit_down):candidate);
         const price=roundPrice(candidate,order.action!=='BUY');
         if(order.action==='BUY'?d(price).gt(order.limit_price):d(price).lt(order.limit_price))continue;
         let shares = Math.min(remaining(order),order.action === 'BUY' ? askDepth : bidDepth);
