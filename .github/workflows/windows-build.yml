@@ -84,8 +84,33 @@ jobs:
           CAPTURE_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha }}
           CAPTURE_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: node scripts/save-windows-captures.mjs
+  strategy_validation:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Five-way strategy, sensitivity and execution stress comparisons
+        env:
+          VALIDATION_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/validate-strategies.mjs
+      - name: Preserve anonymized comparison reports in a separate Git branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VALIDATION_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha }}
+          VALIDATION_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: node scripts/save-strategy-validation.mjs
   windows:
-    needs: test
+    needs: [test, strategy_validation]
     permissions:
       contents: write
     concurrency:
