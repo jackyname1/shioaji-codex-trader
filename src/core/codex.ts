@@ -40,6 +40,7 @@ decisions.limit_price 是 BUY 最高買價或 SELL 最低賣價；觸發條件�
 quotes 是截至 asof、程式核對新鮮度的成交與買賣價；未提供代表缺少當前行情，不可把 universe.last、契約 reference 或昨日價格宣稱為即時成交價。
 規劃 BUY 前先求 entry_when、全部 LAST 條件與 limit_price 的價格交集，包含跳動單位。BELOW 950 與 LAST>=MA20=979.8 不能同時成立；不得產生這種空集合。
 ABOVE/REBOUND 應保留有證據支持的可成交價格空間，考慮賣價、tick 與波動；觸發价等於最高買价通常只剩一個價位。不得自動抬高上限或省略守備條件，若合理區間不存在則 HOLD 並說明。
+啟用 adaptive_entries 時，parallel_entries 是獨立程式策略，只有 BUY_ALLOWED 與觀測資格成立才會比較；不會放寬模型方案。相同股票按已確認、成本及風控可行性選一個方案並共用去重識別；entry_feedback.source 與 selected_strategy 表示實際選用來源。模型等待回檔不會獨占同股的趨勢／突破機會。
 entry_feedback 提供上一輪的區間及最後監測原因；重複等待或價格區間太窄時，重新評估條件，不能只複製無法成交的策略。
 entry_when=REBOUND 可設定先跌至 trigger_price 啟動低點追蹤，再自追蹤低點回升 rebound_fraction（例如 0.02=2%）才提案 BUY；換策略重設低點，反彈後仍受 limit_price 買價上限、conditions 及風控約束。其他 entry_when 的 rebound_fraction=null。
 考慮回檔反彈而非僅跌破即買；只在支撐、趨勢與量能證據足夠時用 REBOUND，反彈幅度必須大於 0 且不超過 0.20，不能把自然波動當作保證反轉。

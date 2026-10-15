@@ -351,6 +351,8 @@ function renderStockDetails():void {
     ['額外必要條件',decision?guardText(decision)||'無':'—'],['優先停損',spec?.stop_price??'—'],['固定停利',spec?.take_profit??'未啟用'],['收益目標（不觸發）',spec?.reward_target??spec?.take_profit??'—'],
     ['含成本保本價',spec?.breakeven_price??'未啟用'],['保本狀態',protection?.breakeven_armed?'已啟動':spec?.breakeven_activate?'等待 '+spec.breakeven_activate:'未啟用'],['有效保護價',protection?.protective_floor??spec?.stop_price??'—'],['退場原因',protection?.triggered||status?.reason||'未觸發'],['追蹤啟動價',spec?.trailing_activate??'—'],['高點回落',spec?.trailing_fraction?`${pct(spec.trailing_fraction)} · ${armed?'已啟動':'待啟動'}`:'—'],
     ['移動退場價',armed&&spec?.trailing_fraction?`高點 ${protection!.high_water} → ${thresholdHint(Math.max(Number(protection?.protective_floor??0),Number(protection!.high_water)-Math.max(Number(protection!.high_water)*Number(spec.trailing_fraction),Number(spec.trailing_atr??0))))}`:'—']];
+  const priority=['反彈追蹤','優先停損','移動退場價'];
+  conditions.sort((a,b)=>{const x=priority.indexOf(a[0]),y=priority.indexOf(b[0]);return (x<0?priority.length:x)-(y<0?priority.length:y);});
   conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後，再由 Codex 按目前現金確認股數，送單前重新核對風控。':'等待 Codex 分析或模擬策略'));
 }
 function conditionList(id:string,rows:[string,string][],note=''):void {

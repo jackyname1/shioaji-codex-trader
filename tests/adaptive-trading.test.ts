@@ -162,3 +162,56 @@ test('optimization variants never alter mode/authority or original saved setting
   assert.equal(idleCategory('扣費後報酬風險比不足'),'REWARD_RISK');assert.equal(idleCategory('待交割'),'SETTLEMENT');
   assert.equal(idleCategory('達到日損失限制'),'DAILY_LOSS');assert.equal(idleCategory('等待行情'),'DATA');
 });
+
+test('a waiting model pullback cannot monopolize the symbol when an independent trend is confirmed and affordable',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,adaptive_entries:true,dynamic_allocation:true,min_entry_reward_risk:'1.2'});
+    r.market.depth=999;
+    const snap=await r.engine.snapshot(now);
+    snap.features['9001']={...f,ma5:30,ma20:29.5,ma60:28,atr14:.5,support20:28.5,resistance20:32};
+    const model:Decision={symbol:'9001',action:'BUY',shares:30,limit_price:'30.1',entry_when:'REBOUND',
+      trigger_price:'27',rebound_fraction:'0.01',smart:{stop_price:'26',take_profit:'35',trailing_activate:null,trailing_fraction:null},conditions:[],reason:'wait for model pullback'};
+    await r.engine.activate({snapshot_id:snap.snapshot_id,expires_at:new Date(now.getTime()+7200000).toISOString(),stance:'BUY_ALLOWED',
+      candidates:['9001'],decisions:[model],screening:null,summary:'independent entry competition'} as Analysis,snap,now);
+    await r.engine.tick(now);assert.equal(r.store.orders().length,0);
+    await r.engine.tick(new Date(now.getTime()+30000));await r.engine.tick(new Date(now.getTime()+60000));
+    const buys=r.store.orders().filter(o=>o.action==='BUY');assert.equal(buys.length,1);
+    assert.equal(buys[0]!.entry_strategy,'TREND_CONTINUATION');assert.ok(d(buys[0]!.limit_price).lte('30.1'));
+    assert.equal(r.engine.plan!.analysis.decisions[0]!.trigger_price,'27');
+    const feedback=await r.engine.snapshot(new Date(now.getTime()+60000));
+    assert.equal(feedback.entry_feedback?.signals.find(s=>s.symbol==='9001')?.source,'PROGRAM');
+    assert.ok(feedback.parallel_entries?.some(d=>d.entry_strategy==='TREND_CONTINUATION'));
+    await r.engine.tick(new Date(now.getTime()+90000));assert.equal(r.store.orders().filter(o=>o.action==='BUY').length,1);
+  }finally{await dispose(r);}
+});
+function priorPositionStore():Store{
+  const store=new Store(':memory:');
+  store.set('paper_ledger',{cash:'97000',lots:[{symbol:'9001',shares:100,price:'30',cost:'3000',acquired:'2026-10-07'}],
+    orders:[],lastEvents:{},charges:{}});
+  return store;
+}
+test('a stable fresh bid can execute a bounded protective sell with adverse slippage and partial depth',async()=>{
+  const r=await rig(priorPositionStore());try{
+    r.engine.setSettings({...r.s,adaptive_exits:true,exit_slippage_fraction:'0.001',simulation_slippage_fraction:'0.001'});
+    r.market.marketPrice='28.8';
+    await r.engine.tick(now);
+    const pending=r.store.orders().find(o=>o.purpose==='PROTECTION')!;
+    assert.ok(pending);assert.ok(d(pending.limit_price).gte('27'));assert.ok(d(pending.limit_price).lt('28.75'));
+    assert.equal(r.broker.fills().length,0);
+    for(let n=1;n<=7;n++)await r.engine.tick(new Date(now.getTime()+n*30000));
+    const sells=r.broker.fills().filter(f=>f.action==='SELL');
+    assert.equal(sells.reduce((sum,f)=>sum+f.shares,0),100);
+    assert.ok(sells.every(f=>d(f.price).gte(pending.limit_price)&&d(f.price).lte('28.75')));
+    assert.equal(r.store.orders().filter(o=>o.purpose==='PROTECTION').length,1);
+  }finally{await dispose(r);}
+});
+test('a real positive bid at limit down remains executable while adverse slippage cannot cross the exchange floor',async()=>{
+  const r=await rig(priorPositionStore());try{
+    r.engine.setSettings({...r.s,adaptive_exits:true,exit_slippage_fraction:'0.001',simulation_slippage_fraction:'0.001'});
+    r.market.quotes=(at:Date)=>[{...quote(at),last:'27',bid:'27',ask:'0',bid_shares:17,ask_shares:0}];
+    await r.engine.tick(now);await r.engine.tick(new Date(now.getTime()+30000));
+    const sells=r.broker.fills().filter(f=>f.action==='SELL');
+    assert.ok(sells.length>0);assert.ok(sells.every(f=>f.price==='27'));
+    assert.ok(r.store.orders().filter(o=>o.purpose==='PROTECTION').every(o=>o.limit_price==='27'));
+  }finally{await dispose(r);}
+});

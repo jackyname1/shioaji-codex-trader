@@ -65,6 +65,7 @@ export class PaperBroker implements Broker {
   dirty = false; generation = 0;
   private ledger: Ledger;
   private prices = new Map<string,string>();
+  private instrumentCache:Record<string,Instrument>={};
   private wholeLots = false;
   constructor(readonly store: Store, readonly market: Broker, public settings: Settings, readonly calendar: TradingCalendar,
     private readonly settleSales = false) {
@@ -79,7 +80,9 @@ export class PaperBroker implements Broker {
   async connect(): Promise<void> { await this.market.connect(); }
   async close(): Promise<void> { await this.market.close(); this.persist(); }
   async subscribe(symbols: string[], wholeLots: boolean): Promise<void> { this.wholeLots = wholeLots; await this.market.subscribe(symbols,wholeLots); }
-  instruments(symbols: string[], now: Date): Promise<Record<string, Instrument>> { return this.market.instruments(symbols,now); }
+  async instruments(symbols: string[], now: Date): Promise<Record<string, Instrument>> {
+    const data=await this.market.instruments(symbols,now);this.instrumentCache={...this.instrumentCache,...data};return data;
+  }
   discover(count: number, now: Date): Promise<Candidate[]> { return this.market.discover(count,now); }
   history(symbol: string, now: Date): Promise<Bar[]> { return this.market.history(symbol,now); }
   features(symbol:string,now:Date){return this.market.features?.(symbol,now);}
@@ -100,8 +103,13 @@ export class PaperBroker implements Broker {
       for (const order of this.ledger.orders.filter(o => active(o) && o.symbol === q.symbol && (o.lot === 'ODD') === q.odd)) {
         if(Math.max(Date.parse(q.trade_at),Date.parse(q.book_at))<=Date.parse(order.created_at))continue;
         if(!(order.action==='BUY'?d(q.ask).gt(0):d(q.bid).gt(0)))continue;
-        const price=roundPrice((order.action==='BUY'?d(q.ask).times(d(1).plus(this.settings.simulation_slippage_fraction)):
-          d(q.bid).times(d(1).minus(this.settings.simulation_slippage_fraction))),order.action!=='BUY');
+        let candidate=order.action==='BUY'?d(q.ask).times(d(1).plus(this.settings.simulation_slippage_fraction)):
+          d(q.bid).times(d(1).minus(this.settings.simulation_slippage_fraction));
+        const instrument=this.instrumentCache[q.symbol];
+        // Clamp adverse simulated execution to verified exchange bounds, without inventing depth.
+        if(instrument&&Date.parse(instrument.verified_at)<=now.getTime()&&twDay(new Date(instrument.verified_at))===twDay(now))
+          candidate=order.action==='BUY'?d(candidate).min(instrument.limit_up):d(candidate).max(instrument.limit_down);
+        const price=roundPrice(candidate,order.action!=='BUY');
         if(order.action==='BUY'?d(price).gt(order.limit_price):d(price).lt(order.limit_price))continue;
         let shares = Math.min(remaining(order),order.action === 'BUY' ? askDepth : bidDepth);
         if (order.lot === 'COMMON') shares = Math.floor(shares / 1000) * 1000;

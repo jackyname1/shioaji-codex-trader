@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
-import { Risk, alignedPrice, fee } from './risk.js';
+import { Risk, alignedPrice, fee, roundPrice } from './risk.js';
 import { evaluate, updateProtection,trackEntry,entryReady,reboundExit } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
 import { conditionIssue } from './conditions.js';
@@ -238,10 +238,7 @@ export class Engine {
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
       universe:bundle.pool,features:bundle.features,hard_limits:{...limits,...adaptiveLimits(this.settings),capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
-      quotes:structuredClone(quotes),entry_feedback:this.plan?{plan_id:this.plan.id,asof:now.toISOString(),
-        signals:this.plan.analysis.decisions.filter(d=>d.action==='BUY').map(decision=>({symbol:decision.symbol,
-          window:entryWindow(decision,bundle.features[decision.symbol],now,bundle.metadata[decision.symbol]),
-          state:this.decisionStates.get(decision.symbol)?.state??'WAIT',reason:this.decisionStates.get(decision.symbol)?.reason??'等待進場條件'}))}:undefined,
+      quotes:structuredClone(quotes),parallel_entries:this.adaptiveCandidates(),entry_feedback:this.entryFeedback(bundle,now),
       instruments:structuredClone(bundle.metadata),data_readiness:{pool_count:bundle.pool.length,
         history_ready:bundle.pool.filter(c=>bundle.features[c.symbol]?.sufficient).length,
         eligible_symbols:bundle.pool.filter(c=>!watchEligibility(c,bundle.features[c.symbol],bundle.metadata[c.symbol],this.settings,undefined,now).length).map(c=>c.symbol),
@@ -259,6 +256,15 @@ export class Engine {
   async snapshot(now: Date, review = false): Promise<Snapshot> {
     const bundle = await this.collectBundle(now); await this.reconcile(now); await this.refreshAccount(now);
     return this.snapshotFromBundle(bundle,now,review);
+  }
+  private entryFeedback(bundle:Bundle,now:Date):Snapshot['entry_feedback']{
+    if(!this.plan)return undefined;
+    const selected=this.adaptiveDecisions(),programSymbols=new Set(selected.map(d=>d.symbol));
+    const decisions=new Map([...this.plan.analysis.decisions.filter(d=>d.action==='BUY'),...selected].map(d=>[d.symbol,d]));
+    return {plan_id:this.plan.id,asof:now.toISOString(),signals:[...decisions.values()].map(decision=>({symbol:decision.symbol,
+      window:entryWindow(decision,bundle.features[decision.symbol],now,bundle.metadata[decision.symbol]),
+      state:this.decisionStates.get(decision.symbol)?.state??'WAIT',reason:this.decisionStates.get(decision.symbol)?.reason??'等待進場條件',
+      source:programSymbols.has(decision.symbol)?'PROGRAM' as const:'MODEL' as const,selected_strategy:decision.entry_strategy}))};
   }
   async activate(analysis: Analysis, snapshot: Snapshot, now: Date): Promise<void> {
     const plan = validateAnalysis(analysis,snapshot,now,this.settings);
@@ -345,14 +351,20 @@ export class Engine {
       if (pending) {
         if (pending.action === 'BUY') await this.cancel(pending.local_id,now);
         else if (pending.purpose === 'PROTECTION' && d(q.bid).gt(0) && alignedPrice(q.bid)
-          && !d(q.bid).eq(pending.limit_price) && ageSeconds(now,pending.created_at) >= 60) await this.cancel(pending.local_id,now);
+          && d(q.bid).lt(pending.limit_price) && ageSeconds(now,pending.created_at) >= 60) await this.cancel(pending.local_id,now);
         continue; // Replacement is allowed only on a later tick after confirmed cancel + inventory refresh.
       }
       const attempts = this.store.orders().filter(o => o.symbol === p.symbol && o.purpose === 'PROTECTION'
         && twDay(new Date(o.created_at)) === twDay(now)).length;
-      if (attempts >= 10) { this.logOnce('BLOCK',`${p.symbol} 保護出場嘗試已達上限，請核對委託`); continue; }
+      if (attempts >= 10) { const reason='保護出場嘗試已達上限，請核對委託';this.decisionStates.set(p.symbol,{state:'BLOCKED',reason,source:'PROTECTION'});this.logOnce('BLOCK',`${p.symbol} ${reason}`); continue; }
       const protectionShares = protectionLot === 'COMMON' ? Math.floor(p.sellable / 1000) * 1000 : Math.min(999,p.sellable);
-      await this.requestExecution(this.newOrder(p.symbol,'SELL',protectionShares,q.bid,protectionLot,now,protection.plan_id,'PROTECTION'),
+      let protectionPrice=q.bid;
+      if(!this.broker.production&&['paper','demo'].includes(this.settings.mode)){
+        const tolerance=d(this.settings.exit_slippage_fraction).max(this.settings.simulation_slippage_fraction);
+        const floor=d(q.bid).times(d(1).minus(tolerance)),minimum=this.metadata[p.symbol]?.limit_down;
+        protectionPrice=roundPrice(minimum?floor.max(minimum):floor);
+      }
+      await this.requestExecution(this.newOrder(p.symbol,'SELL',protectionShares,protectionPrice,protectionLot,now,protection.plan_id,'PROTECTION'),
         now,'PROTECTION',undefined,undefined,trigger,protection.spec);
     }
     if (!this.canExecute() || !this.plan || Date.parse(this.plan.analysis.expires_at) <= now.getTime()) return;
@@ -362,27 +374,41 @@ export class Engine {
       let cache=this.store.get<{plan_id:string;decisions:import('./models.js').Decision[];checked:string[];selected?:import('./models.js').Decision[]}>('adaptive_setups');
       if(cache?.plan_id!==plan.id)cache={plan_id:plan.id,decisions:[],checked:[]};
       for(const w of this.watch.entries.filter(w=>w.eligible&&w.state==='OBSERVE')){
-        if(cache.decisions.some(d=>d.symbol===w.symbol)||decisions.some(d=>d.symbol===w.symbol&&d.action!=='HOLD')||this.account.positions.some(p=>p.symbol===w.symbol&&p.shares))continue;
+        if(cache.decisions.some(d=>d.symbol===w.symbol)||decisions.some(d=>d.symbol===w.symbol&&d.action==='SELL')||this.account.positions.some(p=>p.symbol===w.symbol&&p.shares))continue;
         const q=this.quotes.get(w.symbol+':true');
         if(!q||q.simulated||ageSeconds(now,q.trade_at)<0||ageSeconds(now,q.trade_at)>this.settings.quote_max_age)continue;
         cache.decisions.push(...adaptiveSetups(w.symbol,this.watchFeatures[w.symbol],q,now,this.settings));if(!cache.checked.includes(w.symbol))cache.checked.push(w.symbol);
       }
       this.store.set('adaptive_setups',cache);this.observeEntries(now);
       const candidates=cache.decisions.filter(d=>!this.account!.positions.some(p=>p.symbol===d.symbol&&p.shares)
-        &&!decisions.some(x=>x.symbol===d.symbol&&x.action!=='HOLD'));
+        &&!decisions.some(x=>x.symbol===d.symbol&&x.action==='SELL'));
       const observedTracks=this.store.entryTracks();
       cache.selected=(cache.selected??[]).filter(d=>this.account!.positions.some(p=>p.symbol===d.symbol&&p.shares)
         ||this.account!.orders.some(o=>o.symbol===d.symbol&&active(o)));
       for(const symbol of new Set(candidates.map(d=>d.symbol))){
-        const group=candidates.filter(d=>d.symbol===symbol);
-        const readiness=(d:import('./models.js').Decision):number=>{
-          const q=this.quotes.get(symbol+':true'),t=observedTracks.find(t=>t.plan_id===plan.id&&t.symbol===symbol&&t.strategy===d.entry_strategy&&t.lot==='ODD');
-          return q&&entryReady(d,q.last,t)&&!conditionIssue(d,q,this.watchFeatures[symbol],now)?1:0;
+        const group=[...decisions.filter(d=>d.symbol===symbol&&d.action==='BUY'),...candidates.filter(d=>d.symbol===symbol)];
+        const readiness=(decision:import('./models.js').Decision):number=>{
+          let rank=0;
+          for(const odd of this.settings.whole_lots?[true,false]:[true]){
+            const lot=odd?'ODD':'COMMON',q=this.quotes.get(symbol+':'+odd),m=this.metadata[symbol];
+            const t=observedTracks.find(t=>t.plan_id===plan.id&&t.symbol===symbol&&t.strategy===decision.entry_strategy&&t.lot===lot);
+            if(!q||!m||q.simulated||!this.calendar.inSession(now,lot)||[q.trade_at,q.book_at].some(at=>ageSeconds(now,at)<0||ageSeconds(now,at)>this.settings.quote_max_age)
+              ||!entryReady(decision,q.last,t)||conditionIssue(decision,q,this.watchFeatures[symbol],now)||entryWindow(decision,this.watchFeatures[symbol],now,m).issue)continue;
+            rank=1;
+            const order=this.newOrder(symbol,'BUY',decision.shares,decision.limit_price,lot,now,plan.id,'ENTRY');
+            const ticket:ExecutionTicket={id:'selection',key:'',queued_at:now.toISOString(),state:'QUEUED',order,
+              source:plan.analysis.decisions.includes(decision)?'CODEX':'RULE',condition:decision,smart:decision.smart??undefined,
+              trigger:'selection',settings_key:executionSettingsKey(this.settings),generation:this.broker.generation};
+            const last=this.store.orders().filter(o=>o.symbol===symbol&&(active(o)||o.filled>0)).at(-1)?.created_at;
+            if(executionLot(ticket,q,this.account!,m,this.risk,now,this.baseline(now),last).max_shares>0)return 2;
+          }
+          return rank;
         };
-        group.sort((a,b)=>readiness(b)-readiness(a)||signalScore(b,this.watchFeatures[symbol],this.settings)-signalScore(a,this.watchFeatures[symbol],this.settings));
-        const old=decisions.findIndex(d=>d.symbol===symbol);if(old>=0)decisions.splice(old,1);
-        decisions.push(group[0]!);
-        cache.selected.push(group[0]!);
+        const ranks=new Map(group.map(d=>[d,readiness(d)]));
+        group.sort((a,b)=>ranks.get(b)!-ranks.get(a)!||signalScore(b,this.watchFeatures[symbol],this.settings)-signalScore(a,this.watchFeatures[symbol],this.settings));
+        const index=decisions.findIndex(d=>d.symbol===symbol);if(index>=0)decisions.splice(index,1);
+        const selected=group[0]!;decisions.push(selected);
+        if(!plan.analysis.decisions.includes(selected))cache.selected.push(selected);
       }
       this.store.set('adaptive_setups',cache);
     }

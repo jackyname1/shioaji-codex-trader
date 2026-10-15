@@ -568,7 +568,7 @@ async function smokeTest(): Promise<void> {
       return {text:node.textContent,allVisible:rows.length===3&&rows.every(n=>{const r=n.getBoundingClientRect();return r.top>=box.top&&r.bottom<=box.bottom&&r.right<=box.right}),
       open:document.querySelector('.conditions-details').open,overflow:document.documentElement.scrollWidth>innerWidth};})()`);
     if(!smartUi.open||smartUi.overflow||height>=900&&!smartUi.allVisible||!['低點','高點','已啟動','收益目標（不觸發）','優先停損','含成本保本價','有效保護價','保本狀態'].every(v=>smartUi.text.includes(v)))
-      throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
+      throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過：'+JSON.stringify(smartUi));
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }
   await window.webContents.executeJavaScript(`document.querySelector('.conditions-details').open=false`);

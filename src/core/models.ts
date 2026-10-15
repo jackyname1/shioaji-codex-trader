@@ -225,7 +225,8 @@ export interface Snapshot {
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
   smart_tracking?:{entries:EntryTrack[];protections:Protection[]};
   quotes?:Quote[];
-  entry_feedback?:{plan_id:string;asof:string;signals:{symbol:string;window:import('./entry-window.js').EntryWindow;state:string;reason:string}[]};
+  parallel_entries?:Decision[];
+  entry_feedback?:{plan_id:string;asof:string;signals:{symbol:string;window:import('./entry-window.js').EntryWindow;state:string;reason:string;source?:'MODEL'|'PROGRAM';selected_strategy?:Decision['entry_strategy']}[]};
   capital?:import('./capital.js').CapitalSnapshot;
   news: unknown[]; data_limitations: string[];
   instruments?:Record<string,Instrument>;
