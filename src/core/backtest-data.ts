@@ -3,7 +3,7 @@ import { csvRows } from './facts.js';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { roundPrice, tickSize } from './risk.js';
-import { addDays, d, twDay, twClock, SessionSchema,type SessionDay, type Account, type Bar, type Candidate, type Instrument, type Order, type Quote } from './models.js';
+import { addDays, d, twDay, twClock, SessionSchema,InstrumentSchema,type Features,type SessionDay, type Account, type Bar, type Candidate, type Instrument, type Order, type Quote } from './models.js';
 import type { Broker } from '../broker/types.js';
 
 export const validDay = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -13,10 +13,21 @@ export const HistoryPointSchema = z.strictObject({
   symbol:z.string().regex(/^[1-9]\d{3}$/), at:z.string().datetime({offset:true}),
   open:price,high:price,low:price,close:price,volume_shares:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   amount_twd:z.string().regex(/^\d+(?:\.\d+)?$/).optional(),
-  bid:price.optional(),ask:price.optional(),bid_shares:z.number().int().nonnegative().optional(),ask_shares:z.number().int().nonnegative().optional(),
+  bid:price.or(z.literal('0')).optional(),ask:price.or(z.literal('0')).optional(),bid_shares:z.number().int().nonnegative().optional(),ask_shares:z.number().int().nonnegative().optional(),
 }).refine(x => d(x.high).gte(x.open) && d(x.high).gte(x.close) && d(x.low).lte(x.open) && d(x.low).lte(x.close), 'OHLC 範圍不符')
-  .refine(x => (x.bid === undefined) === (x.ask === undefined) && (!x.bid || d(x.bid).lte(x.ask!)), '買賣報價不符');
+  .refine(x => (x.bid === undefined) === (x.ask === undefined) && (x.bid===undefined||!d(x.bid).gt(0)||!d(x.ask!).gt(0)||d(x.bid).lte(x.ask!)), '買賣報價不符');
 export type HistoryPoint = z.infer<typeof HistoryPointSchema>;
+const FeatureSchema=z.strictObject({sufficient:z.boolean(),sessions:z.number().int().nonnegative(),asof:z.string().refine(validDay),
+  issue:z.string().optional(),ma5:z.number().finite().positive().optional(),ma20:z.number().finite().positive().optional(),ma60:z.number().finite().positive().optional(),
+  rsi14:z.number().min(0).max(100).optional(),atr14:z.number().finite().nonnegative().optional(),support20:z.number().finite().positive().optional(),
+  resistance20:z.number().finite().positive().optional(),volume_ratio20:z.number().finite().nonnegative().optional(),return20:z.number().finite().optional(),
+  daily_amount:z.string().regex(/^\d+(?:\.\d+)?$/).optional(),daily_amount_source:z.enum(['TRADE_AMOUNT','CLOSE_VOLUME_ESTIMATE']).optional()});
+const ObservationSchema=z.strictObject({at:z.string().datetime({offset:true}),
+  features:z.record(z.string().regex(/^[1-9]\d{3}$/),FeatureSchema),
+  metadata:z.record(z.string().regex(/^[1-9]\d{3}$/),InstrumentSchema),
+  universe:z.array(z.strictObject({symbol:z.string().regex(/^[1-9]\d{3}$/),name:z.string(),last:price,amount:z.string(),source:z.string()})).max(100),
+}).refine(o=>Object.values(o.features).every(f=>f.asof<twDay(new Date(o.at))||f.asof===twDay(new Date(o.at))&&twClock(new Date(o.at))>='13:40')
+  &&Object.entries(o.metadata).every(([symbol,m])=>m.symbol===symbol&&Date.parse(m.verified_at)<=Date.parse(o.at)),'行情快照包含未來指標或商品資料');
 export const MAX_HISTORY_POINTS=3000000;
 export const DailyUniverseSchema=z.record(z.string().refine(validDay),z.strictObject({
   asof:z.string().refine(validDay),symbols:z.array(z.string().regex(/^[1-9]\d{3}$/)).min(1).max(100)
@@ -31,6 +42,8 @@ export interface HistoryDataset {
   /** One completed daily OHLCV aggregate before each symbol's first replay membership. Never minute events. */
   daily_history?:HistoryPoint[];
   minute_starts?:Record<string,string>;
+  observations?:z.infer<typeof ObservationSchema>[];
+  coverage?:'FULL_INPUT'|'SPARSE_OBSERVATIONS';
 }
 /** Compact only pre-entry history; all later minutes remain available, including after the symbol leaves the pool. */
 export function partitionReplayHistory(input:HistoryPoint[],minuteStart:string):{points:HistoryPoint[];daily_history:HistoryPoint[]} {
@@ -77,7 +90,9 @@ export function validateDataset(input: HistoryDataset): HistoryDataset {
       if(days.has(key))throw new Error('回測暖機日 K 每檔每日只能有一筆');days.add(key);}
   }
   const normalization={duplicates:(input.normalization?.duplicates??0)+normalized.duplicates+(dailyNormalized?.duplicates??0),revisions:(input.normalization?.revisions??0)+normalized.revisions};
-  return {...input,points:normalized.points,normalization,...(dailyHistory?{daily_history:dailyHistory}:{}),...(minuteStarts?{minute_starts:minuteStarts}:{}),...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{}),
+  const observations=input.observations?.map(o=>ObservationSchema.parse(o)).map(o=>({...o,at:new Date(o.at).toISOString()})).sort((a,b)=>a.at.localeCompare(b.at));
+  if(observations&&input.coverage!=='SPARSE_OBSERVATIONS')throw new Error('快照行情必須明確標示資料稀疏，不可當成完整分鐘回測');
+  return {...input,...(observations?{observations}:{}),points:normalized.points,normalization,...(dailyHistory?{daily_history:dailyHistory}:{}),...(minuteStarts?{minute_starts:minuteStarts}:{}),...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{}),
     ...(input.daily_universe?{daily_universe:DailyUniverseSchema.parse(input.daily_universe)}:{})};
 }
 export function csvDataset(text: string): HistoryDataset {
@@ -120,6 +135,13 @@ export class HistoricalMarket implements Broker {
   private bySymbol=new Map<string,HistoryPoint[]>(); private daily=new Map<string,Bar[]>();
   private dailyLast=new Map<string,string>();
   private firstQuote=new Map<string,string>();
+  private observation(now:Date):NonNullable<HistoryDataset['observations']>[number]|undefined{
+    const rows=this.dataset.observations??[],at=now.toISOString();let lo=0,hi=rows.length;
+    while(lo<hi){const mid=Math.floor((lo+hi)/2);if(rows[mid]!.at<=at)lo=mid+1;else hi=mid;}return rows[lo-1];
+  }
+  features(symbol:string,now:Date):Features|undefined{
+    const o=this.observation(now),f=o?.features[symbol];return f?structuredClone(f):undefined;
+  }
   constructor(readonly dataset:HistoryDataset,readonly participation:string) {
     for(const p of dataset.points)if(!this.firstQuote.has(p.symbol))this.firstQuote.set(p.symbol,p.at);
     for(const p of [...(dataset.daily_history??[]),...dataset.points]) {const rows=this.bySymbol.get(p.symbol)??[];rows.push(p);this.bySymbol.set(p.symbol,rows);}
@@ -155,10 +177,14 @@ export class HistoricalMarket implements Broker {
   quotes(now:Date):Quote[] {
     return [...this.watched].flatMap(symbol=>{const p=this.latest(symbol,now);if(!p||p.at!==now.toISOString())return [];
       if(this.dataset.daily_history&&(!this.firstQuote.has(symbol)||p.at<this.firstQuote.get(symbol)!))return [];
-      const last=roundPrice(p.close), tick=tickSize(last), bid=p.bid??roundPrice(d(last).minus(tick)),ask=p.ask??roundPrice(d(last).plus(tick),false);
+      const last=roundPrice(p.close),tick=tickSize(last),previous=this.previousDays(symbol,now).at(-1);
+      const lower=previous?roundPrice(d(previous.close).times('.9'),false):null,upper=previous?roundPrice(d(previous.close).times('1.1')):null;
+      // Without historical depth, never fabricate a buyer at limit down or a seller at limit up.
+      const bid=p.bid??(lower&&d(last).lte(lower)?'0':roundPrice(d(last).minus(tick)));
+      const ask=p.ask??(upper&&d(last).gte(upper)?'0':roundPrice(d(last).plus(tick),false));
       const depth=Math.floor(d(p.volume_shares).times(this.participation).toNumber());
       return (this.wholeLots?[true,false]:[true]).map(odd=>({symbol,last,bid,ask,odd,simulated:false,
-        trade_at:p.at,book_at:p.at,bid_shares:p.bid_shares??depth,ask_shares:p.ask_shares??depth}));});
+        trade_at:p.at,book_at:p.at,bid_shares:d(bid).gt(0)?p.bid_shares??depth:0,ask_shares:d(ask).gt(0)?p.ask_shares??depth:0}));});
   }
   private previousDays(symbol:string,now:Date):Bar[]{return (this.daily.get(symbol)??[]).filter(b=>b.date<twDay(now));}
   async history(symbol:string,now:Date):Promise<Bar[]> {
@@ -172,13 +198,19 @@ export class HistoricalMarket implements Broker {
   }
   async instruments(symbols:string[],now:Date):Promise<Record<string,Instrument>> {
     const result:Record<string,Instrument>={};
+    const observation=this.observation(now);
+    if(observation&&twDay(new Date(observation.at))===twDay(now))
+      for(const symbol of symbols)if(observation.metadata[symbol])result[symbol]=structuredClone(observation.metadata[symbol]!);
     for(const symbol of symbols) {const p=this.latest(symbol,now),previous=this.previousDays(symbol,now).at(-1);if(!p||!previous)continue;
+      if(result[symbol])continue;
       result[symbol]={symbol,name:this.dataset.names[symbol]?.name??symbol,exchange:this.dataset.names[symbol]?.exchange??'TSE',
         kind:'STOCK',category:'HISTORICAL_SIMULATION',reference:String(previous.close),limit_down:roundPrice(d(previous.close).times('.9'),false),
         limit_up:roundPrice(d(previous.close).times('1.1')),suspended:false,disposition:false,attention:false,verified_at:now.toISOString()};}
     return result;
   }
   async discover(count:number,now:Date):Promise<Candidate[]> {
+    const observation=this.observation(now);
+    if(observation&&twDay(new Date(observation.at))===twDay(now))return structuredClone(observation.universe.slice(0,count));
     const result:Candidate[]=[];
     const pool=this.dataset.daily_universe?.[twDay(now)];
     // A loaded future entrant must stay invisible until its dated membership becomes effective.

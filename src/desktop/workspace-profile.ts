@@ -3,6 +3,8 @@ import {BrokerError} from '../broker/health.js';
 import {Store,StoreOpenError,type StoreOperation} from '../core/store.js';
 import {TradingService} from '../core/service.js';
 import {SettingsSchema,type Settings} from '../core/models.js';
+import {optimizationSettings,costAwareSettings} from '../core/adaptive.js';
+import {replayCapitalSettings} from '../core/capital.js';
 import type {DesktopSettings} from './settings.js';
 
 export type WorkspaceStage='closing'|'database'|'settings'|'engine'|'preferences'|'api';
@@ -55,7 +57,10 @@ export function openWorkspace(root:string,mode:Settings['mode'],baseUrl:string,c
       if(priorMode&&priorMode!==mode&&!(priorMode==='readonly'&&mode==='live'))throw new Error('每種交易模式須使用獨立資料庫');
       if(store.get('account_fingerprint')&&store.get('account_identity_version')!==2&&!store.get('legacy_account_origin'))
         store.set('legacy_account_origin',store.settings().base_url);
-      store.saveSettings(common.apply(store.settings(),mode,baseUrl,override));
+      const saved=store.get<Record<string,unknown>>('settings');
+      let next=common.apply(store.settings(),mode,baseUrl,override);
+      if(mode==='paper'&&!override&&saved?.adaptive_entries===undefined)next=optimizationSettings(costAwareSettings(saved?next:replayCapitalSettings(next,'active'),true),'integrated');
+      store.saveSettings(next);
     }finally{store.close();}
     stage='engine';
     const service=new TradingService(path,mode,createMarket,{automaticLive});

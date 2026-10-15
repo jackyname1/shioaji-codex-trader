@@ -45,8 +45,8 @@ export class Risk {
       if (quote.simulated) reasons.push('試算行情不得當成成交行情');
       if ([quote.trade_at, quote.book_at].some(t => !(ageSeconds(now, t) >= 0 && ageSeconds(now, t) <= s.quote_max_age)))
         reasons.push('成交或五檔行情過期');
-      if (d(quote.bid).lte(0) || d(quote.ask).lte(0) || d(quote.bid).gt(quote.ask)) reasons.push('買賣報價不完整');
-      else if (d(quote.ask).minus(quote.bid).div(quote.last).gt(s.max_spread_fraction)) reasons.push('零股買賣價差過大');
+      if(d(quote.bid).lte(0)||order.action==='BUY'&&d(quote.ask).lte(0)||d(quote.ask).gt(0)&&d(quote.bid).gt(quote.ask))reasons.push('買賣報價不完整或無有效買盤');
+      else if (d(quote.ask).gt(0)&&d(quote.ask).minus(quote.bid).div(quote.last).gt(s.max_spread_fraction)) reasons.push('零股買賣價差過大');
       if (d(order.limit_price).div(quote.last).minus(1).abs().gt(s.price_deviation_fraction)) reasons.push('委託價偏離最新成交價');
     }
     const others = account.orders.filter(o => active(o) && o.local_id !== order.local_id);

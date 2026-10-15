@@ -4,14 +4,17 @@ import { fee, roundPrice, tickSize } from '../core/risk.js';
 import { AccountSchema, OrderSchema, active, addDays, d, remaining, twDay,
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import type { Broker } from './types.js';
+import {tradeRiskIssues,roundTripEstimate} from '../core/costs.js';
 
 interface Lot { symbol: string; shares: number; price: string; acquired: string; cost?: string }
 export interface SimulatedFill { id: string; order_id: string; at: string; symbol: string; action: 'BUY'|'SELL';
   lot: 'ODD'|'COMMON'; purpose: Order['purpose']; shares: number; price: string; amount: string;
-  fee: string; tax: string; realized_pnl: string | null }
+  fee: string; tax: string; realized_pnl: string | null;exit_trigger?:string }
+export interface FillRiskCheck {fill_id:string;order_id:string;at:string;symbol:string;filled_shares:number;average_fill_price:string;
+  buy_fee:string;equity:string;estimated_stop_loss:string|null;issues:string[]}
 interface Ledger { cash: string; lots: Lot[]; orders: Order[]; lastEvents: Record<string,string>;
   charges: Record<string,{ amount: string; fee: string; tax: string }>; fills?: SimulatedFill[];
-  credits?: {due:string;amount:string}[] }
+  credits?: {due:string;amount:string}[];risk_checks?:FillRiskCheck[] }
 export class SyntheticMarket implements Broker {
   readonly production = false; dirty = false; generation = 0;
   private symbols = Array.from({ length:30 },(_,i) => String(9001 + i));
@@ -68,6 +71,7 @@ export class PaperBroker implements Broker {
     this.ledger = store.get<Ledger>('paper_ledger') ?? { cash:settings.demo_cash,lots:[],orders:[],lastEvents:{},charges:{} };
     d(this.ledger.cash); this.ledger.orders.forEach(o => OrderSchema.parse(o));
     this.ledger.fills ??= []; this.ledger.credits ??= [];
+    this.ledger.risk_checks??=[];
     for (const lot of this.ledger.lots) if (!Number.isSafeInteger(lot.shares) || lot.shares < 0
       || !/^\d{4}-\d{2}-\d{2}$/.test(lot.acquired)) throw new Error('模擬庫存資料不完整');
   }
@@ -78,24 +82,30 @@ export class PaperBroker implements Broker {
   instruments(symbols: string[], now: Date): Promise<Record<string, Instrument>> { return this.market.instruments(symbols,now); }
   discover(count: number, now: Date): Promise<Candidate[]> { return this.market.discover(count,now); }
   history(symbol: string, now: Date): Promise<Bar[]> { return this.market.history(symbol,now); }
+  features(symbol:string,now:Date){return this.market.features?.(symbol,now);}
   quotes(now: Date): Quote[] {
     this.settle(now);
     this.generation = this.market.generation;
     const quotes = this.market.quotes(now);
     this.expire(now);
     for (const q of quotes) {
+      if(q.simulated||[q.trade_at,q.book_at].some(at=>Date.parse(at)>now.getTime()))continue;
       this.prices.set(q.symbol,q.last);
       if (!this.calendar.inSession(now,q.odd ? 'ODD' : 'COMMON') || q.simulated) continue;
+      if([q.trade_at,q.book_at].some(at=>now.getTime()-Date.parse(at)>this.settings.quote_max_age*1000))continue;
       const key = `${q.symbol}:${q.odd}`, event = q.trade_at + '/' + q.book_at;
       if (this.ledger.lastEvents[key] === event) continue;
       this.ledger.lastEvents[key] = event;
       let bidDepth = q.bid_shares, askDepth = q.ask_shares;
       for (const order of this.ledger.orders.filter(o => active(o) && o.symbol === q.symbol && (o.lot === 'ODD') === q.odd)) {
-        if (order.action === 'BUY' ? d(order.limit_price).lt(q.ask) : d(order.limit_price).gt(q.bid)) continue;
+        if(Math.max(Date.parse(q.trade_at),Date.parse(q.book_at))<=Date.parse(order.created_at))continue;
+        if(!(order.action==='BUY'?d(q.ask).gt(0):d(q.bid).gt(0)))continue;
+        const price=roundPrice((order.action==='BUY'?d(q.ask).times(d(1).plus(this.settings.simulation_slippage_fraction)):
+          d(q.bid).times(d(1).minus(this.settings.simulation_slippage_fraction))),order.action!=='BUY');
+        if(order.action==='BUY'?d(price).gt(order.limit_price):d(price).lt(order.limit_price))continue;
         let shares = Math.min(remaining(order),order.action === 'BUY' ? askDepth : bidDepth);
         if (order.lot === 'COMMON') shares = Math.floor(shares / 1000) * 1000;
         if (shares <= 0) continue;
-        const price = order.action === 'BUY' ? q.ask : q.bid;
         const amount = d(price).times(shares), prior = this.ledger.charges[order.local_id] ?? {amount:'0',fee:'0',tax:'0'};
         const total = d(prior.amount).plus(amount), totalFee = fee(total,this.settings);
         const totalTax = order.action === 'SELL' ? total.times(this.settings.sell_tax_rate).ceil() : d(0);
@@ -124,8 +134,20 @@ export class PaperBroker implements Broker {
         this.ledger.charges[order.local_id] = { amount:total.toFixed(),fee:totalFee.toFixed(),tax:totalTax.toFixed() };
         const fill: SimulatedFill = {id:`${order.local_id}:${order.filled}`,order_id:order.local_id,
           at:now.toISOString(),symbol:order.symbol,action:order.action,lot:order.lot,purpose:order.purpose,
-          shares,price,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized};
+          shares,price,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized,
+          ...(order.exit_trigger?{exit_trigger:order.exit_trigger}:{})};
         this.ledger.fills!.push(fill);
+        if(order.action==='BUY'){
+          const spec=this.store.protections().find(p=>p.symbol===order.symbol)?.spec;
+          const average=total.div(order.filled).toFixed();
+          const value=this.ledger.lots.reduce((sum,l)=>sum.plus(d(this.prices.get(l.symbol)??l.price).times(l.shares)),d(0))
+            .plus(this.ledger.cash).plus(this.ledger.credits!.reduce((sum,c)=>sum.plus(c.amount),d(0)));
+          const issues=tradeRiskIssues(order.filled,average,spec,value,this.settings);
+          this.ledger.risk_checks!.push({fill_id:fill.id,order_id:order.local_id,at:fill.at,symbol:fill.symbol,filled_shares:order.filled,
+            average_fill_price:average,buy_fee:totalFee.toFixed(),equity:value.toFixed(),
+            estimated_stop_loss:roundTripEstimate(order.filled,average,null,this.settings,spec?.stop_price??null).estimated_stop_loss,issues});
+          if(issues.length)this.store.set('postfill_block_'+twDay(now),{at:fill.at,symbol:fill.symbol,issues});
+        }
         const plan=this.store.plan(),reason=plan?.id===order.plan_id?plan.analysis.decisions.find(x=>x.symbol===order.symbol)?.reason:undefined;
         this.store.recordExperience({id:fill.id,at:fill.at,mode:this.store.get<string>('experience_scope') ?? this.settings.mode,
           kind:'SIMULATED_FILL',symbol:fill.symbol,action:fill.action,shares,price,fee:fill.fee,tax:fill.tax,
@@ -146,7 +168,12 @@ export class PaperBroker implements Broker {
   }
   fillCount():number{return this.ledger.fills!.length;}
   fills(start=0): SimulatedFill[] { return structuredClone(this.ledger.fills!.slice(start)); }
+  riskChecks():FillRiskCheck[]{return structuredClone(this.ledger.risk_checks??[]);}
   remainingCost(): string { return this.ledger.lots.reduce((sum,l) => sum.plus(l.cost ?? d(l.price).times(l.shares)),d(0)).toFixed(); }
+  costBasis(symbol:string):string|undefined{
+    const lots=this.ledger.lots.filter(l=>l.symbol===symbol);
+    return lots.length?lots.reduce((sum,l)=>sum.plus(l.cost??d(l.price).times(l.shares)),d(0)).toFixed():undefined;
+  }
   private sellable(symbol: string, today: string): number {
     return this.ledger.lots.filter(l => l.symbol === symbol && l.acquired < today).reduce((sum,l) => sum + l.shares,0);
   }

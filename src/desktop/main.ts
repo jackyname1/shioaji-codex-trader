@@ -82,7 +82,7 @@ else {
     dataRoot = smoke ? mkdtempSync(join(tmpdir(),'shioaji-ts-smoke-')) : join(app.getPath('userData'),'state');
     if(!smoke)try{const p=JSON.parse(readFileSync(join(dataRoot,'desktop-settings.json'),'utf8')) as typeof preferences;
       SettingsSchema.shape.mode.parse(p.last_mode);for(const c of Object.values(p.connections))if(c){loopbackOrigin(c.base_url);SettingsSchema.shape.stock_account_index.parse(c.stock_account_index);}
-      preferences=p;if(!argsMode)mode=p.last_mode==='live'?'live':'paper';simulationScope=p.paper_scope==='replay'?'replay':'realtime';
+      preferences=p;if(!argsMode)mode='paper';simulationScope=p.paper_scope==='replay'?'replay':'realtime';
     }catch{/* New or malformed preferences start in paper mode. */}
     commonSettings=new DesktopSettings(dataRoot);
     try{commonSettings.migrate(preferences.last_mode,preferences.connections[preferences.last_mode]?.stock_account_index??0);}
@@ -115,7 +115,7 @@ async function connect(nextMode: Settings['mode'],override?:Settings,start=true)
   try {
     if(old)await old.close();
     workspaceDiagnostic.stage='database';
-    const opened=openWorkspace(dataRoot,mode,nativeConnection.baseUrl,commonSettings,override,smokeConnection?smokeMarket:undefined,!smoke&&mode==='live',smokeConnection?smokeReadMarket:undefined);
+    const opened=openWorkspace(dataRoot,mode,nativeConnection.baseUrl,commonSettings,override,smokeConnection?smokeMarket:undefined,false,smokeConnection?smokeReadMarket:undefined);
     service=opened.service;workspaceDiagnostic=opened.diagnostic;
     if(start&&((smoke&&!smokeConnection)||nativeConnection.connected))await service.start(!smoke);
     if(workspaceDiagnostic.state!=='read_only')workspaceDiagnostic.state=service.engine.connected?'ready':'loading';
@@ -234,7 +234,7 @@ function registerIpc(): void {
     codex_auth:{...codexLogin.status},broker_diagnostics:diagnosticSnapshot(),
     runtime:service?{mode,auto:service.engine.settings.auto_execute,paused:service.engine.pausedEntries,killed:service.engine.killed,
       blocked:service.engine.entryBlocked,connected:connected(),session:service.calendar.inSession(new Date()),account:service.engine.account??null,
-      plan:service.engine.plan??null,protections:service.store.protections(),entry_tracks:service.store.entryTracks(),orders:service.store.orders(true),quotes:[...service.engine.quotes.values()],
+      plan:service.engine.plan??null,protections:service.store.protections(),adaptive_decisions:service.engine.adaptiveDecisions(),entry_tracks:service.store.entryTracks(),orders:service.store.orders(true),quotes:[...service.engine.quotes.values()],
       watch:service.engine.watch,next_strategy_at:service.nextStrategyAt(),analyzing:service.analyzing,scanning:service.scanning,
       analysis_status:service.analysisStatus,last_monitor_at:service.lastMonitorAt,
       sizing:service.sizing,execution_queue:[...service.engine.pendingExecutions.values()].map(t=>({symbol:t.order.symbol,action:t.order.action,state:t.state,trigger:t.trigger})),
@@ -515,9 +515,9 @@ async function smokeTest(): Promise<void> {
         const profile=document.querySelector('#bt-capital-profile');
         document.querySelector('#replay-settings-dialog').showModal();
         return {profile:profile.value,options:[...profile.options].map(o=>o.value),metrics:document.querySelector('#bt-capital').textContent,
-          basis:document.querySelector('#s-order-basis').value};
+          optimization:document.querySelector('#bt-optimization').value,cost:document.querySelector('#bt-cost-profile').value,slippage:document.querySelector('#bt-slippage').value,ablation:!!document.querySelector('#bt-ablation'),basis:document.querySelector('#s-order-basis').value};
       })()`);
-      if(capital.profile!=='active'||capital.options.join(',')!=='active,balanced,custom'||!capital.metrics.includes('持倉')
+      if(capital.optimization!=='integrated'||capital.cost!=='conservative'||capital.slippage!=='0.001'||!capital.ablation||capital.profile!=='active'||capital.options.join(',')!=='active,balanced,custom'||!capital.metrics.includes('持倉')
         ||!['EQUITY','AFTER_RESERVE'].includes(capital.basis))throw new Error('回測資金配置、持倉比例與單筆計算基準介面未通過');
       await capture('SYNTHETIC-ui-capital-profile.png',width,height);
       await window.webContents.executeJavaScript(`document.querySelector('#replay-settings-dialog').close()`);
@@ -549,14 +549,14 @@ async function smokeTest(): Promise<void> {
   const smartNow=new Date(),smartSnapshot=await service.engine.snapshot(smartNow),smartAnalysis=demoAnalysis(smartSnapshot,service.engine.settings,smartNow);
   const smartSymbol=smartSnapshot.universe[0]!.symbol,smartPrice=d(smartSnapshot.universe[0]!.last);
   const smartSpec={stop_price:smartPrice.times('.90').toFixed(2),take_profit:null,reward_target:smartPrice.times('1.15').toFixed(2),
-    trailing_activate:smartPrice.times('1.05').toFixed(2),trailing_fraction:'0.03'};
+    trailing_activate:smartPrice.times('1.05').toFixed(2),trailing_fraction:'0.03',trailing_atr:smartPrice.times('.025').toFixed(2),breakeven_activate:smartPrice.times('1.03').toFixed(2),breakeven_price:smartPrice.times('1.01').toFixed(2)};
   smartAnalysis.decisions=[{symbol:smartSymbol,action:'BUY',shares:30,limit_price:smartPrice.times('1.01').toFixed(2),entry_when:'REBOUND',
     trigger_price:smartPrice.times('.99').toFixed(2),rebound_fraction:'0.02',smart:smartSpec,conditions:[],reason:'隔離智慧條件介面測試，不是股票建議'}];
   await service.engine.activate(smartAnalysis,smartSnapshot,smartNow);
   service.store.saveEntryTrack({symbol:smartSymbol,plan_id:service.engine.plan!.id,lot:'ODD',armed:true,
     low_water:smartPrice.times('.97').toFixed(2),observed_at:smartNow.toISOString()});
   service.store.saveProtection({symbol:smartSymbol,plan_id:service.engine.plan!.id,spec:smartSpec,high_water:smartPrice.times('1.10').toFixed(2),
-    trailing_armed:true,observed_at:smartNow.toISOString(),triggered:''});
+    trailing_armed:true,breakeven_armed:true,protective_floor:smartPrice.times('1.06').toFixed(2),latch_exit:true,observed_at:smartNow.toISOString(),triggered:''});
   await window.webContents.executeJavaScript(`(()=>{document.querySelector('#chart-symbol').value=${JSON.stringify(smartSymbol)};
     document.querySelector('#chart-form').requestSubmit();document.querySelector('.conditions-details').open=true;})()`);
   for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
@@ -567,7 +567,7 @@ async function smokeTest(): Promise<void> {
       const box=pane.getBoundingClientRect(),rows=[...node.querySelectorAll('.condition-item')].filter(n=>['反彈追蹤','優先停損','移動退場價'].includes(n.querySelector('span').textContent));
       return {text:node.textContent,allVisible:rows.length===3&&rows.every(n=>{const r=n.getBoundingClientRect();return r.top>=box.top&&r.bottom<=box.bottom&&r.right<=box.right}),
       open:document.querySelector('.conditions-details').open,overflow:document.documentElement.scrollWidth>innerWidth};})()`);
-    if(!smartUi.open||smartUi.overflow||height>=900&&!smartUi.allVisible||!['低點','高點','已啟動','收益目標（不觸發）','優先停損'].every(v=>smartUi.text.includes(v)))
+    if(!smartUi.open||smartUi.overflow||height>=900&&!smartUi.allVisible||!['低點','高點','已啟動','收益目標（不觸發）','優先停損','含成本保本價','有效保護價','保本狀態'].every(v=>smartUi.text.includes(v)))
       throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }
@@ -646,10 +646,10 @@ async function smokeTest(): Promise<void> {
     })()`);
     await new Promise(resolve=>setTimeout(resolve,1400));
     const selected=await window!.webContents.executeJavaScript(`({symbol:document.querySelector('#chart-symbol').value,
-      title:document.querySelector('#chart-name').textContent,source:document.querySelector('#chart-source').value,
+      details:document.querySelector('#stock-details').textContent,title:document.querySelector('#chart-name').textContent,source:document.querySelector('#chart-source').value,
       selected:document.querySelector('#positions tr.selected')?.dataset.chartSymbol,
       cutoff:document.querySelector('#market-chart').dataset.endAt})`);
-    if(!expected||selected.symbol!==expected||!selected.title.includes(expected)||selected.selected!==expected
+    if(!expected||!['持有／可賣股數','平均成本','未實現毛利','持倉市值'].every(v=>selected.details.includes(v))||selected.symbol!==expected||!selected.title.includes(expected)||selected.selected!==expected
       ||selected.source!==(source==='replay'?'replay':'live')||source==='replay'&&Date.parse(selected.cutoff)>Date.parse(backtest.report!.asof))
       throw new Error('持倉整列點選、主圖與工作台行情來源未同步：'+JSON.stringify(selected));
     const keyboard=await window!.webContents.executeJavaScript(`(()=>{

@@ -4,6 +4,8 @@ import { active, d, equity, remaining, type Account, type Decision, type Feature
   type Order, type Quote, type Settings, type SmartSpec } from './models.js';
 import { Risk, fee, roundPrice } from './risk.js';
 import {entryRiskIssues,entryQualityIssues,roundTripEstimate,rewardTarget} from './costs.js';
+import {preferredAllocation} from './adaptive.js';
+import {capitalSnapshot} from './capital.js';
 export {roundTripEstimate} from './costs.js';
 
 export const ExecutionAdviceSchema=z.strictObject({
@@ -22,6 +24,7 @@ export interface ExecutionLot {
   lot:'ODD'|'COMMON';quote:Quote;limit_price:string;min_price:string;max_price:string;
   step:number;min_shares?:number;max_shares:number;reasons:string[];
   cost_at_max_shares?:ReturnType<typeof roundTripEstimate>;
+  preferred_shares?:number;
 }
 export interface ExecutionRequest {
   request_id:string;asof:string;triggered_at:string;symbol:string;action:'BUY'|'SELL';purpose:Order['purpose'];
@@ -52,12 +55,16 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     if(ticket.order.action==='BUY')max=Decimal.min(max,ticket.order.limit_price);
     else min=Decimal.max(min,ticket.order.limit_price);
   }
+  if(ticket.order.action==='BUY'&&ticket.condition?.entry_strategy)max=Decimal.min(max,ticket.condition.limit_price);
   if(ticket.order.action==='BUY'&&ticket.smart){
     min=Decimal.max(min,ticket.smart.stop_price);
     if(ticket.smart.take_profit)max=Decimal.min(max,ticket.smart.take_profit);
   }
   const minPrice=roundPrice(min,false),maxPrice=roundPrice(max);
-  const price=roundPrice(ticket.order.action==='BUY'?Decimal.min(q.ask,maxPrice):Decimal.max(q.bid,minPrice),ticket.order.action!=='BUY');
+  // Program confirmations may cross the current ask only inside their frozen strategy ceiling.
+  // Size and risk are computed at that worst permitted price; fills still require a later event.
+  const price=roundPrice(ticket.order.action==='BUY'?(ticket.condition?.entry_strategy?d(maxPrice):Decimal.min(q.ask,maxPrice)):
+    Decimal.max(q.bid,minPrice),ticket.order.action!=='BUY');
   const test=(shares:number):string[]=>{
     const reasons=risk.check({...ticket.order,lot,shares,limit_price:price},account,q,instrument,now,baseline,false,lastTrade);
     if(ticket.allocation_fraction&&d(price).times(shares).plus(fee(d(price).times(shares),s)).gt(equity(account).times(ticket.allocation_fraction)))
@@ -75,14 +82,25 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     while(lo<=hi){const mid=Math.floor((lo+hi)/2);if(!test(mid*step).length){units=mid;lo=mid+1;}else hi=mid-1;}
   }
   let minimum=units?step:0;
-  if(ticket.order.action==='BUY'&&units&&d(s.min_entry_reward_risk).gt(0)){
+  if(ticket.order.action==='BUY'&&units&&(d(s.min_entry_reward_risk).gt(0)||d(s.min_net_reward_twd).gt(0)||d(s.min_reward_cost_multiple).gt(0))){
     const atMaximum=entryQualityIssues(units*step,price,ticket.smart,s);
     // Fee/tax rounding can make adjacent quantities differ: examine actual lot units.
     while(units&&entryQualityIssues(units*step,price,ticket.smart,s).length)units--;
     if(!units){minimum=0;reasons.push(...atMaximum);}
     else {let first=1;while(first<units&&entryQualityIssues(first*step,price,ticket.smart,s).length)first++;minimum=first*step;}
   }
+  if(ticket.order.action==='BUY'&&units&&s.dynamic_allocation&&ticket.condition){
+    const budget=preferredAllocation(ticket.condition,account,s);
+    const affordable=Math.floor(d(budget).div(price).toNumber()/step);
+    const gap=d(capitalSnapshot(account,s).target_gap_twd),minimumUnits=minimum/step;
+    // A weighted preference is soft. Do not create an uneconomic fragment when the
+    // smallest qualifying lot still fits the target gap and every hard bound.
+    units=Math.min(units,affordable<minimumUnits&&gap.gte(d(price).times(minimum))?minimumUnits:affordable);
+    while(units&&entryQualityIssues(units*step,price,ticket.smart,s).length)units--;
+    if(units*step<minimum){units=0;minimum=0;reasons.push('動態配置餘額不足合格股數／成本門檻');}
+  }
   return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,min_shares:minimum,max_shares:units*step,reasons,
+    preferred_shares:units*step,
     ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,rewardTarget(ticket.smart),s,ticket.smart?.stop_price??null)}:{})};
 }
 export function executionPrompt(request:ExecutionRequest):string {

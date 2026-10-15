@@ -107,7 +107,7 @@ test('paused entries keep their observed low, but missing/future/stale quotes ca
   }finally{await dispose(r);}
 });
 test('rebound secondary guards and cash limits remain mandatory even with a completed bounce',async()=>{
-  const r=await rig();try{reboundPlan(r);r.engine.plan!.analysis.decisions[0]!.conditions=[{left:'LAST',operator:'GTE',right:'VALUE',value:'31'}];
+  const r=await rig();try{reboundPlan(r);r.engine.setSettings({...r.s,daily_loss_fraction:'1'});r.engine.plan!.analysis.decisions[0]!.conditions=[{left:'LAST',operator:'GTE',right:'VALUE',value:'31'}];
     r.market.marketPrice='29';await r.engine.tick(at(1));r.market.marketPrice='29.7';await r.engine.tick(at(2));
     assert.equal(r.store.orders().length,0);assert.match(r.engine.decisionStates.get('9001')!.reason,/LAST/);
     r.engine.plan!.analysis.decisions[0]!.conditions=[];const read=r.broker.account.bind(r.broker);
@@ -208,7 +208,7 @@ test('minute replay catches an off-grid rebound, disallows same-day odd-lot exit
   const report=await runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'fixed',strategy_times:['09:10'],capital_profile:'balanced'},
     data,SettingsSchema.parse({codex_enabled:true,watch_min_amount:'0'}),analyze,new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,
     async r=>{sizings++;return {...await testSize(r),shares:100};});
-  assert.equal(report.status,'COMPLETED');assert.equal(report.version,'0.2.2');
+  assert.equal(report.status,'COMPLETED');assert.equal(report.version,'0.2.3');
   assert.equal(report.orders.filter(o=>o.action==='BUY').length,1,JSON.stringify({logs:report.logs.slice(-25),failures:report.failures,frames:frames.filter(f=>f.at.includes('2026-01-05T01:1')).map(f=>({at:f.at,tracks:f.entry_tracks,decisions:f.decisions}))}));assert.match(report.orders[0]!.created_at,/01:13:00/);
   assert.equal(report.orders.filter(o=>o.action==='SELL').length,1);assert.match(report.orders[1]!.created_at,/2026-01-06T01:12:00/);
   assert.ok(report.fills.every(f=>Date.parse(f.at)>Date.parse(report.orders.find(o=>o.local_id===f.order_id)!.created_at)));

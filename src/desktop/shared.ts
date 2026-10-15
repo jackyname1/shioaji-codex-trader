@@ -16,6 +16,7 @@ export interface RuntimeView {
   next_strategy_at:string|null;analyzing:boolean;scanning:boolean;analysis_status:string;last_monitor_at:string;
   sizing?:boolean;execution_queue?:{symbol:string;action:string;state:string;trigger:string}[];
   entry_tracks?:import('../core/models.js').EntryTrack[];
+  adaptive_decisions?:import('../core/models.js').Decision[];
   fills?:import('../broker/paper.js').SimulatedFill[];
   decisions:{symbol:string;state:string;reason:string;source:string}[];
   features:Record<string,import('../core/models.js').Features>;metadata:Record<string,import('../core/models.js').Instrument>;

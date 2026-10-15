@@ -47,6 +47,8 @@ test('a price condition that reverses during Codex sizing invalidates the answer
 });
 test('cash and standing reservations are refreshed after the model reply, preventing an oversized stale recommendation',async()=>{
   const r=await enabled();try{
+    // Isolate cash availability from the separately tested daily-loss latch.
+    r.engine.setSettings({...r.engine.settings,daily_loss_fraction:'1'});
     const {id,input}=await request(r),advice=await testSize(input),read=r.broker.account.bind(r.broker);
     r.broker.account=async at=>({...await read(at),cash:'30',settlement_debits:'10',settlement_credits:'90000'});
     assert.equal(await r.engine.confirmExecution(id,advice,new Date(now.getTime()+3000)),false);

@@ -95,7 +95,7 @@ test('a smaller second-turn quantity that fails minimum-fee economics never crea
 });
 test('final account refresh repeats the per-trade loss guard before persisting any intent',async()=>{
   const r=await rig();try{
-    r.engine.setSettings({...r.s,codex_enabled:true,min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.001'});
+    r.engine.setSettings({...r.s,codex_enabled:true,min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.001',daily_loss_fraction:'1'});
     await r.engine.tick(now);const id=r.engine.nextExecutionId();assert.ok(id);const input=await r.engine.executionRequest(id,now);assert.ok(input);
     const lot=input.lots.find(l=>l.max_shares>0)!;const shares=lot.max_shares;
     let reads=0;const read=r.broker.account.bind(r.broker);r.broker.account=async at=>{

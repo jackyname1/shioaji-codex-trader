@@ -1,4 +1,4 @@
-import type { Account, Bar, Candidate, Instrument, Order, Quote } from '../core/models.js';
+import type { Account, Bar, Candidate, Features,Instrument, Order, Quote } from '../core/models.js';
 // This error is only for a refusal BEFORE a broker mutation request is sent.
 export class NoSubmissionError extends Error {}
 export interface Broker {
@@ -14,6 +14,9 @@ export interface Broker {
   instruments(symbols: string[], now: Date): Promise<Record<string, Instrument>>;
   discover(count: number, now: Date): Promise<Candidate[]>;
   history(symbol: string, now: Date): Promise<Bar[]>;
+  /** Local simulation cost ledger, never a brokerage API call. */
+  costBasis?(symbol:string):string|undefined;
+  features?(symbol:string,now:Date):Features|undefined;
   submit(order: Order): Promise<Order>;
   cancel(order: Order): Promise<Order>;
 }

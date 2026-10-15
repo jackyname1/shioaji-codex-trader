@@ -1,0 +1,59 @@
+{
+  "source_version": "0.2.2",
+  "source_sha256": "b0087e56b0ee758f324c48ec58f47d4c60ddd7fb03e8cc2cec36ed0d9243f92f",
+  "scope": "replay",
+  "range": [
+    "2026-09-15T01:15:00.000Z",
+    "2026-10-15T06:00:00.000Z"
+  ],
+  "events": 950,
+  "review_snapshots": 20,
+  "initial_cash": "100000",
+  "final_equity": "100589.5",
+  "net_pnl": "589.5",
+  "return_pct": "0.589500",
+  "realized_pnl": "864.50",
+  "unrealized_after_buy_fees": "-275.0",
+  "fees": "533",
+  "taxes": "520",
+  "gross_pnl": "1642.5",
+  "sampled_peak_equity": "105174.5",
+  "snapshot_drawdown_pct_lower_bound": "4.359421722946151396013292195",
+  "mean_review_exposure_pct": "41.85179726376048880396753468",
+  "final_exposure_pct": "4.205210285367757072060205091",
+  "fill_events": 21,
+  "buy_fill_events": 11,
+  "sell_fill_events": 10,
+  "winning_exit_events": 4,
+  "losing_exit_events": 6,
+  "exit_event_win_rate_pct": "40.0",
+  "average_winning_exit_event": "1551.625",
+  "average_losing_exit_event": "-890.3333333333333333333333333",
+  "profit_factor": "1.161830774990640209659303632",
+  "last_day_realized_pnl": "-2546.5",
+  "buy_proposals": 40,
+  "entry_modes": {
+    "IMMEDIATE": 16,
+    "REBOUND": 21,
+    "BELOW": 2,
+    "ABOVE": 1
+  },
+  "trailing_proposals": 0,
+  "risk_events": 16,
+  "failed_events": 1,
+  "limitations": [
+    "Snapshot drawdown is only a lower bound on intraday drawdown.",
+    "Exit events may differ from exit orders; old journal has no order IDs.",
+    "End positions include buy fees and exclude future exit costs.",
+    "Review exposure is not time-weighted.",
+    "No full minute tape, complete trigger history or unrealized intraday path is present."
+  ],
+  "market_fixture": {
+    "sha256": "85deff1632c940e1b5f10c9944674762b84b79a714b9bbd6128bded9bee14ffc",
+    "symbols": 91,
+    "price_points": 1157,
+    "observations": 60,
+    "discarded_incompatible_quotes": 0,
+    "bytes": 1962632
+  }
+}

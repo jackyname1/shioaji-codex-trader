@@ -168,14 +168,20 @@ export class Store {
   }
   removeProtection(symbol: string): void { this.db.prepare('DELETE FROM protections WHERE symbol=?').run(symbol); }
   entryTracks():EntryTrack[]{return (this.get<unknown[]>('entry_tracks')??[]).map(x=>EntryTrackSchema.parse(x));}
+  replaceEntryTracks(tracks:EntryTrack[]):void{this.set('entry_tracks',tracks.map(t=>EntryTrackSchema.parse(t)));}
   saveEntryTrack(value:EntryTrack):void {
     const track=EntryTrackSchema.parse(value),all=this.entryTracks().filter(t=>t.plan_id===track.plan_id
-      &&!(t.symbol===track.symbol&&t.lot===track.lot));
+      &&!(t.symbol===track.symbol&&t.lot===track.lot&&t.strategy===track.strategy));
     this.set('entry_tracks',[...all,track]);
   }
   activatePlan(plan: Plan, protections: Protection[]): void {
     this.db.exec('BEGIN IMMEDIATE');
-    try { this.set('plan', PlanSchema.parse(plan)); this.set('entry_tracks',[]);protections.forEach(p => this.saveProtection(p)); this.db.exec('COMMIT'); }
+    try { const prior=this.entryTracks();this.set('plan', PlanSchema.parse(plan));
+      this.set('entry_tracks',prior.filter(t=>!t.strategy&&t.signal_key&&t.expires_at&&t.expires_at>plan.created_at
+        &&plan.analysis.decisions.some(d=>t.signal_key===JSON.stringify([d.symbol,d.entry_when,d.trigger_price,d.limit_price,
+          d.rebound_fraction,d.smart?.stop_price,d.conditions??[],d.entry_strategy??'MODEL'])))
+        .map(t=>({...t,plan_id:plan.id})));
+      protections.forEach(p => this.saveProtection(p)); this.db.exec('COMMIT'); }
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   saveSessions(days: SessionDay[]): void {

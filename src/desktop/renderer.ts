@@ -20,7 +20,7 @@ const el=<T extends HTMLElement>(id:string):T=>document.getElementById(id) as T;
 const text=(id:string,value:unknown):void=>{const node=el(id),v=String(value??'—');if(node.textContent!==v)node.textContent=v;};
 const value=(id:string):string=>el<HTMLInputElement>(id).value;
 const checked=(id:string):boolean=>el<HTMLInputElement>(id).checked;
-const fmt=(v:string|number|undefined):string=>v===undefined||!Number.isFinite(Number(v))?'—':Number(v).toLocaleString('zh-TW',{maximumFractionDigits:2});
+const fmt=(v:string|number|null|undefined):string=>v===null||v===undefined||!Number.isFinite(Number(v))?'—':Number(v).toLocaleString('zh-TW',{maximumFractionDigits:2});
 const pct=(v:string):string=>fmt(Number(v)*100)+'%';
 const time=(v:string|null|undefined):string=>v?new Date(v).toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,hour:'2-digit',minute:'2-digit'}):'—';
 const stamp=(v:string|null|undefined):string=>v?new Date(v).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
@@ -28,7 +28,7 @@ const phase:Record<string,string>={IDLE:'尚未執行',LOADING:'準備行情',CA
 Object.assign(phase,{DATA:'資料就緒',MODEL:'實際模型',RUNNING:'選股與條件分析',HALTED:'Codex 已停止',RECOVERED:'Codex 連線恢復',REASONING:'官方推理摘要',OUTPUT:'完整結構回覆',PLAN:'分析步驟',USAGE:'用量',VALIDATING:'核對輸出',DECISION:'策略決定',
   SIZING:'Codex 確認股數',SIZE_CONFIRM:'數量與風控核對',SIZE_DECISION:'交易數量建議',EXECUTION_RESULT:'本次執行結果',SUBMISSION:'委託送出'});
 const action:Record<string,string>={BUY:'買進',SELL:'賣出',HOLD:'觀望',ADD:'加入',REMOVE:'移除',RETAIN:'保留監控',OBSERVE:'觀測',RETAINED:'保留監控',WAIT:'等待',BLOCKED:'風控／資格阻擋',SUBMITTED:'已送出',FILLED:'已成交',PARTIAL:'部分成交',PENDING:'委託中',CANCEL_PENDING:'撤單核對中',CANCELLED:'已撤單',REJECTED:'已拒絕',UNKNOWN:'結果待核對'};
-Object.assign(action,{SIZING:'Codex 確認股數',SIZE_FAILED:'數量確認未完成',QUEUED:'等待數量確認',RUNNING:'確認股數中'});
+Object.assign(action,{TRACKING:'追蹤確認中',EXPIRED:'訊號失效／逾時',BREAKEVEN:'保本退場',SIZING:'Codex 確認股數',SIZE_FAILED:'數量確認未完成',QUEUED:'等待數量確認',RUNNING:'確認股數中'});
 type Cell=string|number|{label:string;command?:string;report?:string;chartSymbol?:string};
 function table(id:string,headers:string[],rows:Cell[][],empty='目前沒有資料'):void {
   const host=el(id),signature=JSON.stringify([headers,rows,empty]);if(host.dataset.signature===signature)return;host.dataset.signature=signature;
@@ -97,6 +97,7 @@ const guided:Record<string,keyof Settings>={
   's-review':'postmarket_time','s-count':'watch_max_symbols','s-misses':'watch_remove_after_scans','s-amount':'watch_min_amount',
   's-url':'base_url','s-account':'stock_account_index','s-cash':'demo_cash',
   's-fee':'fee_rate','s-min-fee':'minimum_fee',
+  's-adaptive-entries':'adaptive_entries','s-adaptive-exits':'adaptive_exits','s-dynamic-allocation':'dynamic_allocation',
   's-order-basis':'order_budget_basis','s-target':'target_exposure_fraction','s-reward-risk':'min_entry_reward_risk','s-trade-risk':'max_trade_risk_fraction',
   's-quotes':'manage_quote_subscriptions','s-min-cash':'min_cash_fraction','s-order-limit':'max_order_fraction','s-symbol-limit':'max_symbol_fraction','s-loss-limit':'daily_loss_fraction',
   's-watch-auto':'auto_watchlist','s-whole':'whole_lots','s-awake':'keep_awake','s-minimized':'start_minimized',
@@ -158,7 +159,7 @@ function renderRuntime(state:DesktopState):void {
   const marketCadence=paper&&(state.backtest_progress.running?value('bt-entry-cadence')==='market':replaySettings?.entry_cadence==='market');
   text('schedule-strategy',paper?(replaySettings?(replaySettings.strategy_schedule==='fixed'?replaySettings.strategy_times.join(' / '):replaySettings.decision_interval_minutes+' 分鐘'):
     value('bt-schedule')==='fixed'?value('bt-times'):value('bt-interval')+' 分鐘'):s.strategy_schedule==='fixed'?s.strategy_times.join(' / '):s.decision_interval_minutes+' 分鐘');text('analysis-status',paper?phase[state.backtest_progress.phase]??state.backtest_progress.phase:r.sizing?'確認股數':r.analyzing?'條件分析中':valid?'監測中':'等待策略');
-  text('schedule-monitor',marketCadence?'進場／智慧逐筆':paper&&['0.2.2','0.2.1'].includes(state.backtest_result?.version??'')?'300 秒／智慧逐筆':(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
+  text('schedule-monitor',marketCadence?'進場／智慧逐筆':paper&&['0.2.3','0.2.2','0.2.1'].includes(state.backtest_result?.version??'')?'300 秒／智慧逐筆':(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
   text('schedule-watch',(paper?replaySettings?.watch_refresh_minutes??value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
   el('live-authorization').hidden=r.mode!=='live';
   const live=state.live;
@@ -195,14 +196,19 @@ function renderRuntime(state:DesktopState):void {
   text('strategy-stance',r.plan?stance[r.plan.analysis.stance]:'等待第一輪策略');text('strategy-summary',r.plan?.analysis.summary??'取得有效策略後，程式會依條件執行。');
   text('strategy-expiry',r.plan?`有效至 ${stamp(r.plan.analysis.expires_at)}${valid?'':' · 已到期'}`:'');
   const rule=r.plan?.analysis.screening?.entry;
-  text('rule-summary',rule?`自動規則 ${rule.signal} · 每檔配置 ${pct(rule.allocation_fraction)} · 停損 ${pct(rule.stop_fraction)} · ${rule.trailing_fraction?'預估收益':'固定停利'} ${pct(rule.take_profit_fraction)} · 移動停損 ${rule.trailing_fraction?pct(rule.trailing_fraction):'關閉'}`:'依 Codex 個股決策執行；新加入股票等待授權條件');
-  table('decisions',['股票','方向','參考股數','限價界線','觸發','策略理由'],(r.plan?.analysis.decisions??[]).map(d=>[{label:d.symbol,chartSymbol:d.symbol},action[d.action]??d.action,d.shares,d.limit_price,
+  text('rule-summary',riskSettings!.adaptive_entries?'回檔反彈／趨勢延續／突破確認並行 · 不同時間確認 · 同股單輪去重':rule?`自動規則 ${rule.signal} · 每檔配置 ${pct(rule.allocation_fraction)} · 停損 ${pct(rule.stop_fraction)} · ${rule.trailing_fraction?'預估收益':'固定停利'} ${pct(rule.take_profit_fraction)} · 移動停損 ${rule.trailing_fraction?pct(rule.trailing_fraction):'關閉'}`:'依 Codex 個股決策執行；新加入股票等待授權條件');
+  table('decisions',['股票','方向','參考股數','限價界線','觸發','策略理由'],[...(r.plan?.analysis.decisions??[]).filter(d=>!(r.adaptive_decisions??[]).some(a=>a.symbol===d.symbol)),...(r.adaptive_decisions??[])].map(d=>[{label:d.symbol,chartSymbol:d.symbol},action[d.action]??d.action,d.entry_strategy?'依當時預算':d.shares,d.limit_price,
     triggerText(d)+(guardText(d)?' 且 '+guardText(d):''),d.reason]),'本輪無個股委託；可能使用規則選股或全部觀望');
   text('watch-policy',`上限 ${riskSettings!.watch_max_symbols} · 持倉必留`);el('watch-policy').title=`候選上限 ${riskSettings!.watch_max_symbols}；持倉與掛單持續監測；連續 ${riskSettings!.watch_remove_after_scans} 次不符才移除`;
   text('risk-summary',`現金保留 ${pct(riskSettings!.min_cash_fraction)} · 單筆 ${pct(riskSettings!.max_order_fraction)}（${riskSettings!.order_budget_basis==='EQUITY'?'淨資產':'扣除保留後'}） · 單檔 ${pct(riskSettings!.max_symbol_fraction)} · 日損失 ${pct(riskSettings!.daily_loss_fraction)} 停止新買進`);
 }
 function renderBacktest(state:DesktopState):void {
   const p=state.backtest_progress,r=state.backtest_result;renderReplay(state);
+  const optimizationNames:Record<string,string>={baseline:'原規則',entries:'僅進場',exits:'僅退場',allocation:'僅配置',integrated:'綜合'};
+  table('bt-comparisons',['組別','淨損益','報酬','回撤','PF','平均持倉','費／稅','退出委託','結果'],state.backtest_comparisons.map(c=>[
+    optimizationNames[c.optimization??'baseline']??c.optimization??'原規則',fmt(c.net_pnl),fmt(c.return_pct)+'%',fmt(c.drawdown_pct)+'%',
+    fmt(c.profit_factor),fmt(c.exposure_pct)+'%',fmt(c.fees)+' / '+fmt(c.taxes),c.exit_orders??'—',phase[c.status]??c.status]),'在模擬設定勾選同資料五組比較；不同執行器與資料不可直接歸因策略差異');
+
   text('bt-progress-title',phase[p.phase]??p.phase);text('bt-progress-detail',`${p.total_runs&&p.total_runs>1?`第 ${p.run} / ${p.total_runs} 組 · `:''}${p.day} · Codex ${p.codex_calls}`);
   // The compact layout hides metric subtitles; keep the execution-model warning visible here.
   text('bt-progress-message',(r||p.running?'近似成交 · ':'')+p.message);el<HTMLProgressElement>('bt-progress').value=p.total_points?Math.round(p.points/p.total_points*100):p.phase==='COMPLETED'?100:0;
@@ -222,8 +228,8 @@ function renderBacktest(state:DesktopState):void {
   text('bt-drawdown',fmt(m.max_drawdown_pct)+'%');text('bt-cost',`手續費 ${fmt(m.fees)} · 稅 ${fmt(m.taxes)}`+(m.gross_pnl!==undefined?` · 費用前損益 ${fmt(m.gross_pnl)}`:''));text('bt-filled',m.filled_orders);
   text('bt-activity',`觀測加入 ${m.watch_adds} / 移除 ${m.watch_removes} · Codex ${m.codex_calls}`);text('bt-equity',fmt(m.final_equity));
   text('bt-capital',m.average_exposure_pct===undefined?'舊報表未統計持倉比例':`持倉：行情時點平均 ${fmt(m.average_exposure_pct)}% · 最高 ${fmt(m.max_exposure_pct??'0')}% · ${r.request.capital_profile==='active'?'積極配置':r.request.capital_profile==='balanced'?'平衡配置':'自訂風控'}`);
-  text('bt-entry-diagnostics',entryDiagnosticText(r.entry_diagnostics));
-  text('bt-quality',`近似成交 · ${r.quality.universe_mode==='DAILY_HISTORICAL'?'每日歷史股票池':'固定股票池'} · 行情 ${r.quality.covered_sessions}/${r.quality.sessions} 日 · 有效策略 ${r.quality.successful_strategies}/${r.quality.strategy_slots}`);
+  text('bt-entry-diagnostics',entryDiagnosticText(r.entry_diagnostics)+(m.exit_metrics?'\n退出委託勝率 '+fmt(m.exit_metrics.win_rate_pct)+'% · 平均獲利 '+fmt(m.exit_metrics.average_win)+' / 平均虧損 '+fmt(m.exit_metrics.average_loss)+' · Profit Factor '+fmt(m.exit_metrics.profit_factor)+' · 退出原因 '+JSON.stringify(m.exit_metrics.exit_triggers):''));
+  text('bt-quality',`${r.quality.data_coverage==='SPARSE_OBSERVATIONS'?'稀疏快照 · ':''}近似成交 · ${r.quality.universe_mode==='DAILY_HISTORICAL'?'每日歷史股票池':'固定股票池'} · 行情 ${r.quality.covered_sessions}/${r.quality.sessions} 日 · 有效策略 ${r.quality.successful_strategies}/${r.quality.strategy_slots}`);
   table('bt-fills',['台北時間','股票','方向','股數','價格','手續費 / 稅','已實現損益'],r.fills.slice().reverse().map(f=>[stamp(f.at),f.symbol,action[f.action]??f.action,f.shares,fmt(f.price),`${fmt(f.fee)} / ${fmt(f.tax)}`,f.realized_pnl===null?'—':fmt(f.realized_pnl)]),'本次無成交；請核對策略、資料與風控紀錄');
   table('bt-daily',['日期','淨值','現金','待收交割'],r.daily_equity.map(d=>[d.day,fmt(d.equity),fmt(d.cash),fmt(d.settlement_credits)]));
   text('bt-strategy-log',r.strategy_log.map(s=>`${stamp(s.at)} ${s.review?'檢討':'策略'} ${s.stance}\n${s.summary}`).join('\n\n'));
@@ -256,13 +262,15 @@ el('save').addEventListener('click',()=>void run(async()=>{const result=await wi
 el('reset').addEventListener('click',()=>{settingsDirty=false;void refresh();});
 el('s-schedule').addEventListener('change',()=>schedulingFields('s'));el('bt-schedule').addEventListener('change',()=>schedulingFields('bt'));
 function request(compare=false):BacktestRequest {
-  return {start:value('bt-start'),end:value('bt-end'),initial_cash:value('bt-cash'),source:value('bt-source') as BacktestRequest['source'],strategy:value('bt-strategy') as BacktestRequest['strategy'],
+  return {start:value('bt-start'),end:value('bt-end'),initial_cash:value('bt-cash'),source:value('bt-source') as BacktestRequest['source'],strategy:(checked('bt-ablation')?'rules':value('bt-strategy')) as BacktestRequest['strategy'],
     whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
+    optimization:value('bt-optimization') as BacktestRequest['optimization'],compare_optimizations:checked('bt-ablation')&&!compare,cost_profile:value('bt-cost-profile') as BacktestRequest['cost_profile'],slippage_fraction:value('bt-slippage'),
     capital_profile:value('bt-capital-profile') as BacktestRequest['capital_profile'],entry_cadence:value('bt-entry-cadence') as BacktestRequest['entry_cadence'],start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:value('replay-mode')==='direct'?0:Number(value('replay-speed-number')),
     decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
     comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),participation:value('bt-participation')};
 }
 el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>beginReplay());});
+el('bt-executor').addEventListener('change',()=>{el<HTMLInputElement>('bt-strategy').value=value('bt-executor');});
 el('bt-compare').addEventListener('click',()=>void run(()=>beginReplay(true)));
 el('bt-cancel').addEventListener('click',()=>void run(()=>window.trader.cancelBacktest()));el('bt-json').addEventListener('click',()=>void run(()=>window.trader.exportBacktest('json')));el('bt-csv').addEventListener('click',()=>void run(()=>window.trader.exportBacktest('csv')));
 el('codex-login').addEventListener('click',()=>void run(()=>window.trader.loginCodex()));
@@ -310,6 +318,7 @@ async function loadChart(source?:ChartRequest['source']):Promise<string>{
   }finally{chartLoading=false;if(chartQueued){chartQueued=false;void loadChart().catch(()=>undefined);}}
 }
 async function showStock(symbol:string):Promise<string>{
+  if(latestState)el<HTMLInputElement>('chart-source').value=replayView(latestState)?'replay':'live';
   if(selectedSymbol!==symbol){chartGeneration++;chartData=undefined;el('market-chart').replaceChildren();el('market-chart').classList.add('chart-empty');
     text('market-chart',`正在載入 ${symbol} 行情…`);text('chart-name',symbol);text('chart-price','—');}
   selectedSymbol=symbol;el<HTMLInputElement>('chart-symbol').value=symbol;markSelectedStock();renderStockDetails();return loadChart();
@@ -327,16 +336,21 @@ function renderStockDetails():void {
   const rows:[string,string][]=[['股票',replay?selectedSymbol:(m?.name??selectedSymbol)],['最新價',fmt(quote?.last??bar?.close)],['買價',fmt(quote?.bid)],['賣價',fmt(quote?.ask)],
     ['MA5',fmt(replay?bar?.ma5:f?.ma5??bar?.ma5)],['MA20',fmt(replay?bar?.ma20:f?.ma20??bar?.ma20)],['MA60',fmt(replay?bar?.ma60:f?.ma60??bar?.ma60)],['RSI14',fmt(replay?bar?.rsi:f?.rsi14??bar?.rsi)],
     ['支撐',fmt(replay?undefined:f?.support20)],['壓力',fmt(replay?undefined:f?.resistance20)]];
+  const account=replay?frame?.account:r?.account,position=account?.positions.find(p=>p.symbol===selectedSymbol);
+  const status=(replay?frame?.decisions:r?.decisions)?.find(d=>d.symbol===selectedSymbol);
+  rows.push(['持有／可賣股數',position?fmt(position.shares)+' / '+fmt(position.sellable):'0'],['平均成本',fmt(position?.average_price)],
+    ['未實現毛利',position?fmt((Number(position.last_price)-Number(position.average_price))*position.shares):'—'],
+    ['持倉市值',position?fmt(Number(position.last_price)*position.shares):'—'],['狀態',status?action[status.state]??status.state:'等待有效訊號']);
   for(const [label,v] of rows){const cell=document.createElement('div');cell.className='detail-cell';const l=document.createElement('span'),n=document.createElement('strong');l.textContent=label;n.textContent=v;cell.append(l,n);host.append(cell);}
-  const plan=frame?.plan??(replay?null:r?.plan),decision=plan?.analysis.decisions.find(d=>d.symbol===selectedSymbol),protection=(frame?.protections??(replay?[]:r?.protections))?.find(p=>p.symbol===selectedSymbol);
+  const plan=frame?.plan??(replay?null:r?.plan),decision=(frame?.adaptive_decisions??r?.adaptive_decisions)?.find(d=>d.symbol===selectedSymbol)??plan?.analysis.decisions.find(d=>d.symbol===selectedSymbol),protection=(frame?.protections??(replay?[]:r?.protections))?.find(p=>p.symbol===selectedSymbol);
   const spec=protection?.spec??decision?.smart;const rules=plan?.analysis.screening?.entry;
-  const tracking=(replay?frame?.entry_tracks:r?.entry_tracks)?.find(t=>t.plan_id===plan?.id&&t.symbol===selectedSymbol&&t.lot===(quote?.odd===false?'COMMON':'ODD'));
+  const tracking=(replay?frame?.entry_tracks:r?.entry_tracks)?.find(t=>t.plan_id===plan?.id&&t.symbol===selectedSymbol&&t.strategy===decision?.entry_strategy&&t.lot===(quote?.odd===false?'COMMON':'ODD'));
   const armed=protection?.trailing_armed??(!!spec?.trailing_activate&&Number(protection?.high_water)>=Number(spec.trailing_activate));
   const conditions:[string,string][]=[['方向',decision? (action[decision.action]??decision.action):plan?plan.analysis.stance:'等待有效策略'],['進場限價',decision?.limit_price??'—'],['觸發條件',decision?triggerText(decision):rules?.signal??'—'],
     ['反彈追蹤',decision?.entry_when==='REBOUND'?tracking?.armed?`低點 ${tracking.low_water} → ${thresholdHint(Number(tracking.low_water)*(1+Number(decision.rebound_fraction)))}`:'尚未跌至門檻':'—'],
     ['額外必要條件',decision?guardText(decision)||'無':'—'],['優先停損',spec?.stop_price??'—'],['固定停利',spec?.take_profit??'未啟用'],['收益目標（不觸發）',spec?.reward_target??spec?.take_profit??'—'],
-    ['追蹤啟動價',spec?.trailing_activate??'—'],['高點回落',spec?.trailing_fraction?`${pct(spec.trailing_fraction)} · ${armed?'已啟動':'待啟動'}`:'—'],
-    ['移動退場價',armed&&spec?.trailing_fraction?`高點 ${protection!.high_water} → ${thresholdHint(Number(protection!.high_water)*(1-Number(spec.trailing_fraction)))}`:'—']];
+    ['含成本保本價',spec?.breakeven_price??'未啟用'],['保本狀態',protection?.breakeven_armed?'已啟動':spec?.breakeven_activate?'等待 '+spec.breakeven_activate:'未啟用'],['有效保護價',protection?.protective_floor??spec?.stop_price??'—'],['退場原因',protection?.triggered||status?.reason||'未觸發'],['追蹤啟動價',spec?.trailing_activate??'—'],['高點回落',spec?.trailing_fraction?`${pct(spec.trailing_fraction)} · ${armed?'已啟動':'待啟動'}`:'—'],
+    ['移動退場價',armed&&spec?.trailing_fraction?`高點 ${protection!.high_water} → ${thresholdHint(Math.max(Number(protection?.protective_floor??0),Number(protection!.high_water)-Math.max(Number(protection!.high_water)*Number(spec.trailing_fraction),Number(spec.trailing_atr??0))))}`:'—']];
   conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後，再由 Codex 按目前現金確認股數，送單前重新核對風控。':'等待 Codex 分析或模擬策略'));
 }
 function conditionList(id:string,rows:[string,string][],note=''):void {

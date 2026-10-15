@@ -224,6 +224,11 @@ export class TradingService {
         this.analyst = new CodexAnalyst(s,profile,undefined,join(dirname(this.store.path),'codex-login'),this.analystEvent);
         signal.throwIfAborted();
         analysis = await this.analyst.analyze(snapshot,signal);
+        if(analysis.candidates.some(symbol=>!snapshot.universe.some(c=>c.symbol===symbol))){
+          this.engine.log('REPAIR','候選超出當時資料範圍；同一快照限一次完整修正，不截斷排行');
+          analysis=await this.analyst.analyze({...snapshot,hard_limits:{...snapshot.hard_limits,
+            validation_feedback:'上一回覆包含資料範圍以外候選。請以此 universe 完整重產合法決策，禁止外部資料。'}},signal);
+        }
       }
       await this.enqueue(async () => { signal.throwIfAborted();await this.engine.activate(analysis,snapshot,this.now());this.clearCodexFailure(); });
       this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';

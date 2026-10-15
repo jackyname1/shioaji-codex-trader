@@ -44,6 +44,8 @@ export const OrderSchema = z.strictObject({
     'CANCEL_PENDING', 'CANCELLED', 'REJECTED', 'UNKNOWN']),
   filled: quantity, created_at: timestamp, plan_id: z.string(),
   purpose: z.enum(['ENTRY', 'EXIT', 'PROTECTION', 'EXTERNAL']),
+  exit_trigger:z.string().max(30).optional(),
+  entry_strategy:z.enum(['PULLBACK_REBOUND','TREND_CONTINUATION','BREAKOUT_CONFIRM']).optional(),
 }).refine(o => o.filled <= o.shares, '成交量超過委託量');
 export type Order = z.infer<typeof OrderSchema>;
 export const active = (o: Order): boolean => !['FILLED', 'CANCELLED', 'REJECTED'].includes(o.status);
@@ -65,7 +67,12 @@ export const SmartSchema = z.strictObject({
   trailing_fraction: positive.refine(v => d(v).lt(1)).nullable(),
   // A forecast exit price for cost checks, NOT an executable take-profit order.
   reward_target:positive.nullable().optional(),
-}).refine(s => s.take_profit === null || d(s.take_profit).gt(s.stop_price), '停利必須高於停損')
+  trailing_atr:positive.nullable().optional(),
+  breakeven_activate:positive.nullable().optional(),
+  breakeven_price:positive.nullable().optional(),
+}).refine(s=>(s.breakeven_activate==null)===(s.breakeven_price==null),'保本啟動價與保護價必須成對')
+  .refine(s=>!s.trailing_atr||!!s.trailing_fraction,'ATR 移動距離需要移動停利設定')
+  .refine(s => s.take_profit === null || d(s.take_profit).gt(s.stop_price), '停利必須高於停損')
   .refine(s => !s.reward_target || d(s.reward_target).gt(s.stop_price), '收益目標必須高於停損')
   .refine(s => (s.trailing_activate === null) === (s.trailing_fraction === null), '移動停損欄位必須成對');
 export type SmartSpec = z.infer<typeof SmartSchema>;
@@ -82,6 +89,10 @@ export const DecisionSchema = z.strictObject({
   trigger_price: nonnegative, smart: SmartSchema.nullable(), reason: z.string().min(1).max(1500),
   rebound_fraction:positiveFraction.refine(v=>d(v).lte('.20')).nullable().optional(),
   conditions:z.array(ConditionSchema).max(12).nullable().optional(),
+  entry_strategy:z.enum(['PULLBACK_REBOUND','TREND_CONTINUATION','BREAKOUT_CONFIRM']).optional(),
+  tracking_timeout_minutes:z.number().int().min(5).max(360).optional(),
+  confirmation_ticks:z.number().int().min(1).max(10).optional(),
+  confirmation_seconds:z.number().int().min(0).max(600).optional(),
 }).refine(x => x.action === 'HOLD' || (x.shares > 0 && d(x.limit_price).gt(0)), '委託需要價格與股數')
   .refine(x => x.action !== 'BUY' || (x.smart !== null && d(x.smart.stop_price).lt(x.limit_price)
     && (x.smart.take_profit === null || d(x.smart.take_profit).gt(x.limit_price))
@@ -119,11 +130,17 @@ export type Plan = z.infer<typeof PlanSchema>;
 export const ProtectionSchema = z.strictObject({
   symbol, spec: SmartSchema, high_water: nonnegative, triggered: z.string(), plan_id: z.string(),
   trailing_armed:z.boolean().optional(),observed_at:timestamp.nullable().optional(),
+  protective_floor:nonnegative.optional(),breakeven_armed:z.boolean().optional(),latch_exit:z.boolean().optional(),
 });
 export type Protection = z.infer<typeof ProtectionSchema>;
 export const EntryTrackSchema=z.strictObject({
   symbol,plan_id:z.string(),lot:z.enum(['ODD','COMMON']),armed:z.boolean(),low_water:nonnegative,
   observed_at:timestamp.nullable(),
+  signal_key:z.string().optional(),started_at:timestamp.optional(),expires_at:timestamp.optional(),
+  strategy:z.enum(['PULLBACK_REBOUND','TREND_CONTINUATION','BREAKOUT_CONFIRM']).optional(),
+  state:z.enum(['WAITING','TRACKING','CONFIRMING','READY','EXPIRED','INVALID']).optional(),
+  confirmations:quantity.optional(),confirmation_at:timestamp.nullable().optional(),
+  last_price:positive.optional(),
 });
 export type EntryTrack=z.infer<typeof EntryTrackSchema>;
 export const SettingsSchema = z.strictObject({
@@ -144,6 +161,14 @@ export const SettingsSchema = z.strictObject({
   account_max_age: quantity.min(1).max(300).default(60), cooldown_seconds: quantity.max(86400).default(120),
   fee_rate: fraction.default('0.001425'), minimum_fee: nonnegative.default('20'),
   sell_tax_rate: fraction.default('0.003'),
+  adaptive_entries:z.boolean().default(false),adaptive_exits:z.boolean().default(false),dynamic_allocation:z.boolean().default(false),
+  exit_slippage_fraction:fraction.refine(v=>d(v).lte('.05')).default('0'),
+  simulation_slippage_fraction:fraction.refine(v=>d(v).lte('.05')).default('0'),
+  gap_stress_fraction:fraction.refine(v=>d(v).lte('.20')).default('0'),max_gap_risk_fraction:fraction.default('0'),
+  min_net_reward_twd:nonnegative.default('0'),min_reward_cost_multiple:nonnegative.refine(v=>d(v).lte(10)).default('0'),
+  breakeven_r_multiple:positive.refine(v=>d(v).lte(3)).default('0.5'),
+  trailing_atr_multiple:positive.refine(v=>d(v).lte(4)).default('1.5'),
+  entry_tracking_minutes:quantity.min(5).max(360).default(120),
   allow_attention: z.boolean().default(false), codex_enabled: z.boolean().default(false),
   experience_enabled: z.boolean().default(true), experience_limit: quantity.min(5).max(100).default(40),
   official_facts_enabled: z.boolean().default(true), codex_path: z.string().default(''),

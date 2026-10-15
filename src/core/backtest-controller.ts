@@ -17,16 +17,19 @@ export function appendReplayActivity(events:AnalystEvent[],event:ReplayActivity)
   if(event.stage==='FAILED'&&previous?.stage==='FAILED'&&previous.run_id&&previous.asof===event.at){
     appendAnalystEvent(events,{...previous,message:event.message});return;
   }
-  events.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,model:'模擬執行引擎',reasoning:'程序步驟'});
+  events.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,details:event.details,model:'模擬執行引擎',reasoning:'程序步驟'});
 }
 
 export interface BacktestSummary {id:string;created_at:string;status:string;start:string;end:string;synthetic:boolean;
-  strategy:string;schedule:string;monitor_seconds:number;net_pnl:string;return_pct:string;drawdown_pct:string;calls:number}
+  strategy:string;schedule:string;monitor_seconds:number;net_pnl:string;return_pct:string;drawdown_pct:string;calls:number;
+  optimization?:string;profit_factor?:string|null;exposure_pct?:string;fees?:string;taxes?:string;exit_orders?:number}
 export function reportSummary(r:BacktestReport):BacktestSummary {
   return {id:r.id,created_at:r.created_at,status:r.status,start:r.request.start,end:r.request.end,synthetic:r.synthetic,strategy:r.request.strategy,
-    schedule:r.request.strategy_schedule==='fixed'?r.request.strategy_times.join(' / '):r.request.decision_interval_minutes+' 分鐘',
+    schedule:(r.request.optimization??'baseline')+' · '+(r.request.strategy_schedule==='fixed'?r.request.strategy_times.join(' / '):r.request.decision_interval_minutes+' 分鐘'),
     monitor_seconds:r.request.monitor_interval_seconds,net_pnl:r.metrics.net_pnl,return_pct:r.metrics.return_pct,
-    drawdown_pct:r.metrics.max_drawdown_pct,calls:r.metrics.codex_calls};
+    drawdown_pct:r.metrics.max_drawdown_pct,calls:r.metrics.codex_calls,optimization:r.request.optimization,
+    profit_factor:r.metrics.exit_metrics?.profit_factor,exposure_pct:r.metrics.average_exposure_pct,
+    fees:r.metrics.fees,taxes:r.metrics.taxes,exit_orders:r.metrics.exit_metrics?.exit_orders};
 }
 export class BacktestController {
   clock=new ReplayClock();frame?:ReplayFrame;analystEvents:AnalystEvent[]=[];
@@ -44,7 +47,7 @@ export class BacktestController {
   }
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
-      if(['0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
+      if(['0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
       else this.progress.message='上一版報表仍保留在本機；新版請重新執行測試';
     }catch{/* New profile. */}
     await this.loadHistory();
@@ -55,7 +58,7 @@ export class BacktestController {
       const result:BacktestSummary[]=[];
       for(const f of files.sort((a,b)=>b.time-a.time).slice(0,30))try {
         const r=JSON.parse(await readFile(join(this.root,f.name),'utf8')) as BacktestReport;
-        if(['0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
+        if(['0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
       }catch{/* A damaged report cannot affect trading. */}
       this.history=result;
     }catch{this.history=[];}
@@ -64,7 +67,7 @@ export class BacktestController {
     if(this.task)throw new Error('回測執行中不能切換報表');
     if(!/^[a-f0-9-]{36}$/.test(id)||!this.history.some(r=>r.id===id))throw new Error('回測報表識別不合法');
     const r=JSON.parse(await readFile(join(this.root,`report-${id}.json`),'utf8')) as BacktestReport;
-    if(r.id!==id||!['0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
+    if(r.id!==id||!['0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
     this.useReport(r);this.dataset=undefined;return '已載入測試結果';
   }
   private async save(report:BacktestReport):Promise<void>{
@@ -80,7 +83,9 @@ export class BacktestController {
     if(request.strategy==='codex'&&!settings.codex_enabled)throw new Error('回測 Codex 需先啟用並在本機登入');
     this.abort=new AbortController();this.comparisons=[];this.frame=undefined;this.dataset=undefined;this.report=undefined;this.analystEvents=[];
     this.clock=new ReplayClock(this.onClock);this.clock.setSpeed(request.playback_speed);
-    const intervals=request.comparison_intervals.length?request.comparison_intervals:[request.decision_interval_minutes];
+    const intervals=request.compare_optimizations?Array(5).fill(request.decision_interval_minutes) as number[]:request.comparison_intervals.length?request.comparison_intervals:[request.decision_interval_minutes];
+    if(request.compare_optimizations&&request.strategy!=='rules')throw new Error('五組消融比較須選程式策略，以固定訊號與相同資料排除模型隨機性');
+    if(request.compare_optimizations&&request.comparison_intervals.length)throw new Error('五組消融比較與排程比較請分開執行');
     this.progress={running:true,phase:'LOADING',day:request.start,points:0,total_points:0,codex_calls:0,message:'準備歷史資料與獨立模擬帳戶',run:1,total_runs:intervals.length};
     const signal=this.abort.signal,snapshotSettings=structuredClone(settings);let consumed=0;
     this.task=(async()=>{
@@ -94,7 +99,7 @@ export class BacktestController {
         for(let index=0;index<intervals.length;index++){
           if(signal.aborted)break;
           if(request.strategy==='codex'&&consumed>=request.max_codex_calls){this.progress.message='整批 Codex 呼叫額度已用完，其餘比較未執行';break;}
-          const runRequest={...request,comparison_intervals:[],decision_interval_minutes:intervals[index]!,max_codex_calls:Math.max(1,request.max_codex_calls-consumed)};
+          const runRequest={...request,compare_optimizations:false,optimization:request.compare_optimizations?(['baseline','entries','exits','allocation','integrated'] as const)[index]!:request.optimization,comparison_intervals:[],decision_interval_minutes:intervals[index]!,max_codex_calls:Math.max(1,request.max_codex_calls-consumed)};
           const eventStart=this.analystEvents.length;
           const r=await runBacktest(runRequest,dataset,snapshotSettings,analyst?(input,sig)=>analyst.analyze(input,sig):undefined,signal,
             p=>{this.progress={...p,codex_calls:consumed+p.codex_calls,run:index+1,total_runs:intervals.length};},this.clock,frame=>{this.frame=frame;},event=>{
@@ -112,6 +117,7 @@ export class BacktestController {
           message:signal.aborted?'已停止，保存已完成的步驟與成交':this.report?.quality.halt_reason?`Codex 無法完成（${this.report.quality.halt_reason}）：已停止於 ${this.report.asof}，保存部分結果；請查看失敗記錄，其餘比較不再重試`:
             exhausted?'呼叫上限為整批共用；尚未執行所有比較。已完成結果可查看與匯出':
             this.report?.status==='FAILED'?'本次沒有有效盤中策略：'+(this.report.failures?.at(-1)?.issue??'請查看資料與策略紀錄'):
+            this.report?.quality.data_coverage==='SPARSE_OBSERVATIONS'?'僅提供稀疏快照，不能視為完整歷史結果；完整行情可從「匯出行情」保存再比較':
             this.report?.status==='PARTIAL'?'部分步驟未完成：'+(this.report.failures?.at(-1)?.issue??(this.report.quality.skipped_strategies?'已達 Codex 呼叫上限':'部分交易日缺少行情')):'完整流程已執行並保存，可查看每日選股、條件、委託與成交'};
       }catch(e){this.progress={...this.progress,running:false,phase:signal.aborted?'CANCELLED':'FAILED',
         message:signal.aborted?'已停止測試；已完成結果保留':e instanceof Error&&/^(回測|歷史|Shioaji|Codex|證交所|日期|股票)/.test(e.message)?e.message:'回測資料或分析未通過驗證，請核對歷史日期、暖機資料、官方服務與 Codex 登入'};}

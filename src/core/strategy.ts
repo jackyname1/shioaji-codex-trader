@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AnalysisSchema, ageSeconds, d, type Analysis, type Bar, type Features, type Plan, type Settings, type Snapshot } from './models.js';
+import { AnalysisSchema, ageSeconds, d,twDay, type Analysis, type Bar, type Features, type Plan, type Settings, type Snapshot } from './models.js';
 import { roundPrice, tickSize } from './risk.js';
 const mean = (x: number[]): number => x.reduce((a, b) => a + b, 0) / x.length;
 export function indicators(bars: Bar[]): Features {
@@ -29,6 +29,7 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
   if (!(age >= 0 && age <= settings.codex_timeout_seconds + 30)) throw new Error('Codex 決策資料已過期');
   const expiry = Date.parse(a.expires_at);
   if (!(expiry > now.getTime() && expiry <= now.getTime() + settings.plan_max_minutes * 60000)) throw new Error('計畫有效期限不符');
+  if(!snapshot.review_only&&twDay(new Date(expiry))!==twDay(now))throw new Error('計畫進場期限不得跨交易日');
   const universe = new Set(snapshot.universe.map(x => x.symbol));
   const candidates = new Set(a.candidates), held = new Set(snapshot.account.positions.map(x => x.symbol));
   if(snapshot.review_only){
