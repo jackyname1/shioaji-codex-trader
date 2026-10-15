@@ -177,10 +177,10 @@ export class Store {
   activatePlan(plan: Plan, protections: Protection[]): void {
     this.db.exec('BEGIN IMMEDIATE');
     try { const prior=this.entryTracks();this.set('plan', PlanSchema.parse(plan));
-      this.set('entry_tracks',prior.filter(t=>!t.strategy&&t.signal_key&&t.expires_at&&t.expires_at>plan.created_at
-        &&plan.analysis.decisions.some(d=>t.signal_key===JSON.stringify([d.symbol,d.entry_when,d.trigger_price,d.limit_price,
-          d.rebound_fraction,d.smart?.stop_price,d.conditions??[],d.entry_strategy??'MODEL'])))
-        .map(t=>({...t,plan_id:plan.id})));
+      this.set('entry_tracks',prior.filter(t=>t.signal_key&&t.expires_at&&t.expires_at>plan.created_at
+        &&(t.strategy||plan.analysis.decisions.some(d=>t.signal_key===JSON.stringify([d.symbol,d.entry_when,d.trigger_price,d.limit_price,
+          d.rebound_fraction,d.smart?.stop_price,d.conditions??[],d.entry_strategy??'MODEL']))))
+        .map(t=>t.strategy?t:{...t,plan_id:plan.id}));
       protections.forEach(p => this.saveProtection(p)); this.db.exec('COMMIT'); }
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }

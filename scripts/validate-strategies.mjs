@@ -29,7 +29,9 @@ async function run(data,start,end,optimization,settings=base){
   const result={optimization,status:r.status,metrics:r.metrics,diagnostics:r.entry_diagnostics,
     quality:r.quality,failures:r.failures,daily_equity:r.daily_equity,exit_triggers:r.metrics.exit_metrics?.exit_triggers};
   console.log(JSON.stringify({case:data.source,optimization,status:r.status,pnl:r.metrics.net_pnl,
-    drawdown:r.metrics.max_drawdown_pct,exposure:r.metrics.average_exposure_pct,fills:r.metrics.fill_count}));
+    drawdown:r.metrics.max_drawdown_pct,exposure:r.metrics.average_exposure_pct,fills:r.metrics.fill_count,
+    setups:r.entry_diagnostics?.program_setups,orders:r.entry_diagnostics?.strategy_orders,
+    waits:r.entry_diagnostics?.waits?.slice(0,6),idle:r.entry_diagnostics?.idle_reasons?.filter(x=>x.samples)}));
   return result;
 }
 await mkdir('validation-output',{recursive:true});

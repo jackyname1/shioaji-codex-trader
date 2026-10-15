@@ -291,7 +291,7 @@ export class Engine {
     if(!this.plan||Date.parse(this.plan.analysis.expires_at)<=now.getTime())return;
     const setups=this.store.get<{plan_id:string;decisions:import('./models.js').Decision[]}>('adaptive_setups');
     const decisions=[...this.plan.analysis.decisions,...(setups?.plan_id===this.plan.id?setups.decisions:[])];
-    const tracks=new Map(this.store.entryTracks().filter(t=>t.plan_id===this.plan!.id)
+    const tracks=new Map(this.store.entryTracks().filter(t=>t.plan_id===this.plan!.id||!!t.strategy&&!!t.expires_at&&t.expires_at>now.toISOString())
       .map(t=>[t.symbol+':'+t.lot+':'+(t.strategy??'MODEL'),t]));let changed=false;
     for(const decision of decisions.filter(d=>d.entry_when==='REBOUND'||(d.confirmation_ticks??1)>1))for(const odd of [true,false]){
       const q=this.quotes.get(`${decision.symbol}:${odd}`);

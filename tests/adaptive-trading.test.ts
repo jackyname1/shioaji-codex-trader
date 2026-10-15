@@ -10,9 +10,10 @@ import {SettingsSchema,d,type Features,type Decision,type Analysis} from '../src
 import {exitMetrics,idleCategory} from '../src/core/performance.js';
 import {Store} from '../src/core/store.js';
 import {Engine} from '../src/core/engine.js';
+import {programAnalysis} from '../src/core/program-strategy.js';
 import {HistoricalMarket,validateDataset,syntheticDataset,type HistoryDataset} from '../src/core/backtest-data.js';
 import {runBacktest} from '../src/core/backtest.js';
-import {rig,now,quote,account,order} from './helpers.js';
+import {rig,now,quote,account,order,snapshot} from './helpers.js';
 const f:Features={sufficient:true,sessions:100,asof:'2026-10-07',ma5:102,ma20:100,ma60:95,atr14:4,
   support20:94,resistance20:104,rsi14:60,volume_ratio20:1.5,return20:.1,daily_amount:'100000000'};
 const q=(price:string,seconds=0)=>({...quote(new Date(now.getTime()+seconds*1000)),last:price,bid:price,ask:price,bid_shares:999,ask_shares:999});
@@ -213,5 +214,30 @@ test('a real positive bid at limit down remains executable while adverse slippag
     const sells=r.broker.fills().filter(f=>f.action==='SELL');
     assert.ok(sells.length>0);assert.ok(sells.every(f=>f.price==='27'));
     assert.ok(r.store.orders().filter(o=>o.purpose==='PROTECTION').every(o=>o.limit_price==='27'));
+  }finally{await dispose(r);}
+});
+
+test('a regenerated program policy stays inside its rule schema when the hard order budget is raised to 25 percent',()=>{
+  const settings=SettingsSchema.parse({dynamic_allocation:true,max_order_fraction:'0.25'});
+  const analysis=programAnalysis(snapshot(),settings);
+  assert.equal(analysis.screening!.entry!.allocation_fraction,'0.20');
+  assert.equal(settings.max_order_fraction,'0.25');
+});
+test('an identical bounded program signal preserves its first confirmation and expiry across a new plan',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,adaptive_entries:true,dynamic_allocation:true,min_entry_reward_risk:'1.2'});
+    const activate=async(at:Date)=>{
+      const snap=await r.engine.snapshot(at);
+      snap.features['9001']={...f,ma5:30,ma20:29.5,ma60:28,atr14:.5,support20:28.5,resistance20:32};
+      await r.engine.activate({snapshot_id:snap.snapshot_id,expires_at:new Date(at.getTime()+7200000).toISOString(),stance:'BUY_ALLOWED',
+        candidates:['9001'],decisions:[],screening:null,summary:'bounded program continuity'} as Analysis,snap,at);
+    };
+    await activate(now);await r.engine.tick(now);
+    const first=r.store.entryTracks().find(t=>t.strategy==='TREND_CONTINUATION'&&t.lot==='ODD')!;
+    assert.equal(first.confirmations,1);
+    await activate(new Date(now.getTime()+20000));await r.engine.tick(new Date(now.getTime()+30000));
+    const carried=r.store.entryTracks().find(t=>t.strategy==='TREND_CONTINUATION'&&t.lot==='ODD')!;
+    assert.equal(carried.started_at,first.started_at);assert.equal(carried.expires_at,first.expires_at);
+    assert.equal(carried.state,'READY');assert.equal(r.store.orders().filter(o=>o.action==='BUY').length,1);
   }finally{await dispose(r);}
 });
