@@ -102,7 +102,7 @@ jobs:
           VALIDATION_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/validate-strategies.mjs
       - name: Preserve anonymized comparison reports in a separate Git branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

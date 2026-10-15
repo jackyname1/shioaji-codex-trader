@@ -1,0 +1,145 @@
+{
+  "version": "0.2.3",
+  "validation_status": "INCOMPLETE",
+  "source_commit": "0a8e4e7b72e27c2b6acb0db65a5598a1783293dd",
+  "workflow_run_id": 38781348465,
+  "job_id": 116582047100,
+  "basis": "Summary values recovered from completed case logs before a later parameter-case schema failure. Not the latest candidate's final validation.",
+  "common": {
+    "initial_cash": "100000",
+    "capital_profile": "active-equivalent custom",
+    "cost_profile": "conservative",
+    "minimum_fee": "20",
+    "fee_rate": "0.001425",
+    "sell_tax_rate": "0.003",
+    "simulation_slippage_fraction": "0.001",
+    "exit_slippage_fraction": "0.001",
+    "entry_cadence": "market",
+    "participation": "0.01"
+  },
+  "observed": {
+    "range": [
+      "2026-09-15",
+      "2026-10-15"
+    ],
+    "coverage": "SPARSE_OBSERVATIONS",
+    "results": [
+      {
+        "case": "Anonymized v0.2.2 sparse recorded price/feature observations; NOT original Codex replay",
+        "optimization": "baseline",
+        "status": "PARTIAL",
+        "pnl": "319.65",
+        "drawdown": "3.9373",
+        "exposure": "39.5392",
+        "fills": 35
+      },
+      {
+        "case": "Anonymized v0.2.2 sparse recorded price/feature observations; NOT original Codex replay",
+        "optimization": "entries",
+        "status": "PARTIAL",
+        "pnl": "0.00",
+        "drawdown": "0.0000",
+        "exposure": "0.0000",
+        "fills": 0
+      },
+      {
+        "case": "Anonymized v0.2.2 sparse recorded price/feature observations; NOT original Codex replay",
+        "optimization": "exits",
+        "status": "PARTIAL",
+        "pnl": "1485.65",
+        "drawdown": "3.1916",
+        "exposure": "35.2839",
+        "fills": 35
+      },
+      {
+        "case": "Anonymized v0.2.2 sparse recorded price/feature observations; NOT original Codex replay",
+        "optimization": "allocation",
+        "status": "PARTIAL",
+        "pnl": "3507.00",
+        "drawdown": "3.3927",
+        "exposure": "49.4792",
+        "fills": 18
+      },
+      {
+        "case": "Anonymized v0.2.2 sparse recorded price/feature observations; NOT original Codex replay",
+        "optimization": "integrated",
+        "status": "PARTIAL",
+        "pnl": "0.00",
+        "drawdown": "0.0000",
+        "exposure": "0.0000",
+        "fills": 0
+      }
+    ]
+  },
+  "synthetic": {
+    "range": [
+      "2026-08-03",
+      "2026-10-15"
+    ],
+    "coverage": "SYNTHETIC_10_MINUTE_EVENTS",
+    "results": [
+      {
+        "case": "SYNTHETIC：虛構股票、行情及成交，不是歷史市場績效",
+        "optimization": "baseline",
+        "status": "COMPLETED",
+        "pnl": "-9725.35",
+        "drawdown": "10.3812",
+        "exposure": "52.2895",
+        "fills": 67
+      },
+      {
+        "case": "SYNTHETIC：虛構股票、行情及成交，不是歷史市場績效",
+        "optimization": "entries",
+        "status": "COMPLETED",
+        "pnl": "0.00",
+        "drawdown": "0.0000",
+        "exposure": "0.0000",
+        "fills": 0
+      },
+      {
+        "case": "SYNTHETIC：虛構股票、行情及成交，不是歷史市場績效",
+        "optimization": "exits",
+        "status": "COMPLETED",
+        "pnl": "-7579.50",
+        "drawdown": "7.6637",
+        "exposure": "27.3926",
+        "fills": 96
+      },
+      {
+        "case": "SYNTHETIC：虛構股票、行情及成交，不是歷史市場績效",
+        "optimization": "allocation",
+        "status": "COMPLETED",
+        "pnl": "-12305.60",
+        "drawdown": "12.8671",
+        "exposure": "58.8978",
+        "fills": 39
+      },
+      {
+        "case": "SYNTHETIC：虛構股票、行情及成交，不是歷史市場績效",
+        "optimization": "integrated",
+        "status": "COMPLETED",
+        "pnl": "0.00",
+        "drawdown": "0.0000",
+        "exposure": "0.0000",
+        "fills": 0
+      }
+    ]
+  },
+  "unavailable_details": [
+    "realized/unrealized split",
+    "win rate",
+    "average winning/losing exit",
+    "profit factor",
+    "fees/taxes",
+    "exit trigger distribution",
+    "idle reason distribution",
+    "daily-loss/risk detail"
+  ],
+  "incomplete": [
+    "Full parameter sensitivity stopped at the 25% order-budget schema mismatch; candidate fix added but not yet executed.",
+    "Stress suite did not execute after parameter failure.",
+    "Latest candidate has not completed regression; runner startup failed before steps.",
+    "No complete historical minute tape, original Codex rerun or authentic historical out-of-sample evaluation is available."
+  ],
+  "profit_claim": false
+}
