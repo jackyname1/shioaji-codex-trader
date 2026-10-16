@@ -84,6 +84,7 @@ test('an unknown exit, permission failure or unsuccessful CA recovery never beco
     try{
       await assert.rejects(f.native.start({...input,ca_path:path,ca_password:'SYNTHETIC_CA_PASSWORD'}));
       assert.equal(f.launches,options.failures===2?2:1);assert.equal(f.native.connected,false);assert.equal(f.native.hasCa,false);
+      if('spawnError' in options)assert.equal(f.native.diagnostics().startup?.process_exit_code,null,'intentional cleanup must not overwrite the startup failure');
       assert.ok(!JSON.stringify(f.native.diagnostics()).includes('SYNTHETIC_'));
     }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
   }

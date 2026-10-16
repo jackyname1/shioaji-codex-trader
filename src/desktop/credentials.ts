@@ -122,7 +122,7 @@ export class NativeConnection {
       child.stdout?.on('data',(chunk:Buffer)=>{if(this.owned===child&&this.phase==='authenticating')startup.consume('stdout',chunk);});
       child.stderr?.on('data',(chunk:Buffer)=>{if(this.owned===child&&this.phase==='authenticating')startup.consume('stderr',chunk);});
       child.on('error',()=>{failed=true;spawnError=true;});
-      child.on('exit',(code,signal)=>{failed=true;startup.exited(code,signal);if(this.owned===child){this.healthy=false;
+      child.on('exit',(code,signal)=>{failed=true;if(this.owned===child){startup.exited(code,signal);this.healthy=false;
         if(this.phase==='ready'){this.phase='failed';this.status=startup.failure('PROCESS_EXIT');}}});
       stage='login';this.phase='authenticating';this.status='正在登入 Shioaji，等待行情服務就緒';
       try {
