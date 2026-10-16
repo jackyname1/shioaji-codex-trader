@@ -419,7 +419,7 @@ function diagnosticSnapshot(){
         issue:'隔離介面測試：Shioaji 交割戶餘額讀取失敗（HTTP 503）',http_status:503,retry_at:null}]};}
   const broker=service?.broker instanceof PaperBroker?service.broker.market:service?.broker;
   const result=mergeDiagnostics(nativeConnection.diagnostics(),broker instanceof ShioajiHttpBroker?broker.diagnosticSnapshot():null);
-  result.startup={phase:connectionStatus().phase,issue:initialError||result.startup?.issue||''};
+  result.startup={...result.startup,phase:connectionStatus().phase,issue:initialError||result.startup?.issue||''};
   result.workspace=workspaceDiagnostic;result.app_version=app.getVersion();return result;
 }
 async function enableLive(startAutomation:boolean,afterAuthorization?:(selected:TradingService)=>Promise<string>):Promise<string>{
