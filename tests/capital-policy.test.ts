@@ -42,7 +42,7 @@ test('capital snapshots reserve open buys and settlements and clip the soft targ
   assert.equal(c.target_exposure_twd,'59500');assert.equal(c.target_gap_twd,'41500');
 });
 test('entry economics include both fees and taxes at target and stop, and reject the logged weak reward/risk setup',()=>{
-  const s=replayCapitalSettings(SettingsSchema.parse({}),'balanced');
+  const s=replayCapitalSettings(SettingsSchema.parse({risk_slippage_fraction:'0'}),'balanced');
   const spec={...smart,stop_price:'210',take_profit:'237'};
   const c=roundTripEstimate(32,'227','237',s,'210');assert.equal(c.estimated_net_target_gain,'257');
   assert.equal(c.estimated_stop_loss,'605');assert.ok(d(c.estimated_reward_risk!).lt('.43'));

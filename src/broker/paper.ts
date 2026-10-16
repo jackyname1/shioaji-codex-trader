@@ -1,14 +1,14 @@
 import { Store } from '../core/store.js';
 import { TradingCalendar } from '../core/calendar.js';
 import { fee, roundPrice, tickSize } from '../core/risk.js';
-import { AccountSchema, OrderSchema, active, addDays, d, remaining, twDay,
+import { AccountSchema, OrderSchema, active, addDays, d, remaining, twDay, twClock,
   type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import type { Broker } from './types.js';
 
 interface Lot { symbol: string; shares: number; price: string; acquired: string; cost?: string }
 export interface SimulatedFill { id: string; order_id: string; at: string; symbol: string; action: 'BUY'|'SELL';
   lot: 'ODD'|'COMMON'; purpose: Order['purpose']; shares: number; price: string; amount: string;
-  fee: string; tax: string; realized_pnl: string | null }
+  fee: string; tax: string; realized_pnl: string | null;exit_trigger?:Order['exit_trigger'] }
 interface Ledger { cash: string; lots: Lot[]; orders: Order[]; lastEvents: Record<string,string>;
   charges: Record<string,{ amount: string; fee: string; tax: string }>; fills?: SimulatedFill[];
   credits?: {due:string;amount:string}[] }
@@ -91,6 +91,8 @@ export class PaperBroker implements Broker {
       this.ledger.lastEvents[key] = event;
       let bidDepth = q.bid_shares, askDepth = q.ask_shares;
       for (const order of this.ledger.orders.filter(o => active(o) && o.symbol === q.symbol && (o.lot === 'ODD') === q.odd)) {
+        // The quote that caused submission cannot also fill it, including after a restart.
+        if(Date.parse(q.trade_at)<=Date.parse(order.created_at)||Date.parse(q.book_at)<=Date.parse(order.created_at))continue;
         if (order.action === 'BUY' ? d(order.limit_price).lt(q.ask) : d(order.limit_price).gt(q.bid)) continue;
         let shares = Math.min(remaining(order),order.action === 'BUY' ? askDepth : bidDepth);
         if (order.lot === 'COMMON') shares = Math.floor(shares / 1000) * 1000;
@@ -115,7 +117,7 @@ export class PaperBroker implements Broker {
           }
           const proceeds = amount.minus(extraFee).minus(extraTax); realized = proceeds.minus(cost).toFixed();
           if (this.settleSales && proceeds.gte(0)) {
-            let due = '9999-12-31'; try { due = this.calendar.next(this.calendar.next(twDay(now))); } catch { /* Do not recycle unverified settlement credits. */ }
+            let due = '9999-12-31'; try { due = this.calendar.nextSettlement(this.calendar.nextSettlement(twDay(now))); } catch { /* Do not recycle unverified settlement credits. */ }
             this.ledger.credits!.push({due,amount:proceeds.toFixed()});
           } else this.ledger.cash = d(this.ledger.cash).plus(proceeds).toFixed();
           bidDepth -= shares;
@@ -124,7 +126,8 @@ export class PaperBroker implements Broker {
         this.ledger.charges[order.local_id] = { amount:total.toFixed(),fee:totalFee.toFixed(),tax:totalTax.toFixed() };
         const fill: SimulatedFill = {id:`${order.local_id}:${order.filled}`,order_id:order.local_id,
           at:now.toISOString(),symbol:order.symbol,action:order.action,lot:order.lot,purpose:order.purpose,
-          shares,price,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized};
+          shares,price,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized,
+          ...(order.exit_trigger?{exit_trigger:order.exit_trigger}:{})};
         this.ledger.fills!.push(fill);
         const plan=this.store.plan(),reason=plan?.id===order.plan_id?plan.analysis.decisions.find(x=>x.symbol===order.symbol)?.reason:undefined;
         this.store.recordExperience({id:fill.id,at:fill.at,mode:this.store.get<string>('experience_scope') ?? this.settings.mode,
@@ -140,9 +143,10 @@ export class PaperBroker implements Broker {
     for (const o of this.ledger.orders) if (active(o) && twDay(new Date(o.created_at)) < twDay(now)) { o.status = 'CANCELLED'; this.dirty = true; }
   }
   private settle(now: Date): void {
-    const today = twDay(now), due = this.ledger.credits!.filter(x => x.due <= today);
+    const today = twDay(now),mature=(x:{due:string})=>x.due<today||x.due===today&&twClock(now)>='11:00';
+    const due = this.ledger.credits!.filter(mature);
     this.ledger.cash = due.reduce((sum,x) => sum.plus(x.amount),d(this.ledger.cash)).toFixed();
-    this.ledger.credits = this.ledger.credits!.filter(x => x.due > today);
+    this.ledger.credits = this.ledger.credits!.filter(x => !mature(x));
   }
   fillCount():number{return this.ledger.fills!.length;}
   fills(start=0): SimulatedFill[] { return structuredClone(this.ledger.fills!.slice(start)); }
@@ -157,12 +161,13 @@ export class PaperBroker implements Broker {
       const lots = this.ledger.lots.filter(l => l.symbol === symbol), shares = lots.reduce((sum,l) => sum + l.shares,0);
       const cost = lots.reduce((sum,l) => sum.plus(d(l.price).times(l.shares)),d(0));
       positions.push({symbol,shares,sellable:this.sellable(symbol,twDay(now)),average_price:cost.div(shares).toFixed(),
+        cost_basis:lots.reduce((sum,l)=>sum.plus(l.cost??d(l.price).times(l.shares)),d(0)).toFixed(),
         last_price:this.prices.get(symbol) ?? cost.div(shares).toFixed()});
     }
     const buys = this.ledger.orders.filter(o => o.action === 'BUY' && twDay(new Date(o.created_at)) === twDay(now) && (active(o) || o.filled > 0));
     const account = AccountSchema.parse({asof:now.toISOString(),cash:this.ledger.cash,settlement_debits:'0',
       settlement_credits:this.ledger.credits!.reduce((sum,x) => sum.plus(x.amount),d(0)).toFixed(),
-      positions,orders:structuredClone(this.ledger.orders),complete:true,
+      positions,orders:structuredClone(this.ledger.orders.filter(o=>active(o)||twDay(new Date(o.created_at))===twDay(now))),complete:true,
       issue:this.settleSales ? '模擬帳務：買款即時預留、賣款 T+2 可用' : '模擬成交；未模擬實際 T+2 入扣款與券商拒單',
       daily_buy_count:buys.length,daily_buy_amount:buys.reduce((sum,o) => sum.plus(d(o.limit_price).times(active(o) ? o.shares : o.filled)),d(0)).toFixed()});
     this.dirty = false; return account;

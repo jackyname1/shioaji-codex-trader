@@ -1,0 +1,158 @@
+{
+  "dataset_sha256": "ccd513d90ba3c5249122d80d37e4e899ddb4fb0548d8cc3187cff459949c43f2",
+  "cases": [
+    {
+      "period": "development",
+      "variant": "v022",
+      "file": "development-v022.json.gz",
+      "sha256": "604a295e8d952d885306f113e1c41d698eb38b72d1e1603dbe7cd15141dbed54",
+      "fills": 215,
+      "orders": 223,
+      "workflow_events": 7483
+    },
+    {
+      "period": "development",
+      "variant": "entries",
+      "file": "development-entries.json.gz",
+      "sha256": "93ab8a3a39be3e904860dd0b8f36c9a4849fb5c5f5c089085883defb26f138cd",
+      "fills": 43,
+      "orders": 43,
+      "workflow_events": 5814
+    },
+    {
+      "period": "development",
+      "variant": "exits",
+      "file": "development-exits.json.gz",
+      "sha256": "e6fe8658ae549a47d52aad7b6bfa7f0fff54ede609dba6d7b138a04d4e14f5e4",
+      "fills": 217,
+      "orders": 226,
+      "workflow_events": 7471
+    },
+    {
+      "period": "development",
+      "variant": "allocation",
+      "file": "development-allocation.json.gz",
+      "sha256": "c55ad1bd5c2c21eca09b7feb9ed2ce1cc1581c818e8e785d53ef934408e968c0",
+      "fills": 107,
+      "orders": 125,
+      "workflow_events": 6937
+    },
+    {
+      "period": "development",
+      "variant": "combined",
+      "file": "development-combined.json.gz",
+      "sha256": "f93b931df8f6859a40ce10c67c27d6a48a73cc93d01c8ccddb0456346c35474a",
+      "fills": 49,
+      "orders": 50,
+      "workflow_events": 5862
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "v022",
+      "file": "out_of_sample-v022.json.gz",
+      "sha256": "6c0c5bd4ccd98f0aec7d8234629ee8486fb956ad48614c057fcc0ffbc7baa4f6",
+      "fills": 138,
+      "orders": 144,
+      "workflow_events": 4513
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "entries",
+      "file": "out_of_sample-entries.json.gz",
+      "sha256": "7175fcc100294663d5683bfdc171439fd3349573444d4ef6e5925bcfb7e9e785",
+      "fills": 22,
+      "orders": 22,
+      "workflow_events": 3505
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "exits",
+      "file": "out_of_sample-exits.json.gz",
+      "sha256": "52c2700cd2cbfeb9ed14c0dc4b52f4a1ca6a2c055c05b492d0949bbdbe5c88f2",
+      "fills": 138,
+      "orders": 144,
+      "workflow_events": 4513
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "allocation",
+      "file": "out_of_sample-allocation.json.gz",
+      "sha256": "45803bebe322565769602527e12643d30b18dc4d8ea4e86ef441d4d501a6b0e9",
+      "fills": 73,
+      "orders": 85,
+      "workflow_events": 4200
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "combined",
+      "file": "out_of_sample-combined.json.gz",
+      "sha256": "65b6c2c6dcbf76c4327d8774006376750d9d3a61610296308b489d0506eb6478",
+      "fills": 31,
+      "orders": 31,
+      "workflow_events": 3510
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "order15",
+      "file": "sensitivity_development_only-order15.json.gz",
+      "sha256": "d002a780b70581f93f0d13cfe8606cb1dbbff9bfd0461bff3f15e649d771da9e",
+      "fills": 51,
+      "orders": 52,
+      "workflow_events": 5872
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "order18",
+      "file": "sensitivity_development_only-order18.json.gz",
+      "sha256": "84367f6bab3de2b0a2c79bb6e14551c7d64e2f315a3c466a946abc6f00a847e9",
+      "fills": 51,
+      "orders": 52,
+      "workflow_events": 5873
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "cash25",
+      "file": "sensitivity_development_only-cash25.json.gz",
+      "sha256": "436626ceb84273969d15d4013abc9b1a31b4c0a2e01abe56d78d5564df06873a",
+      "fills": 49,
+      "orders": 50,
+      "workflow_events": 5862
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "target60",
+      "file": "sensitivity_development_only-target60.json.gz",
+      "sha256": "3b8fe8afe3d82db14e9170efc307ea3a26b07d936ab8e19eb38cba8033a3e527",
+      "fills": 48,
+      "orders": 49,
+      "workflow_events": 5855
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "risk1pct",
+      "file": "sensitivity_development_only-risk1pct.json.gz",
+      "sha256": "139907bd5e0e4be666c7285f629a1bd3124ac3bc3e12d59de3b095de6e65e07b",
+      "fills": 49,
+      "orders": 50,
+      "workflow_events": 5862
+    },
+    {
+      "period": "development",
+      "variant": "adaptive_allocation",
+      "file": "development-adaptive_allocation.json.gz",
+      "sha256": "acc1fa0224aa81fc3db5a3dd04c209541c73032782818acb7967d512f45723f9",
+      "fills": 111,
+      "orders": 127,
+      "workflow_events": 6974
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "adaptive_allocation",
+      "file": "out_of_sample-adaptive_allocation.json.gz",
+      "sha256": "22162439194bb89dfe72cd52a8b93dbd36879df1f268fce1696e7db20021f5a3",
+      "fills": 73,
+      "orders": 85,
+      "workflow_events": 4200
+    }
+  ]
+}

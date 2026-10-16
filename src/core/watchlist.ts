@@ -3,6 +3,8 @@ import { active, ageSeconds, d, equity, marketValue, remaining, twDay, type Acco
 import { Decimal } from 'decimal.js';
 import { roundPrice, fee } from './risk.js';
 import {orderBudget} from './capital.js';
+import {multiOpportunity,type Opportunity} from './opportunities.js';
+import type {EntryTrack} from './models.js';
 
 export interface WatchEntry {
   symbol:string; name:string; state:'OBSERVE'|'RETAINED'; source:'CODEX'|'SCANNER';
@@ -92,13 +94,14 @@ export function selectWatchlist(previous:WatchState,bundle:WatchBundle,settings:
     removes:(previous.removes??0)+changes.filter(c=>c.action==='REMOVE').length,
     entries:entries.sort((a,b)=>a.state.localeCompare(b.state)||b.score-a.score),changes:[...previous.changes,...changes].slice(-120)};
 }
-export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|undefined,a:Account,s:Settings,now:Date):{decision?:Decision;reason:string} {
+export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|undefined,a:Account,s:Settings,now:Date,track?:EntryTrack):Opportunity {
   const rule=plan.analysis.screening?.entry;
   if(!rule||plan.analysis.stance!=='BUY_ALLOWED')return {reason:'等待 Codex 個股決策'};
   if(!w.eligible||w.state!=='OBSERVE')return {reason:w.reason};
   if(!f?.sufficient||!f.ma20||!f.ma5||!f.resistance20)return {reason:'策略指標不足'};
   if(!q||q.simulated||ageSeconds(now,q.trade_at)<0||ageSeconds(now,q.trade_at)>s.quote_max_age
     ||ageSeconds(now,q.book_at)<0||ageSeconds(now,q.book_at)>s.quote_max_age||!d(q.ask).gt(0))return {reason:'等待新鮮成交與五檔行情'};
+  if(rule.signal==='MULTI')return multiOpportunity(plan,w.symbol,f,q,a,s,now,track);
   const last=d(q.last),distance=last.minus(f.ma20).abs().div(f.ma20);
   if(distance.gt(rule.max_ma20_distance))return {reason:'價格距離 MA20 超過策略範圍'};
   if(rule.signal==='TREND'&&!(last.gte(f.ma20)&&d(f.ma5).gte(f.ma20)))return {reason:'等待多頭趨勢條件'};

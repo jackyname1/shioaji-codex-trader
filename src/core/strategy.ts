@@ -17,6 +17,11 @@ export function indicators(bars: Bar[]): Features {
     Math.abs(b.high - closes[closes.length - 15 + i]!), Math.abs(b.low - closes[closes.length - 15 + i]!))));
   result.support20 = Math.min(...bars.slice(-20).map(b => b.low));
   result.resistance20 = Math.max(...bars.slice(-20).map(b => b.high));
+  if(bars.length>=21){result.previous_resistance20=Math.max(...bars.slice(-21,-1).map(b=>b.high));
+    result.ma20_previous=mean(closes.slice(-21,-1));}
+  result.last_close=last.close;
+  if(bars.length>=25){const base=bars.slice(-25,-5);result.breakout_base20=Math.max(...base.map(b=>b.high));
+    result.breakout_range20=result.breakout_base20-Math.min(...base.map(b=>b.low));}
   const averageVolume = mean(bars.slice(-20).map(b => b.volume));
   result.volume_ratio20 = averageVolume ? last.volume / averageVolume : 0;
   result.return20 = last.close / closes.at(-20)! - 1;
@@ -37,7 +42,8 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
     // Unknown symbols and malformed fields still fail validation below / in the schema.
     for(const decision of a.decisions)if(universe.has(decision.symbol)||held.has(decision.symbol))decision.smart=null;
   }
-  if (a.candidates.some(x => !universe.has(x))) throw new Error('候選包含資料範圍以外的股票');
+  // A held stock may leave today's ranked pool; it is still in the supplied account/history.
+  if (a.candidates.some(x => !universe.has(x)&&!held.has(x))) throw new Error('候選包含資料範圍以外的股票');
   if(a.candidates.length>settings.watch_max_symbols)throw new Error('候選超過本機觀測股上限');
   // An empty HOLD_ONLY plan is a valid decision. Never force unqualified stocks into a strategy.
   if(a.screening?.entry&&d(a.screening.entry.allocation_fraction).gt(settings.max_order_fraction))throw new Error('策略配置超過硬性單筆上限');

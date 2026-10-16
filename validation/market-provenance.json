@@ -1,0 +1,1337 @@
+{
+  "retrieved_at": "2026-10-16T03:14:43.932777+00:00",
+  "sources": [
+    {
+      "symbol": "2330",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2330",
+      "sha256": "ab8faa2bc6b97af3426c7c093713fa7ce07e556d7f45cda7721946bac960f227"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2330",
+      "sha256": "25913dceeee9ccfe5c7efaea3949178477ad4c77028346167cf4c3399c9eccfa"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2330",
+      "sha256": "42758499a703d83639b9666d3fd9e3881b57bcbfb5950a32d0a94a88f96d4b5a"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2330",
+      "sha256": "1eae5660dba003779f53d0fddd587f408105494a941f524b197ed015f4e15547"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2330",
+      "sha256": "cccbde9f6e7633ae28d3acc82563301d6d5909f03a64a82b58c3842d5d8aebd2"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2330",
+      "sha256": "206e5de8ea69b81651ffacedff4226f13ecb241692ac9f79d54665870ddbc2b1"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2330",
+      "sha256": "d55c8854eb619b847c5e5328b223aa2c1cc7e3c7808503a9e501a89eae73cbb8"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2330",
+      "sha256": "590aafe58d6cd91d873cd86f55b3d655e864538be080d08bf0cda440c4086769"
+    },
+    {
+      "symbol": "2330",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2330",
+      "sha256": "9155688482b41ea3d8bc0e17babf49a9c5ae01a3c67a4cf416bcb0b898ac35dc"
+    },
+    {
+      "symbol": "2330",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2330",
+      "sha256": "5cd8f05d60e2a798192368b90919b6ca1d256f8f53c11ca439e94f36b1bae942"
+    },
+    {
+      "symbol": "2330",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2330",
+      "sha256": "25873d6b6dcfd087f91b17c969ce9e8c7450b25eacd388634a6ed29f9d64337b"
+    },
+    {
+      "symbol": "2330",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2330",
+      "sha256": "01244c3ca32256276475b58e873362ca80f9339679382ecc2d70c49f0c2104c1"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2330",
+      "sha256": "91697ada7d807fed5222ea82712bbb4b2719c53da0a9791ee1bd24a6d9f2bc02"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2330",
+      "sha256": "60c605674205809f9fef6574913a2f4567929365128c818fffd697421270c63f"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2330",
+      "sha256": "69589b0deda7fdced73ac61a3ba53b906bdf73f2419555bdec21bd36d4809d56"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2330",
+      "sha256": "a7785861cc83cb77842c908721dd8dce229183079b2888c694afd53c933aca9d"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2330",
+      "sha256": "abaf0063bee1513fc2b9285947ce90dd6165b745f91be80f4ae026b242663ebd"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2330",
+      "sha256": "1f3d24c2d49921d29a723de582ef88f578c0b26fe69fb2f0866720d58341b813"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2330",
+      "sha256": "7c88e7356682959b0c619757f9e1797ef6c2ae90010692a87f7a45cb11728610"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2330",
+      "sha256": "017e038130832238b1241583681f2beec016a7241bc77d1a62fadcc4aa9f0f38"
+    },
+    {
+      "symbol": "2330",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2330",
+      "sha256": "c556fb917676d81615b5c8e133c5f36dae52fba2efcfc8b9ab196c86ef1506ec"
+    },
+    {
+      "symbol": "2330",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2330",
+      "sha256": "df6f9a70a0c6852b7ee588a7933af0859b78246cc5d51897259ac46e508d69bb"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2303",
+      "sha256": "8bb309b2fa0342ad6565bdcc2fd8dae4171f80876adc29515c52e1ac8296d70e"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2303",
+      "sha256": "485619e5418098fa72b0c885db199b528daaefd197b046f0e20af71bae743ca6"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2303",
+      "sha256": "95684b4286bc7138b5f2e4a14518f27aea6d81672fb3005aaed3b1dfdb2ffc0b"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2303",
+      "sha256": "2a08e7277e1b6e2637bf140a2e88b78ca0c56dfd08995ae501581f9c67a54d20"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2303",
+      "sha256": "750419949e91f9fa82f1a2336689356aa0343be399724177b2b62a77ec709803"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2303",
+      "sha256": "85e11e54c2700c598918ba92541e2750569da71247acefaee6911c2704bca556"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2303",
+      "sha256": "a3249b9ccb752a501837cb4dc4572edb4cdf1c2bd85d468b3efdb2923007a68e"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2303",
+      "sha256": "377dcc008e2a1bc240dde4f79fb6b93ec1a70396997192bd9db8e313e7244a64"
+    },
+    {
+      "symbol": "2303",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2303",
+      "sha256": "4a406cbef73223dfe3064aca12391fd27ed9c30279b2038c2fd6892eee2591f8"
+    },
+    {
+      "symbol": "2303",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2303",
+      "sha256": "0519f5879d639f55d1be5637e285210cf16310b24226db9cf0ff2586213aeda3"
+    },
+    {
+      "symbol": "2303",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2303",
+      "sha256": "360e1793bdd4c1981bf9402c139a875aedfaaab644bc021a7f8ac710fab6c246"
+    },
+    {
+      "symbol": "2303",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2303",
+      "sha256": "a650d24ec3a477f413b5d0ef2fc2c943ad61563d64a5e328ee3fa9957c7a0a3c"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2303",
+      "sha256": "449910e9cb6b8b3b9ff0113515762e9640e80544f211b047cbbc17d26765a5af"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2303",
+      "sha256": "e1dd6b7309da58747809698dd6dde4e5b7d86cfb76a51853e3d91ffbd72671d9"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2303",
+      "sha256": "8d9df93d8ed87262be20dd21952355420cdb5464c5f7199b70bbeb3d081de7c7"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2303",
+      "sha256": "cb1835623b07e619e0077538e4c9c2376ab9d89e9cfd032f67a067c919738c25"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2303",
+      "sha256": "c6d937ada4d2024cf86e6b391b70c2509a5bf4fecd9eb605929b9d91108ae840"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2303",
+      "sha256": "afa0c06db84b5a5ebb10d489a418100de19a64b11224825a6d26d0f6d3b7c5ae"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2303",
+      "sha256": "2cd35e961086bacdd13286454d7f503a508142e7efc036cbdbc7e379de20d0bc"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2303",
+      "sha256": "0c3273a5cbaa3b7ebe69a618f94ba499707a199d7a45744af3ce20e0ed9e50d3"
+    },
+    {
+      "symbol": "2303",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2303",
+      "sha256": "fb7738782d44fe59856a5795cfc95fbddc9053be7050d3593c6be587c49edce5"
+    },
+    {
+      "symbol": "2303",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2303",
+      "sha256": "ede50fe06266c170623baf42322b4a91f309ae436c7373a83b141b053c28a215"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2317",
+      "sha256": "8a90c155b5d06c05df77b486a691691bc89a1eea61507289b3278798f5cf66c9"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2317",
+      "sha256": "0c0bfadc1dcdc28c457d468969872d32a70f023af331f40c1b26f200c6088213"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2317",
+      "sha256": "423074e6f593ffe04d7be74aebf8614cbfb18325f17ed9f5f01a1c716f97fabb"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2317",
+      "sha256": "2dbede894a6ab6c4b0bd15944392fe0096861d0310db8409f9e41e2485f19877"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2317",
+      "sha256": "377b4375a2234cf55eab8317a27c5d148427600feb75f55f5550e338763fcb1c"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2317",
+      "sha256": "f77d0f9258f06e6c2b91e30d7309214ebad1dc567574639d41b8b45943d74b17"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2317",
+      "sha256": "7dc065673a8ac786da4605a41c7e9ba07b2c63ee5db8056bea0f6b382f44d418"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2317",
+      "sha256": "47622a0db73ebdf70db39abaf5d73722296046c33fd77566748088ad6cae5e7d"
+    },
+    {
+      "symbol": "2317",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2317",
+      "sha256": "8e6dc439ef3fc442e18cbaea8cb7be5230e8a161fdd00e717a51c49be18ff3ce"
+    },
+    {
+      "symbol": "2317",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2317",
+      "sha256": "b03e9975d2563b80e1e13ed04f546d6b0ca23ce1f9a13ffa042f085024b3e89f"
+    },
+    {
+      "symbol": "2317",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2317",
+      "sha256": "9d9cc761ab278f3f28de891bc8123d36450037aa4800ee563330ae8851f08cd5"
+    },
+    {
+      "symbol": "2317",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2317",
+      "sha256": "dff3c4728c3b96ca363aca28f327945bb740eebb17399307c5d935cb4bb8593a"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2317",
+      "sha256": "618a2e7c0cdfe2b0fe91f4d068229354f0b18ac99dd4d8b9bf85881103a775d6"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2317",
+      "sha256": "cdf54abdedb7f97ab4ce467b8703ccbc89a4a6d96eca5a5ea869e56d96cbce28"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2317",
+      "sha256": "a7515c5a61d954afb5c7aad2dab68670f4c5b3473e036cde6a54121142749778"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2317",
+      "sha256": "0e9d004eaf426900ed8f39c44c684615f9697a63452853ee9a362e492faa579c"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2317",
+      "sha256": "c8892b4bcfa111d6a21d4e204bebea3bd2f3661854246e10b9a344402ea01659"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2317",
+      "sha256": "caf195490a802a54e049447d899f2d55f4111c78ee918c29a51d413ce26d8a15"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2317",
+      "sha256": "de1caf127a482cac513a1013ee0b0cec1f26e2f23aefbd49e5f7ee57cff6e45a"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2317",
+      "sha256": "8b50281bedd07ae6628e9f7b504bb048ecff915712eae6845f529b286a070682"
+    },
+    {
+      "symbol": "2317",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2317",
+      "sha256": "ac4ef2ac4395462d02cabac81c5ca7c23b1902c732e5873dd3eeb4d5708d2800"
+    },
+    {
+      "symbol": "2317",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2317",
+      "sha256": "6b9635ba764e939d406ee25cc0360951803ff54d252ac21d1b21a01e485dff3e"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2454",
+      "sha256": "bd450dbfc5cc4dc794ef9e495ae92327e0626b34a89487dee574b99beab67bed"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2454",
+      "sha256": "5cd687cff3005c39df844289596735668cd93482efbe899c02aa75a18a04ccce"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2454",
+      "sha256": "f39e093c6a039431bf980be392273a7194fa7d571384807c2346dbd46b2e0fbd"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2454",
+      "sha256": "d55f91c607aed7204ff52a7d7a1a1123350ca9766df9c62626f829f803b1d96b"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2454",
+      "sha256": "e2a572c5301fe2949e42ad4d7f3568d4c3e87f50de153ea96a6224d41192d914"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2454",
+      "sha256": "fcf3e8f94c793ce92dda1ab4c7ea502f3a27d93be35e0ba34a1f0759f350cab2"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2454",
+      "sha256": "f8c6591f3c2c3891c017ad2bc529600cbc8200e5cb9c3ff0db6f10c59b2f071e"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2454",
+      "sha256": "4ba054802a4b75d591e1838075dfd12f5a864c71c54e0d09468c564527b42929"
+    },
+    {
+      "symbol": "2454",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2454",
+      "sha256": "1f2f3b1fdadf2ee4945f9c747d2e3f3b9ebe2ec8bd6a62cbb751d7e7b060952c"
+    },
+    {
+      "symbol": "2454",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2454",
+      "sha256": "7d95d3e6df42f8ca0772edd341491c88c32d32922ca25b02204e86faf5bcfd39"
+    },
+    {
+      "symbol": "2454",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2454",
+      "sha256": "98646d800f17052ba7d2a692347db292d7e10e852f015ac0bd453fe5f5a2bd22"
+    },
+    {
+      "symbol": "2454",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2454",
+      "sha256": "d276d685ee25099576ebaaa9670b4ff6f96f972a4b23bc394b015647db6fc17d"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2454",
+      "sha256": "12366b0b155db74bb4d6eda02e47fd6ba001a877aa6c397ed357af510b2ab9e6"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2454",
+      "sha256": "cdc650af8a904b45f4fca0958802fb1dcd7e2000c829c87395d494fb8842d52f"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2454",
+      "sha256": "10d5a416892921165087383fbdad57b300e3bd2ba5ce8f25ea94aacbf1d088f4"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2454",
+      "sha256": "e53f49f461bcb419561e73ed4fb5d692677d65ba58e04f92d2e5d3f055d96464"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2454",
+      "sha256": "d4aee80f3dd15ade8505f6881add26205dfdd8cb2139dbbc17663f2daf3a6988"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2454",
+      "sha256": "bd5e62d15c7ef90d1dc4f66dfb377b034a699ee4143841623010ff4100a10863"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2454",
+      "sha256": "04c2cfd4724609020293ca1300d1cbc282fc8c005101a6b192eddb23d4aa63ad"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2454",
+      "sha256": "62a579c46bc26f74de2dc72a30317a8298e99b1f8752ee2e8948b64d2909472f"
+    },
+    {
+      "symbol": "2454",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2454",
+      "sha256": "6db1f54ca5f269340af8af6b1f911ad7ca358800abe233d0a70afc8461ea6e70"
+    },
+    {
+      "symbol": "2454",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2454",
+      "sha256": "2c60584955adf1b379e5c3353a1aed848450d28debc5cf4dae608e665ad98f47"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2308",
+      "sha256": "330b801bcb03eecc0da5dd28bcec808e9b06b0a7187395a8d5489b309f4b6f73"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2308",
+      "sha256": "fb541ffdceb6832d211680e8b345db4bd3cf0358c2c03e4d6d61d3514bf507a9"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2308",
+      "sha256": "0fc668cc5b2212e617f9e31625ab1e0dc967e74c7ae8c24b8eb65285216cd3fd"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2308",
+      "sha256": "b91047a6ff5a894b109e6320e79770d516bf52587e177b2340acf7cdccc61a68"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2308",
+      "sha256": "35f560d999d18c3f9ba6be4dd001210733fe4b617f367ddb0c77776ba0e8e25d"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2308",
+      "sha256": "e4d1588857010a584a0229e9c704059ce3d32a7d986d28f03d4d6c3b596d7ed9"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2308",
+      "sha256": "3d3a4f64bad5f0fef6b0b4745d0d620030da069ad56e724178f6a05627b6c89f"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2308",
+      "sha256": "63c29bfdf9eceaaa57f88da249589e0990446205fdff6bd9d2a958b9a492f203"
+    },
+    {
+      "symbol": "2308",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2308",
+      "sha256": "6c78531e2ea354d9ef10d2aa3c57cb00ba92a302c376fd76745416eb1c54b464"
+    },
+    {
+      "symbol": "2308",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2308",
+      "sha256": "e6a91bf77e584e7b5eabbe5c78d23cf634cb5e3b4c99075eac83fa91624edc32"
+    },
+    {
+      "symbol": "2308",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2308",
+      "sha256": "faa39c98b8ed50332b5566378f6e1459b841091b3a7ebbfae1fff0d6de80f476"
+    },
+    {
+      "symbol": "2308",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2308",
+      "sha256": "496a60292205be17eb531f5585b9a6a314c1971e57bfebaec0a1e0b48944983b"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2308",
+      "sha256": "850c6ee8bc72360e1926ac678b4619aea54265776597bbe476ccdd8ee7ea16f5"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2308",
+      "sha256": "7486db3ebabdff6159af341eb7cbeb27e02427985e2284439fa59099768d2d42"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2308",
+      "sha256": "32002643965520748117df10a30071f62d82a8c98fe6710d0a1f3e1ed9a511d1"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2308",
+      "sha256": "626d39ab4126ba8f4e142179a1b130ead9cc0e0766ece7434cac200d87a4c2cf"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2308",
+      "sha256": "6c71aba5183ce7fdc6569b16b8a29e4238f20d8e3eca5acd1d51a5d20842bc28"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2308",
+      "sha256": "dd43fc4c411365d3553fe38945e62c15cd65479c455c5cd4c7d2e09d63916e4d"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2308",
+      "sha256": "9dfc44a3a18b3ccac09c678e771800055629cfb35c4cee5ccbf1b2d77503f6f4"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2308",
+      "sha256": "03357b85800d78e33f90f0f862e32d4a80be82f384c96b165acc46c18a1eff24"
+    },
+    {
+      "symbol": "2308",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2308",
+      "sha256": "f3dbc6507524ff9fc56f4ad081795402875fbf4cdc41f25ca758e4b2df190c0f"
+    },
+    {
+      "symbol": "2308",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2308",
+      "sha256": "03cbd31168dcbe7c84c9b75b39b486543728f81457ec23f025867075f19d8a73"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2881",
+      "sha256": "5e38f80f9eceea8346712aabe8ffd5c3fdf57b06ee9d457cb009aea845c6429f"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2881",
+      "sha256": "427a98d3fe0ed2159158d606f6476792403c0001121a5049500275b8b1a5dedb"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2881",
+      "sha256": "f585da606dd99cb7c959dfbc79e99ddd616a3283a1d559d304ecb2eaffe0db2a"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2881",
+      "sha256": "8c636fcdda6026c670945b25865f1607bcf1360dd8aee30f4b77e9c37e425fa4"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2881",
+      "sha256": "8b5c152b5c863a4162b8cf1804b107cae1bb197f51814247cd2fcac11da9b36a"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2881",
+      "sha256": "f3caff8a1deb3229648723c39396c384d54ebec96b7194ef1ae17e8aa35a9f7b"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2881",
+      "sha256": "46dd1c25ae947627a6e84c9ae4dddb3598fabbacb207f8c3db9b0516246aee6a"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2881",
+      "sha256": "9586570629fc82049c1fdcbdf0c4cb9ddaa24cab7fe8156306e3bcc22f1cfe85"
+    },
+    {
+      "symbol": "2881",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2881",
+      "sha256": "4003205821f15a998c6a1b1a614c1ebbf99e1abd81b32b5329b0923a81561e54"
+    },
+    {
+      "symbol": "2881",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2881",
+      "sha256": "8c23215438463726f90a9102acfdb0013fee7c4984d7a31987536416f7b02b8b"
+    },
+    {
+      "symbol": "2881",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2881",
+      "sha256": "3a5aacd901b1b9ce3e87338634487dc25a838ce40200108c44492a408419f0e5"
+    },
+    {
+      "symbol": "2881",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2881",
+      "sha256": "1137a9e8ec445ff0c7b2c2e3963b9033d1d675c47710f004faf318d101800a91"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2881",
+      "sha256": "80ebce96761cdad1aea21f1ff8a0e5c5d13ff50d68bdae01739d9e2fd70b8662"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2881",
+      "sha256": "aa2cdb9c3c12f38a617dc14708b03af5b8b71cd3e014fa08e32784eae5ea11dc"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2881",
+      "sha256": "b83aa360a0fe7238a5f4586420b6eb59113540feca6be51911f754219b6a363a"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2881",
+      "sha256": "eac7af6b9989e66c26032d9e72aab8a135c89f9df0aa4cc6e8ec3afb14580b71"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2881",
+      "sha256": "87736da5208cca91827a98f4f45db4cd14c07bc334de9908521a048c9146aafd"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2881",
+      "sha256": "b12ff53b6b59742fad5aba2e1d8077aab638deebe57a4027e06d49be37c47f2b"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2881",
+      "sha256": "a1d661918f37f0aa0b86e09dd28581b9e217e6b51c427ac6defad5124a100771"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2881",
+      "sha256": "65e3d3b3553dd0e52d5cca823ab3a466f2ce5bc4f0836fce0df5f16714e4b326"
+    },
+    {
+      "symbol": "2881",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2881",
+      "sha256": "9649296374fdfe69f107b382f7356a4e434420ff7cd56b7b7f7c599ad32cd6f3"
+    },
+    {
+      "symbol": "2881",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2881",
+      "sha256": "63461ba6d3a5b340dee4ca6f155afd6b8fdef93ce2bcec9463169adf8215bf47"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2882",
+      "sha256": "69b132f49c50e1744d234d6803bda722035af40b422886ae9217b16555592a61"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2882",
+      "sha256": "e44b64fd932bbccd23c0d0a79495970467d332551abff7c0b7e39cb9c73b4315"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2882",
+      "sha256": "194c42c7277d5b54c68f8bc1b228b158b1903bb8ab0c9155eeba4c82425c6fa4"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2882",
+      "sha256": "d9a5987ada0671ebea765b75e1b5fb9f59d39e27cb73c6efdb482d7be9b54b70"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2882",
+      "sha256": "6b3bdb0815f59dbcd6b02ffadf385c62bc33647738e3a07ffaf63533290249a3"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2882",
+      "sha256": "151804ccb529bc55083e5b71742b2d2e2b8ca82ef90606f7f9aebb92c4831160"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2882",
+      "sha256": "02beaa5c384576e669196c0ba025ab61aaac2e6060671aed1be28edd985f79bd"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2882",
+      "sha256": "6405e7bc3a5a36186de09cb9818b192eabea9dbb18ec65aac887f6e2605c722a"
+    },
+    {
+      "symbol": "2882",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2882",
+      "sha256": "edb4e004cf4da9a838834415fbc900fba2bbdbf03af5b9b8a99f2f8f5cab12c6"
+    },
+    {
+      "symbol": "2882",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2882",
+      "sha256": "134d1a5a159e10029082d8a7fc1b4e2c0e00a81c6ec56fcbfc3b37aff5b66321"
+    },
+    {
+      "symbol": "2882",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2882",
+      "sha256": "fffeeb36023050466e22034a42af3e1c9d0b492dc0550cf86cb96883676dffc3"
+    },
+    {
+      "symbol": "2882",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2882",
+      "sha256": "d14abbaefa338bb9f8535b13ec0912ccb27420b96154977cff8f3720050c78ed"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2882",
+      "sha256": "f39f122ed80d71c53b7a5d9c32c2a961cb64d33304e283a4afd29c5b76b19fd3"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2882",
+      "sha256": "a7c14485fe70a0c6666b48f5ce298479a9bc90e07b598a37328e5d3afd4499f4"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2882",
+      "sha256": "6b710046f9bdd0dab4fa5c4d746330a24719a3becb0793006b45e32ef37ca161"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2882",
+      "sha256": "6d7776b3d0a61fc3cbcee66ee6194c36444a3bb5b9823fe4fe1be6cbfe9a524c"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2882",
+      "sha256": "5bc09a9182b1618671349915cbec3707d837c25de9df1e39f12bf874ca35b4e0"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2882",
+      "sha256": "4e6bdb9e2b781e186c0aa5ecc9f385ddfca53a29f74d125dd220cb40f3b84de2"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2882",
+      "sha256": "2ada2f1a77431471022cab2027137f8b286bfc53b76ef0e040017b9e89217d22"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2882",
+      "sha256": "31354b04c8dffb5c5973f25340cbfbcf0aae32a2b50af655c68dee1611782336"
+    },
+    {
+      "symbol": "2882",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2882",
+      "sha256": "f9a602e202457a956aee1bec64c9577b507d34778d78f73cc7d8390e09d9418e"
+    },
+    {
+      "symbol": "2882",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2882",
+      "sha256": "ba4a0535ce00333a8121d64026efc522bee8fd58952207d226cc388ad1835b70"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2603",
+      "sha256": "e344ca070600410dcb5d04b2f8fd0ac81f229abd2a2bd8e1508d83fcba1ec8ca"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2603",
+      "sha256": "4c6640815dcc378b94aa4b108c9b36e877478b434b9a959a329273777f02a3ab"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2603",
+      "sha256": "b7ebb809e42038454ca5dceb10732afee23cb0aa6e4635c073e76a126e3717c2"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2603",
+      "sha256": "91c55a08559cb00970367b1a8f1cb190a05661776c68bb402d6a6ed24460e542"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2603",
+      "sha256": "81442869db92fcad89ffcebee0d06ced307b5c540788ebeca35578544c1268c9"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2603",
+      "sha256": "6b23494572a63074bb662824d1a26ae271e5cd8483e8c753f4ae8cf69b3560e9"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2603",
+      "sha256": "d714fe1fa02ed639655a961f679fa7de12b1a7f98704770010549f303e1f69cd"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2603",
+      "sha256": "dd655583b2b8d61e84bdb727c552db81e4fed5722f168055049d3b6ac82763bc"
+    },
+    {
+      "symbol": "2603",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2603",
+      "sha256": "6c01a3124fd2374010c21e640d3b6b5838701e0081508d50ff34147e38d96a40"
+    },
+    {
+      "symbol": "2603",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2603",
+      "sha256": "66b0c5479f3bae3a023a14e3bbdad0e801b324c37ccc8c64a2abe1e393033ed7"
+    },
+    {
+      "symbol": "2603",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2603",
+      "sha256": "5b5725f2c9c6956e879bc08d134f788df60ea36a323d543d45ed15ed5a20f1c6"
+    },
+    {
+      "symbol": "2603",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2603",
+      "sha256": "39251b0bcb85cd36177b43d065985c8cffc3da363594af20817f83fdba6b21c7"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2603",
+      "sha256": "cee2d59c875d455d9a8dfe07f93e04e32c261a75ab069c23f5faeb51b95a8faf"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2603",
+      "sha256": "364ee74aeb02bab9dcba79c2bc4b4a9fca06deb67d52a8cb1fe352978689f088"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2603",
+      "sha256": "9f1e9edbc0ca74faf210b7d7c3cad9e9b8679e04eb89df28b88481d2f474765c"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2603",
+      "sha256": "148e99dd8de836a6f2ac95f750916260df1275af3406f5cc69e4b28e6459a434"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2603",
+      "sha256": "0fbdb7dba54d01c4ef0b533ddb620477fd5825fc2299d1d5d5f0d308f010d492"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2603",
+      "sha256": "fa776494924aecc0f85da8254f7d35de6e6e31886b73df4da5e381c3dfca5f02"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2603",
+      "sha256": "e38fc018df5636514442f0797c8dea92c93d5091cf432146f584cc46543ed539"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2603",
+      "sha256": "7e466b1c6903e3d98855c343e630bc227756353d1c62723e92bd44a2957c895f"
+    },
+    {
+      "symbol": "2603",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2603",
+      "sha256": "0281367ac82971a97533dc86c17b81011c8490ba5dc89a99c8a9cfa96200644f"
+    },
+    {
+      "symbol": "2603",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2603",
+      "sha256": "666bfb7e452a4d58435a1fa61f52820a553b90c531b7bdccc15948c5c8a90513"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=2002",
+      "sha256": "3973aec8422e0f437f556087abdc92f12c292c098ccb11d583a9ace5adf8fa16"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=2002",
+      "sha256": "b17eea914ce2b9ef8352a3bfded0a88282050b25745de2a9f5ebd9a4527ffe72"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=2002",
+      "sha256": "b4f5be380a71c0192fe058458b94efbff3858ca61315c1cb51c7ef7da27543e1"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=2002",
+      "sha256": "3d752285af6315ac4d51a86bc99d4ddff23fe430ca1d83b14983387d5819d3b9"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=2002",
+      "sha256": "381577ff6a251363f51493fef31ac0ef6980ef87be744ef8f637c9cf69349b0e"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=2002",
+      "sha256": "43885a22efe1e263d728948d0d2ddefcc736d120255a177603cd4178f87aefde"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=2002",
+      "sha256": "23bad45fc3ba9ea8e4b2a720da9ac6821d1dbf3673da06a7d575330a90544fec"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=2002",
+      "sha256": "de583e7f11016a331049604683fcdf193f1c8282afebe6594f1ba557d2ecf5be"
+    },
+    {
+      "symbol": "2002",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=2002",
+      "sha256": "225a343856c0c82a70c00093cc7dd185358c390eb24cb53974158520b396d9ee"
+    },
+    {
+      "symbol": "2002",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=2002",
+      "sha256": "0d6a04e21dda1e00f647ee14d25e13a03b5519a1ff093bf123cd6ad942be27f5"
+    },
+    {
+      "symbol": "2002",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=2002",
+      "sha256": "21a79e161b6b68200a1b6aad88bae43b1a0a15e159e36eaa113faa339284d6d0"
+    },
+    {
+      "symbol": "2002",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=2002",
+      "sha256": "a626c406b2e077c29fab53a1ccc97ae4e0b929545e40202a0a510e6ca118e6c0"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=2002",
+      "sha256": "9bafeff1830873fecafc93b7ba13223e6f8dc1a565c298e23070ac868d2ecaaf"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=2002",
+      "sha256": "38d7740a9d8d53db23bef36816ff85d85fab4ffc407e6698f18feeaf2d15c916"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=2002",
+      "sha256": "acd2e173429efd1a072f2aa54f0eea2bc5a5ec80caf43ccf9d7673962610c0f1"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=2002",
+      "sha256": "fae4c858a38a660ae9fceb5fcd950102ce9e9817af1e042c6ea3d787400ea833"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=2002",
+      "sha256": "bb94bfdba927d497bcbaa8223a119b806922f06fd2d7c7eccb88970d5d955a25"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=2002",
+      "sha256": "614f9eba50a569696c7b3c2c8d71377ba413196702c0d0054360a4c9274d3819"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=2002",
+      "sha256": "fd3798246fe3972bd3a191e618fff659897c2b7614c6964e83322d89d436061a"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=2002",
+      "sha256": "d0fd066000b84444063b47c2a79dbd74f7aa439cd2d001f1f75c39a132443f6a"
+    },
+    {
+      "symbol": "2002",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=2002",
+      "sha256": "00750230bc1f5124799b976af25735b0e32553cc13a5327e942133aab8d84194"
+    },
+    {
+      "symbol": "2002",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=2002",
+      "sha256": "6569d27cc4bf44ac41df06572857c429bf199cafe79a31e7256a5ec3ed71d018"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250101&stockNo=1216",
+      "sha256": "07ffc3d30f8bc348fd646bcc06a60d5a546e58b63a0e94d842cfb73645cbcad4"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250201&stockNo=1216",
+      "sha256": "72004bb73bfc0e4019d7bc200f4b2f22a447f5f371ae6a8aebee6fccb1733cb5"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250301&stockNo=1216",
+      "sha256": "e3b78fdd0eaf7b312d8cd21820aae84fce1d76b64b724616e10e54278bf03ee2"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250401&stockNo=1216",
+      "sha256": "9648511e66f150e7b6566e4f310140c995b9d73fd5e282869fe1d34c47f3e43f"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250501&stockNo=1216",
+      "sha256": "3d0633d0fd3ea45320618dd9a1c67b47bab4f6e504b20c556533cde7d25ccae8"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250601&stockNo=1216",
+      "sha256": "7e5d3160a97731362e86c70e30f9a64c8a08929f38dccfec8df10129de847426"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250701&stockNo=1216",
+      "sha256": "70f52a0bf32654afd0f13bf2029d32332f1c15c9ea99f9c7e187cebab70b481a"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250801&stockNo=1216",
+      "sha256": "d6396bdba935850b17cdf95a43fa04cdcee186f224007a45026a89fa68696d32"
+    },
+    {
+      "symbol": "1216",
+      "month": "20250901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20250901&stockNo=1216",
+      "sha256": "e37a196587b56d60c4d9b745860e1f031ab9959f31a13833c1a7a5d36c0696bc"
+    },
+    {
+      "symbol": "1216",
+      "month": "20251001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251001&stockNo=1216",
+      "sha256": "ce1ec2c0e93e446002907e85b10829271945e2cdfc1c186e9868ce48b4c8ccdd"
+    },
+    {
+      "symbol": "1216",
+      "month": "20251101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251101&stockNo=1216",
+      "sha256": "1622a3db36523d50f60267782d498cb640f887e23b56d6018296bf8fde26eebb"
+    },
+    {
+      "symbol": "1216",
+      "month": "20251201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20251201&stockNo=1216",
+      "sha256": "6378f9d7d5405d900f250ea282ba3ee6a75f0c25fb61bb4f7d6d2149278e1d59"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260101",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260101&stockNo=1216",
+      "sha256": "40a004339035efdee392fca318bf57d5f2b9e986f471aa3372317ad48780e17b"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260201",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260201&stockNo=1216",
+      "sha256": "d6322c4318c85c102462616bb13d31182a18a90729d01d347395fc115d76b4be"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260301",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260301&stockNo=1216",
+      "sha256": "291887c99e40073b6a6495b3cb3def864902c410850d953bd6702ab4872df3c0"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260401",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260401&stockNo=1216",
+      "sha256": "cb3a8351c9ced0f1d089fda0bbb03020935fedfbc9beef9ccec8f89c32a217e9"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260501",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260501&stockNo=1216",
+      "sha256": "c145c74959fb300028b554dc63bf1064b573a991cbdcbe3b3b8b74a78d5ed7dd"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260601",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260601&stockNo=1216",
+      "sha256": "97bb03dfcb5b6dbc11bcf626cf2e79701d7e2c031587c1864862b8caaf69abbd"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260701",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260701&stockNo=1216",
+      "sha256": "9f5995344ef48a79fdf84edb2d5c61f685408bd0ca5c1dc83f4a9934d850788a"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260801",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260801&stockNo=1216",
+      "sha256": "5fdf1904e5bdf2d7a128f001f3455d88b05e1dd7e7d8992f526a5427f856723c"
+    },
+    {
+      "symbol": "1216",
+      "month": "20260901",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20260901&stockNo=1216",
+      "sha256": "72b56516077820ccf8e32bde7e2e9278efaac6075e76de1bb3be2342a049c25f"
+    },
+    {
+      "symbol": "1216",
+      "month": "20261001",
+      "url": "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20261001&stockNo=1216",
+      "sha256": "33e70977d894b4db02e4f99f8d3f753a6f76e913dc14902fbcbbb58e1bc9bcca"
+    }
+  ],
+  "calendar_sources": [
+    {
+      "year": 2025,
+      "url": "https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&date=20250101",
+      "sha256": "5c85396aa2c0bf45add08a257aa6343aac2d48f9d6bb54da17c7f88fefcb71f8"
+    },
+    {
+      "year": 2026,
+      "url": "https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&date=20260101",
+      "sha256": "7fefe785ea7155a5004a2eb74486ad865ea5c4b5f02ee0cffbbdacb1ca2ea390"
+    }
+  ]
+}

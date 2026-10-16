@@ -1,0 +1,55 @@
+{
+  "source_sha256": "b0087e56b0ee758f324c48ec58f47d4c60ddd7fb03e8cc2cec36ed0d9243f92f",
+  "events": 950,
+  "initial_cash": "100000",
+  "final_equity": "100589.5",
+  "return_pct": "0.589500",
+  "realized_net_pnl": "864.50",
+  "unrealized_after_buy_fees": "-275.00",
+  "fills": 21,
+  "exits": 10,
+  "fees": "533",
+  "taxes": "520",
+  "win_rate_pct": "40.0",
+  "average_win": "1551.625",
+  "average_loss": "890.3333333333333333333333333",
+  "profit_factor": "1.161830774990640209659303632",
+  "average_close_exposure_pct": "41.85179726376048880396753468",
+  "close_exposure_days": 20,
+  "final_exposure_pct": "4.205210285367757072060205091",
+  "snapshot_peak_equity": "105174.5",
+  "snapshot_max_drawdown_lower_bound_pct": "4.359421722946151396013292195",
+  "buy_proposals": 40,
+  "buy_proposals_with_trailing": 0,
+  "failures": [
+    {
+      "asof": "2026-10-05T06:00:00.000Z",
+      "message": "2026-10-05 14:00 · ACTIVATION · 候選包含資料範圍以外的股票"
+    }
+  ],
+  "failure_details": [
+    {
+      "asof": "2026-10-05T06:00:00.000Z",
+      "outside": [
+        "3324"
+      ],
+      "held_outside": [
+        "3324"
+      ]
+    }
+  ],
+  "entry_types": {
+    "IMMEDIATE": 16,
+    "REBOUND": 21,
+    "BELOW": 2,
+    "ABOVE": 1
+  },
+  "all_decisions_with_trailing": 0,
+  "logged_risk_events": 16,
+  "distinct_logged_risk_messages": 4,
+  "october15_exits_net": "-2546.5",
+  "limitations": [
+    "Execution log contains snapshots, not a complete minute path. Intraday max drawdown and unfilled-signal distribution are not recoverable.",
+    "Close exposure uses one review snapshot per session. Unrealized PnL includes paid buy fees; future liquidation fees and tax are excluded."
+  ]
+}

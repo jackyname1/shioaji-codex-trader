@@ -22,6 +22,7 @@ const q=(price:string,seconds:number)=>({...quote(at(seconds)),last:price});
 async function dispose(r:Awaited<ReturnType<typeof rig>>){await r.engine.close();r.store.close();}
 function reboundPlan(r:Awaited<ReturnType<typeof rig>>):void {
   Object.assign(r.engine.plan!.analysis.decisions[0]!,{entry_when:'REBOUND',trigger_price:'29.5',rebound_fraction:'0.02',limit_price:'30.3',conditions:[]});
+  r.engine.plan!.analysis.decisions[0]!.smart!.stop_price='28';
   r.store.set('plan',r.engine.plan);
 }
 test('structured rebound requires a BUY, bounded positive percentage and no stray rebound fields on ordinary triggers',()=>{
@@ -36,7 +37,7 @@ test('rebound arms at the threshold, tracks the actual lower low, and buys only 
   t=trackEntry(t,decision,'a',q('100',1),now.toISOString());assert.equal(t.armed,true);assert.equal(entryReady(decision,'100',t),false);
   t=trackEntry(t,decision,'a',q('96',2),now.toISOString());assert.equal(t.low_water,'96');assert.equal(reboundExit(t,decision),'97.92');
   assert.equal(entryReady(decision,'97.9199',t),false);assert.equal(entryReady(decision,'97.92',t),true);
-  t=trackEntry(t,decision,'a',q('94',3),now.toISOString());assert.equal(reboundExit(t,decision),'95.88');
+  t=trackEntry(t,decision,'a',q('94',3),now.toISOString());assert.equal(t.status,'INVALID');assert.equal(reboundExit(t,decision),null);
 });
 test('entry tracking ignores pre-plan, repeated and out-of-order trades and does not mix odd and common markets',()=>{
   let t=trackEntry(undefined,decision,'a',q('80',-1),now.toISOString());assert.equal(t.armed,false);
@@ -56,7 +57,7 @@ test('entry state persists across restart, while a newly activated plan atomical
 });
 test('trailing activates without selling, tracks new highs, then exits on the precise drawdown; reward target never sells',()=>{
   const p=updateProtection(undefined,'9001',spec,'a');
-  assert.equal(evaluate(p,'109',at(1).toISOString()),'');assert.equal(p.trailing_armed,false);assert.equal(p.high_water,'0');
+  assert.equal(evaluate(p,'109',at(1).toISOString()),'');assert.equal(p.trailing_armed,false);assert.equal(p.high_water,'109');
   assert.equal(evaluate(p,'110',at(2).toISOString()),'');assert.equal(p.trailing_armed,true);
   assert.equal(evaluate(p,'115',at(3).toISOString()),'');assert.equal(trailingExit(p),'111.55');
   assert.equal(evaluate(p,'111.5501',at(4).toISOString()),'');assert.equal(evaluate(p,'111.55',at(5).toISOString()),'TRAILING');
@@ -112,7 +113,7 @@ test('rebound secondary guards and cash limits remain mandatory even with a comp
     assert.equal(r.store.orders().length,0);assert.match(r.engine.decisionStates.get('9001')!.reason,/LAST/);
     r.engine.plan!.analysis.decisions[0]!.conditions=[];const read=r.broker.account.bind(r.broker);
     r.broker.account=async date=>({...await read(date),cash:'30'});await r.engine.tick(at(3));
-    assert.equal(r.store.orders().length,0);assert.match(r.engine.decisionStates.get('9001')!.reason,/現金/);
+    assert.equal(r.store.orders().length,0);assert.match(r.engine.decisionStates.get('9001')!.reason,/日損失/);
   }finally{await dispose(r);}
 });
 test('tracking metadata is available to strategy snapshots and strict model schema includes nullable new fields',async()=>{
@@ -208,7 +209,7 @@ test('minute replay catches an off-grid rebound, disallows same-day odd-lot exit
   const report=await runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'fixed',strategy_times:['09:10'],capital_profile:'balanced'},
     data,SettingsSchema.parse({codex_enabled:true,watch_min_amount:'0'}),analyze,new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,
     async r=>{sizings++;return {...await testSize(r),shares:100};});
-  assert.equal(report.status,'COMPLETED');assert.equal(report.version,'0.2.2');
+  assert.equal(report.status,'COMPLETED');assert.equal(report.version,'0.2.3');
   assert.equal(report.orders.filter(o=>o.action==='BUY').length,1,JSON.stringify({logs:report.logs.slice(-25),failures:report.failures,frames:frames.filter(f=>f.at.includes('2026-01-05T01:1')).map(f=>({at:f.at,tracks:f.entry_tracks,decisions:f.decisions}))}));assert.match(report.orders[0]!.created_at,/01:13:00/);
   assert.equal(report.orders.filter(o=>o.action==='SELL').length,1);assert.match(report.orders[1]!.created_at,/2026-01-06T01:12:00/);
   assert.ok(report.fills.every(f=>Date.parse(f.at)>Date.parse(report.orders.find(o=>o.local_id===f.order_id)!.created_at)));

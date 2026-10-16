@@ -32,6 +32,9 @@ export class Store {
   private closed = false;
   private ownsLock=false;
   private operation:StoreOperation='directory';
+  private orderSequence=0;
+  private orderChanges=new Map<string,{sequence:number;created:number}>();
+  get orderRevision():number{return this.orderSequence;}
   constructor(readonly path: string,private readonly options:{platform?:NodeJS.Platform;probeProcess?:(pid:number)=>ProcessState}={}) {
     let opened: DatabaseSync | undefined;
     try {
@@ -51,6 +54,9 @@ export class Store {
         CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS analyst_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, tag TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS orders_status ON orders(json_extract(value,'$.status'));
+        CREATE INDEX IF NOT EXISTS orders_symbol ON orders(json_extract(value,'$.symbol'));
+        CREATE INDEX IF NOT EXISTS orders_broker ON orders(json_extract(value,'$.broker_id'));
         CREATE TABLE IF NOT EXISTS protections (symbol TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sessions (day TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL);
@@ -138,14 +144,33 @@ export class Store {
   settings(): Settings { return storedSettings(this.get('settings') ?? {}); }
   saveSettings(s: Settings): void { this.set('settings', SettingsSchema.parse(s)); }
   orders(activeOnly = false): Order[] {
-    const values = (this.db.prepare('SELECT value FROM orders ORDER BY rowid').all() as { value: string }[])
+    const sql=activeOnly?"SELECT value FROM orders WHERE json_extract(value,'$.status') IN ('PREPARED','SUBMITTING','PENDING','PARTIAL','CANCEL_PENDING','UNKNOWN') ORDER BY rowid":'SELECT value FROM orders ORDER BY rowid';
+    const values = (this.db.prepare(sql).all() as { value: string }[])
       .map(r => OrderSchema.parse(JSON.parse(r.value)));
     return activeOnly ? values.filter(active) : values;
   }
+  order(id:string):Order|undefined {const row=this.db.prepare('SELECT value FROM orders WHERE id=?').get(id) as {value:string}|undefined;
+    return row?OrderSchema.parse(JSON.parse(row.value)):undefined;}
+  orderByBroker(id:string):Order|undefined {if(!id)return;const row=this.db.prepare("SELECT value FROM orders WHERE json_extract(value,'$.broker_id')=? ORDER BY rowid DESC LIMIT 1").get(id) as {value:string}|undefined;
+    return row?OrderSchema.parse(JSON.parse(row.value)):undefined;}
+  lastOrder(symbol:string):Order|undefined {
+    const row=this.db.prepare("SELECT value FROM orders WHERE json_extract(value,'$.symbol')=? AND (json_extract(value,'$.filled')>0 OR json_extract(value,'$.status') IN ('PREPARED','SUBMITTING','PENDING','PARTIAL','CANCEL_PENDING','UNKNOWN')) ORDER BY rowid DESC LIMIT 1").get(symbol) as {value:string}|undefined;
+    return row?OrderSchema.parse(JSON.parse(row.value)):undefined;
+  }
+  protectionAttempts(symbol:string,day:string):number {
+    return (this.db.prepare("SELECT COUNT(*) AS n FROM orders WHERE json_extract(value,'$.symbol')=? AND json_extract(value,'$.purpose')='PROTECTION' AND substr(json_extract(value,'$.created_at'),1,10)=?").get(symbol,day) as {n:number}).n;
+  }
+  changedOrders(since:number):{order:Order;created:boolean}[]{
+    return [...this.orderChanges].flatMap(([id,change])=>{if(change.sequence<=since)return [];const order=this.order(id);
+      return order?[{order,created:change.created>since}]:[];});
+  }
+  private changedOrder(order:Order,created=false):void {const previous=this.orderChanges.get(order.local_id),sequence=++this.orderSequence;
+    this.orderChanges.set(order.local_id,{sequence,created:created?sequence:previous?.created??0});}
   insertIntent(o: Order): boolean {
     const value = OrderSchema.parse(o);
     // Both the full intent ID and the broker's six-character tag must be unique.
     const result = this.db.prepare('INSERT OR IGNORE INTO orders VALUES (?,?,?)').run(value.local_id, value.tag, JSON.stringify(value));
+    if(result.changes===1)this.changedOrder(value,true);
     return result.changes === 1;
   }
   prepareIntent(o:Order,protection?:Protection):boolean {
@@ -155,7 +180,9 @@ export class Store {
   }
   saveOrder(o: Order): void {
     const value = OrderSchema.parse(o);
+    const previous=this.order(value.local_id);
     this.db.prepare('INSERT INTO orders VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(value.local_id, value.tag, JSON.stringify(value));
+    if(!previous||previous.status!==value.status||previous.filled!==value.filled)this.changedOrder(value,!previous);
   }
   plan(): Plan | undefined { const x = this.get('plan'); return x ? PlanSchema.parse(x) : undefined; }
   protections(): Protection[] {
@@ -168,6 +195,7 @@ export class Store {
   }
   removeProtection(symbol: string): void { this.db.prepare('DELETE FROM protections WHERE symbol=?').run(symbol); }
   entryTracks():EntryTrack[]{return (this.get<unknown[]>('entry_tracks')??[]).map(x=>EntryTrackSchema.parse(x));}
+  removeEntryTracks(symbol:string):void {this.set('entry_tracks',this.entryTracks().filter(t=>t.symbol!==symbol));}
   saveEntryTrack(value:EntryTrack):void {
     const track=EntryTrackSchema.parse(value),all=this.entryTracks().filter(t=>t.plan_id===track.plan_id
       &&!(t.symbol===track.symbol&&t.lot===track.lot));

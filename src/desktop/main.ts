@@ -82,7 +82,7 @@ else {
     dataRoot = smoke ? mkdtempSync(join(tmpdir(),'shioaji-ts-smoke-')) : join(app.getPath('userData'),'state');
     if(!smoke)try{const p=JSON.parse(readFileSync(join(dataRoot,'desktop-settings.json'),'utf8')) as typeof preferences;
       SettingsSchema.shape.mode.parse(p.last_mode);for(const c of Object.values(p.connections))if(c){loopbackOrigin(c.base_url);SettingsSchema.shape.stock_account_index.parse(c.stock_account_index);}
-      preferences=p;if(!argsMode)mode=p.last_mode==='live'?'live':'paper';simulationScope=p.paper_scope==='replay'?'replay':'realtime';
+      preferences=p;if(!argsMode)mode='paper';simulationScope=p.paper_scope==='replay'?'replay':'realtime';
     }catch{/* New or malformed preferences start in paper mode. */}
     commonSettings=new DesktopSettings(dataRoot);
     try{commonSettings.migrate(preferences.last_mode,preferences.connections[preferences.last_mode]?.stock_account_index??0);}
