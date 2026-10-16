@@ -758,6 +758,7 @@ async function verifyConnectionLifecycle():Promise<void>{
   const originalNative=nativeConnection;await originalNative.close();
   const fixture=new ConnectionSmoke();smokeConnection=true;smokeMarket=fixture.market;smokeReadMarket=fixture.reader;
   if(!window.webContents.debugger.isAttached())window.webContents.debugger.attach('1.3');
+  await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width:1600,height:960,deviceScaleFactor:1,mobile:false});
   nativeConnection=fixture.native(join(dataRoot,'connection-fixture'));mode='paper';simulationScope='realtime';
   await vault.clear();credentialState=await vault.status();initialError='';fixture.failWorkspace=true;
   const js=(source:string)=>window!.webContents.executeJavaScript(source);
@@ -771,7 +772,14 @@ async function verifyConnectionLifecycle():Promise<void>{
   if(!await js('document.querySelector("#settings-dialog").open && document.querySelector("#settings-dialog .dialog-message.failed").getBoundingClientRect().height>0'))throw new Error('Login error is hidden behind the modal');
   if(!await js('!document.querySelector("#connection-status").textContent.includes("已連線") && document.querySelector("#runtime-workspace-name").textContent.includes("即時模擬")'))throw new Error('Modal connection text or pipeline mode retained a stale ready state');
   await captureConnection('SYNTHETIC-ui-login-failure.png');
-  fixture.failWorkspace=false;fixture.simulation=true;
+  fixture.failWorkspace=false;fixture.nativeFailure=true;
+  await js('document.querySelector("#connect-saved").click()');
+  await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("SIGN_TIME")');
+  current=await state();if(current.connected||!current.connection.remembered||current.broker_diagnostics?.startup?.code!=='SIGN_TIME'
+    ||current.broker_diagnostics.startup.process_exit_code!==17||JSON.stringify(current.broker_diagnostics).includes('SYNTHETIC_'))
+    throw new Error('Native process failure lost its safe classification, exit code or saved login');
+  await captureConnection('SYNTHETIC-ui-native-login-failure.png');
+  fixture.nativeFailure=false;fixture.simulation=true;
   await js('document.querySelector("#connect-saved").click()');
   await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("未取得正式行情")');
   current=await state();if(!current.connection.remembered||!current.broker_diagnostics?.endpoints.some(e=>e.endpoint==='/info')||current.connected)throw new Error('A failed native login lost its saved settings or endpoint record');

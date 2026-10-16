@@ -1,4 +1,5 @@
 import {EventEmitter} from 'node:events';
+import {PassThrough} from 'node:stream';
 import type {spawn} from 'node:child_process';
 import {NativeConnection} from './credentials.js';
 import {ShioajiHttpBroker} from '../broker/http.js';
@@ -8,12 +9,14 @@ import type {TradingService} from '../core/service.js';
 
 /** Used only by --smoke-test. Every request and process is isolated; live mutations are rejected. */
 export class ConnectionSmoke {
-  simulation=false;failWorkspace=false;launches=0;mutations=0;
+  simulation=false;failWorkspace=false;nativeFailure=false;launches=0;mutations=0;
   native(root:string):NativeConnection{return new NativeConnection(root,async()=>'/SYNTHETIC/native',{
     origin:async()=>'http://127.0.0.1:19099',run:async()=>({stdout:'--no-open --production'}),
     launch:((_:string,args:readonly string[])=>{if(!args.includes('--production'))throw new Error('Production market flag is missing');this.launches++;
-      const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;
-      child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as unknown as typeof spawn,
+      const child=Object.assign(new EventEmitter(),{exitCode:null as number|null,stderr:new PassThrough(),stdout:new PassThrough(),kill:()=>true});
+      child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit',0,null));return true;};
+      if(this.nativeFailure)setImmediate(()=>{child.stderr.write('SYNTHETIC_PRIVATE_ACCOUNT Sign data is time');
+        child.stderr.write('out SYNTHETIC_PRIVATE_KEY');child.exitCode=17;child.emit('exit',17,null);});return child;}) as unknown as typeof spawn,
     fetcher:this.fetch,timeoutMs:1000,pollMs:10,
   });}
   market:ConstructorParameters<typeof TradingService>[2]=(store,settings,session)=>{
@@ -23,6 +26,7 @@ export class ConnectionSmoke {
   reader:ConstructorParameters<typeof TradingService>[2]=(store,settings,session)=>new ShioajiHttpBroker(store,settings,false,this.fetch,session);
   fetch:typeof fetch=async(input,init)=>{
     const path=new URL(String(input)).pathname;
+    if(this.nativeFailure)throw new Error('Isolated native service has not started');
     if(/place_order|cancel_order/.test(path)){this.mutations++;throw new Error('Real mutations forbidden');}
     if(path==='/api/v1/info')return Response.json({simulation:this.simulation,version:'1.7.7'});
     if(path==='/api/v1/health')return Response.json({status:'healthy',token_stale:false,token_expires_in_seconds:3600,ca_expired:false,ca_expires_in_days:30});

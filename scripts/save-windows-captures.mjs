@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 
 const repository='jackyname1/shioaji-codex-trader';
 export const captureFiles=['SYNTHETIC-ui-paper-1600.png','SYNTHETIC-ui-capital-profile.png','SYNTHETIC-ui-smart-conditions-1600.png',
-  'SYNTHETIC-ui-realtime-1600.png','SYNTHETIC-ui-live.png','SYNTHETIC-ui-connection.png','SYNTHETIC-ui-codex-history.png'];
+  'SYNTHETIC-ui-realtime-1600.png','SYNTHETIC-ui-live.png','SYNTHETIC-ui-connection.png','SYNTHETIC-ui-codex-history.png','SYNTHETIC-ui-native-login-failure.png'];
 const hash=(bytes,algorithm='sha256')=>createHash(algorithm).update(bytes).digest('hex');
 export function captureManifest(root,version,source,tree,run){
   if(!/^\d+\.\d+\.\d+$/.test(version)||![source,tree].every(x=>/^[a-f0-9]{40}$/.test(x))||!/^\d+$/.test(String(run)))
