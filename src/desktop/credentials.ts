@@ -96,7 +96,7 @@ export class NativeConnection {
   async start(raw: unknown): Promise<ConnectionInput> {
     const input = ConnectionInputSchema.parse(raw);
     const signature=createHash('sha256').update(JSON.stringify([input.api_key,input.secret_key,input.ca_path,input.ca_password])).digest('hex');
-    if(this.connected&&this.signature===signature&&await this.available(this.baseUrl)&&this.connected)return input;
+    if(this.connected&&!this.caFallback&&this.signature===signature&&await this.available(this.baseUrl)&&this.connected)return input;
     let stage='CA',effective=input;this.caIssue='';this.caFallback=false;this.startup=new NativeStartup();
     try {
     if (input.ca_path) {

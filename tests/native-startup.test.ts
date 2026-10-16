@@ -71,7 +71,9 @@ test('an explicit CA failure retries once without the CA, preserves saved input 
       assert.equal(f.environments[1]?.SJ_CA_PASSWD,undefined);assert.equal(f.native.hasCa,false);
       assert.equal(f.native.diagnostics().startup?.ca_fallback,true);assert.match(f.native.diagnostics().startup!.issue,/實盤需重新核對有效 CA/);
       assert.ok(!JSON.stringify(f.native.diagnostics()).includes('SYNTHETIC_'));
-      await f.native.start(credentials);assert.equal(f.launches,2);
+      // A later explicit login must load a replacement CA, even at the same path/password.
+      await f.native.start(credentials);assert.equal(f.launches,3);assert.equal(f.environments[2]?.SJ_CA_PATH,path);
+      assert.equal(f.native.hasCa,true);assert.equal(f.native.diagnostics().startup?.ca_fallback,false);
     }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
   }
 });
