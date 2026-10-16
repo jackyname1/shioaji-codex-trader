@@ -29,6 +29,7 @@ Object.assign(phase,{DATA:'資料就緒',MODEL:'實際模型',RUNNING:'選股與
   SIZING:'Codex 確認股數',SIZE_CONFIRM:'數量與風控核對',SIZE_DECISION:'交易數量建議',EXECUTION_RESULT:'本次執行結果',SUBMISSION:'委託送出'});
 const action:Record<string,string>={BUY:'買進',SELL:'賣出',HOLD:'觀望',ADD:'加入',REMOVE:'移除',RETAIN:'保留監控',OBSERVE:'觀測',RETAINED:'保留監控',WAIT:'等待',BLOCKED:'風控／資格阻擋',SUBMITTED:'已送出',FILLED:'已成交',PARTIAL:'部分成交',PENDING:'委託中',CANCEL_PENDING:'撤單核對中',CANCELLED:'已撤單',REJECTED:'已拒絕',UNKNOWN:'結果待核對'};
 Object.assign(action,{SIZING:'Codex 確認股數',SIZE_FAILED:'數量確認未完成',QUEUED:'等待數量確認',RUNNING:'確認股數中'});
+Object.assign(action,{TRACKING:'追蹤低點',EXPIRED:'追蹤超時',TRIGGERED:'已觸發',BREAKEVEN:'保本退場'});
 type Cell=string|number|{label:string;command?:string;report?:string;chartSymbol?:string};
 function table(id:string,headers:string[],rows:Cell[][],empty='目前沒有資料'):void {
   const host=el(id),signature=JSON.stringify([headers,rows,empty]);if(host.dataset.signature===signature)return;host.dataset.signature=signature;
@@ -100,6 +101,9 @@ const guided:Record<string,keyof Settings>={
   's-order-basis':'order_budget_basis','s-target':'target_exposure_fraction','s-reward-risk':'min_entry_reward_risk','s-trade-risk':'max_trade_risk_fraction',
   's-quotes':'manage_quote_subscriptions','s-min-cash':'min_cash_fraction','s-order-limit':'max_order_fraction','s-symbol-limit':'max_symbol_fraction','s-loss-limit':'daily_loss_fraction',
   's-watch-auto':'auto_watchlist','s-whole':'whole_lots','s-awake':'keep_awake','s-minimized':'start_minimized',
+  's-entry-mode':'entry_strategy_mode','s-adaptive':'adaptive_protection','s-dynamic':'dynamic_allocation',
+  's-slip':'risk_slippage_fraction','s-gap':'overnight_gap_fraction','s-gap-risk':'max_gap_risk_fraction',
+  's-min-profit':'min_net_profit_twd','s-track-minutes':'entry_tracking_minutes',
 };
 function schedulingFields(prefix:'s'|'bt'):void {
   const fixed=value(prefix+'-schedule')==='fixed';el<HTMLInputElement>(prefix+'-times').disabled=!fixed;el<HTMLInputElement>(prefix+'-interval').disabled=fixed;
@@ -158,7 +162,7 @@ function renderRuntime(state:DesktopState):void {
   const marketCadence=paper&&(state.backtest_progress.running?value('bt-entry-cadence')==='market':replaySettings?.entry_cadence==='market');
   text('schedule-strategy',paper?(replaySettings?(replaySettings.strategy_schedule==='fixed'?replaySettings.strategy_times.join(' / '):replaySettings.decision_interval_minutes+' 分鐘'):
     value('bt-schedule')==='fixed'?value('bt-times'):value('bt-interval')+' 分鐘'):s.strategy_schedule==='fixed'?s.strategy_times.join(' / '):s.decision_interval_minutes+' 分鐘');text('analysis-status',paper?phase[state.backtest_progress.phase]??state.backtest_progress.phase:r.sizing?'確認股數':r.analyzing?'條件分析中':valid?'監測中':'等待策略');
-  text('schedule-monitor',marketCadence?'進場／智慧逐筆':paper&&['0.2.2','0.2.1'].includes(state.backtest_result?.version??'')?'300 秒／智慧逐筆':(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
+  text('schedule-monitor',marketCadence?'進場／智慧逐筆':paper&&['0.2.3','0.2.2','0.2.1'].includes(state.backtest_result?.version??'')?'300 秒／智慧逐筆':(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
   text('schedule-watch',(paper?replaySettings?.watch_refresh_minutes??value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
   el('live-authorization').hidden=r.mode!=='live';
   const live=state.live;
@@ -320,6 +324,7 @@ function renderStockDetails():void {
   text('detail-context',replay?'截至模擬時間':'即時行情');
   const quote=(replay?frame?.quotes:r?.quotes)?.find(q=>q.symbol===selectedSymbol&&q.odd),f=r?.features[selectedSymbol];
   const bar=chartData?.symbol===selectedSymbol?chartData.bars.at(-1):undefined;
+  const account=replay?frame?.account:r?.account,position=account?.positions.find(p=>p.symbol===selectedSymbol);
   const book=el('order-book');book.replaceChildren();
   if(!replay&&quote?.bid_levels&&quote.ask_levels){for(let i=0;i<5;i++){const bid=quote.bid_levels[i],ask=quote.ask_levels[i],row=document.createElement('div');row.className='book-row';for(const v of [fmt(bid?.shares),fmt(bid?.price),fmt(ask?.price),fmt(ask?.shares)]){const span=document.createElement('span');span.textContent=v;row.append(span);}book.append(row);}}else book.textContent=replay?'歷史 K 線沒有完整零股五檔':'等待即時五檔';
   const m=r?.metadata[selectedSymbol],host=el('stock-details');host.replaceChildren();
@@ -327,6 +332,14 @@ function renderStockDetails():void {
   const rows:[string,string][]=[['股票',replay?selectedSymbol:(m?.name??selectedSymbol)],['最新價',fmt(quote?.last??bar?.close)],['買價',fmt(quote?.bid)],['賣價',fmt(quote?.ask)],
     ['MA5',fmt(replay?bar?.ma5:f?.ma5??bar?.ma5)],['MA20',fmt(replay?bar?.ma20:f?.ma20??bar?.ma20)],['MA60',fmt(replay?bar?.ma60:f?.ma60??bar?.ma60)],['RSI14',fmt(replay?bar?.rsi:f?.rsi14??bar?.rsi)],
     ['支撐',fmt(replay?undefined:f?.support20)],['壓力',fmt(replay?undefined:f?.resistance20)]];
+  if(position){
+    const mark=Number(position.last_price),gross=(mark-Number(position.average_price))*position.shares;
+    rows.push(['持有／可賣股數',`${fmt(position.shares)} / ${fmt(position.sellable)}`],['平均買價',fmt(position.average_price)],
+      ['帳務估值',fmt(position.last_price)],['浮動毛損益',fmt(gross)]);
+    if(position.cost_basis!==undefined)rows.push(['含買費成本',fmt(position.cost_basis)],['扣已付買費浮損益',fmt(mark*position.shares-Number(position.cost_basis))]);
+    if(account){const equity=Number(account.cash)-Number(account.settlement_debits)+Number(account.settlement_credits)+account.positions.reduce((sum,p)=>sum+Number(p.last_price)*p.shares,0);
+      rows.push(['單檔持倉比例',equity>0?(mark*position.shares/equity*100).toFixed(2)+'%':'—']);}
+  }
   for(const [label,v] of rows){const cell=document.createElement('div');cell.className='detail-cell';const l=document.createElement('span'),n=document.createElement('strong');l.textContent=label;n.textContent=v;cell.append(l,n);host.append(cell);}
   const plan=frame?.plan??(replay?null:r?.plan),decision=plan?.analysis.decisions.find(d=>d.symbol===selectedSymbol),protection=(frame?.protections??(replay?[]:r?.protections))?.find(p=>p.symbol===selectedSymbol);
   const spec=protection?.spec??decision?.smart;const rules=plan?.analysis.screening?.entry;
@@ -337,6 +350,12 @@ function renderStockDetails():void {
     ['額外必要條件',decision?guardText(decision)||'無':'—'],['優先停損',spec?.stop_price??'—'],['固定停利',spec?.take_profit??'未啟用'],['收益目標（不觸發）',spec?.reward_target??spec?.take_profit??'—'],
     ['追蹤啟動價',spec?.trailing_activate??'—'],['高點回落',spec?.trailing_fraction?`${pct(spec.trailing_fraction)} · ${armed?'已啟動':'待啟動'}`:'—'],
     ['移動退場價',armed&&spec?.trailing_fraction?`高點 ${protection!.high_water} → ${thresholdHint(Number(protection!.high_water)*(1-Number(spec.trailing_fraction)))}`:'—']];
+  conditions.push(['有效保護底線',protection?.protected_floor??spec?.stop_price??'—'],['已觀測最高價',protection?.high_water??'—'],
+    ['費稅保本價',protection?.break_even_price?`${thresholdHint(Number(protection.break_even_price))} · ${protection.break_even_armed?'已啟動':'待啟動'}`:'—'],
+    ['追蹤期限',tracking?.expires_at?stamp(tracking.expires_at):'—']);
+  const state=(replay?frame?.decisions:r?.decisions)?.find(x=>x.symbol===selectedSymbol);
+  if(state)conditions.push(['目前狀態',action[state.state]??state.state],['執行／等待原因',state.reason]);
+  if(position&&!position.sellable)conditions.push(['可賣限制','今日新增股數不可當日賣出']);
   conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後，再由 Codex 按目前現金確認股數，送單前重新核對風控。':'等待 Codex 分析或模擬策略'));
 }
 function conditionList(id:string,rows:[string,string][],note=''):void {

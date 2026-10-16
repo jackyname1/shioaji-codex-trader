@@ -48,7 +48,9 @@ conditions 每項為 left/operator/right/value：left 是 LAST、BID、ASK 或 M
 right 為 VALUE 時 value 是十進位常數字串；right 為同一組行情／指標欄位時 value=null。例如價格仍高於 MA20：{"left":"LAST","operator":"GTE","right":"MA20","value":null}。
 例如 MA5>=MA20、價格>=支撐價、RSI 上限等，每項都需列入 conditions；reason 只解釋條件，不能把必要條件只寫在 reason。資料缺漏會阻擋，不得省略條件來繞過。
 可用 screening 設定流動性、量能、RSI、20 日趨勢門檻；min_amount 不得低於 hard_limits.watch_min_amount。
-screening.entry 可為 null（僅選股）或提供 TREND、BREAKOUT20、PULLBACK20 的受限進場規則。
+screening.entry 可為 null（僅選股）或提供 MULTI、TREND、BREAKOUT20、PULLBACK20 的受限進場規則。
+MULTI 同時比較三種訊號，依突破確認、已完成回檔反彈、趨勢延續的優先順序，每檔共用去重識別。目標只能來自已完成支撐壓力／區間投射，不依所需報酬比抬高。
+回檔追蹤超時或跌破支撐停損後，等待新策略才重新啟動。adaptive_protection=true 時本機會為持倉補上 ATR 移動保護與費稅保本底線，底線不下降；保本不保證跳空時不虧損。
 規則只會套用到已確認資格、有足夠已完成日 K 的普通股票；可自動加入新觀測股，不需要固定股票名單。
 若你啟用 screening.entry，代表授權程式在策略有效期間對任何符合這套條件的觀測股自動產生買進提案。
 allocation_fraction 不得超過 hard_limits.max_order_fraction，且至多 0.20；每檔每輪只進場一次，仍須硬性風控核准。

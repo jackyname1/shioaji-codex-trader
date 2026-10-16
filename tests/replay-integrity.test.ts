@@ -130,7 +130,7 @@ test('quota during quantity confirmation never bypasses the second turn or retri
   assert.equal(r.quality.halt_reason,'CODEX_QUOTA');assert.deepEqual(r.final_frame!.execution_queue,[]);
 });
 test('cost estimates account for minimum fees and tax, and reports reconcile gross minus all costs to net equity PnL',async()=>{
-  const s=SettingsSchema.parse({}),small=roundTripEstimate(11,'659','673',s);
+  const s=SettingsSchema.parse({risk_slippage_fraction:'0'}),small=roundTripEstimate(11,'659','673',s);
   assert.equal(small.estimated_total_costs,'63');assert.equal(small.estimated_net_target_gain,'91');
   assert.equal(roundTripEstimate(1,'659','673',s).estimated_net_target_gain,'-29');
   assert.equal(roundTripEstimate(11,'659',null,s).estimated_net_target_gain,null);

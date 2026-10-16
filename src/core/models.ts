@@ -34,6 +34,7 @@ export const QuoteSchema = z.strictObject({
 export type Quote = z.infer<typeof QuoteSchema>;
 export const PositionSchema = z.strictObject({
   symbol, shares: quantity, sellable: quantity, average_price: nonnegative, last_price: nonnegative,
+  cost_basis: nonnegative.optional(),
 }).refine(p => p.sellable <= p.shares, '可賣量超過持倉');
 export type Position = z.infer<typeof PositionSchema>;
 export const OrderSchema = z.strictObject({
@@ -44,6 +45,7 @@ export const OrderSchema = z.strictObject({
     'CANCEL_PENDING', 'CANCELLED', 'REJECTED', 'UNKNOWN']),
   filled: quantity, created_at: timestamp, plan_id: z.string(),
   purpose: z.enum(['ENTRY', 'EXIT', 'PROTECTION', 'EXTERNAL']),
+  exit_trigger:z.enum(['STOP','TAKE_PROFIT','TRAILING','BREAKEVEN']).optional(),
 }).refine(o => o.filled <= o.shares, '成交量超過委託量');
 export type Order = z.infer<typeof OrderSchema>;
 export const active = (o: Order): boolean => !['FILLED', 'CANCELLED', 'REJECTED'].includes(o.status);
@@ -96,7 +98,7 @@ export const ScreeningSchema = z.strictObject({
   rsi_min: z.number().min(0).max(100), rsi_max: z.number().min(0).max(100),
   return20_min: decimal.refine(v => d(v).gte(-1) && d(v).lte(2)),
   entry: z.strictObject({
-    signal: z.enum(['TREND', 'BREAKOUT20', 'PULLBACK20']),
+    signal: z.enum(['TREND', 'BREAKOUT20', 'PULLBACK20', 'MULTI']),
     allocation_fraction: positiveFraction.refine(v => d(v).lte('.20')),
     max_ma20_distance: positiveFraction.refine(v => d(v).lte('.10')),
     stop_fraction: positiveFraction.refine(v => d(v).gte('.02') && d(v).lte('.15')),
@@ -119,11 +121,17 @@ export type Plan = z.infer<typeof PlanSchema>;
 export const ProtectionSchema = z.strictObject({
   symbol, spec: SmartSchema, high_water: nonnegative, triggered: z.string(), plan_id: z.string(),
   trailing_armed:z.boolean().optional(),observed_at:timestamp.nullable().optional(),
+  initial_risk:nonnegative.optional(), protected_floor:nonnegative.optional(),
+  break_even_price:nonnegative.optional(), break_even_floor:nonnegative.optional(), break_even_armed:z.boolean().optional(),
+  entry_price:nonnegative.optional(), trailing_distance:nonnegative.optional(),
 });
 export type Protection = z.infer<typeof ProtectionSchema>;
 export const EntryTrackSchema=z.strictObject({
   symbol,plan_id:z.string(),lot:z.enum(['ODD','COMMON']),armed:z.boolean(),low_water:nonnegative,
   observed_at:timestamp.nullable(),
+  started_at:timestamp.optional(), expires_at:timestamp.optional(),
+  status:z.enum(['WAIT','TRACKING','TRIGGERED','EXPIRED','INVALID']).optional(),
+  signature:z.string().optional(),
 });
 export type EntryTrack=z.infer<typeof EntryTrackSchema>;
 export const SettingsSchema = z.strictObject({
@@ -144,6 +152,12 @@ export const SettingsSchema = z.strictObject({
   account_max_age: quantity.min(1).max(300).default(60), cooldown_seconds: quantity.max(86400).default(120),
   fee_rate: fraction.default('0.001425'), minimum_fee: nonnegative.default('20'),
   sell_tax_rate: fraction.default('0.003'),
+  entry_strategy_mode:z.enum(['legacy','multi']).default('multi'),
+  adaptive_protection:z.boolean().default(true), dynamic_allocation:z.boolean().default(true),
+  risk_slippage_fraction:fraction.refine(v=>d(v).lte('0.05')).default('0.001'),
+  overnight_gap_fraction:fraction.default('0.05'), max_gap_risk_fraction:fraction.default('0.02'),
+  min_net_profit_twd:nonnegative.default('60'),
+  entry_tracking_minutes:quantity.min(5).max(360).default(90),
   allow_attention: z.boolean().default(false), codex_enabled: z.boolean().default(false),
   experience_enabled: z.boolean().default(true), experience_limit: quantity.min(5).max(100).default(40),
   official_facts_enabled: z.boolean().default(true), codex_path: z.string().default(''),
@@ -188,6 +202,7 @@ export interface Features {
   support20?: number; resistance20?: number; volume_ratio20?: number; return20?: number;
   daily_amount?: string;
   daily_amount_source?:'TRADE_AMOUNT'|'CLOSE_VOLUME_ESTIMATE';
+  previous_resistance20?:number; ma20_previous?:number;
 }
 export interface Snapshot {
   snapshot_id: string; asof: string; synthetic: boolean; review_only: boolean;
