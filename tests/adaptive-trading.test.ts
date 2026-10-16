@@ -16,7 +16,9 @@ import {runBacktest} from '../src/core/backtest.js';
 import {executionLot,type ExecutionTicket} from '../src/core/execution.js';
 import {Risk} from '../src/core/risk.js';
 import {TradingCalendar} from '../src/core/calendar.js';
-import {rig,now,quote,account,order,snapshot,instrument} from './helpers.js';
+import {PaperBroker} from '../src/broker/paper.js';
+import {spendableCash} from '../src/core/execution.js';
+import {rig,now,quote,account,order,snapshot,instrument,ControlledMarket} from './helpers.js';
 const f:Features={sufficient:true,sessions:100,asof:'2026-10-07',ma5:102,ma20:100,ma60:95,atr14:4,
   support20:94,resistance20:104,rsi14:60,volume_ratio20:1.5,return20:.1,daily_amount:'100000000'};
 const q=(price:string,seconds=0)=>({...quote(new Date(now.getTime()+seconds*1000)),last:price,bid:price,ask:price,bid_shares:999,ask_shares:999});
@@ -103,6 +105,18 @@ test('dynamic allocation respects the soft exposure gap and cannot spend pending
   // Allocation is a preference. Actual funds/settlements remain bounded by executionLot and final Risk.check.
   a.cash='20000';a.settlement_credits='50000';const before=JSON.stringify(a);
   preferredAllocation(decision,a,s);assert.equal(JSON.stringify(a),before);
+});
+test('a T+2 credit cannot finance opening trades before the assumed 10:00 arrival and is credited exactly once',async()=>{
+  const db=new Store(':memory:'),s=SettingsSchema.parse({mode:'paper'});
+  db.set('paper_ledger',{cash:'1000',lots:[],orders:[],lastEvents:{},charges:{},credits:[{due:'2026-10-08',amount:'90000'},{due:'9999-12-31',amount:'1'}]});
+  const broker=new PaperBroker(db,new ControlledMarket(),s,new TradingCalendar(db,true),true);
+  try{
+    const before=await broker.account(new Date('2026-10-08T09:59:59+08:00'));
+    assert.equal(before.cash,'1000');assert.equal(before.settlement_credits,'90001');assert.equal(spendableCash(before,s).available,'1000');
+    const arrived=await broker.account(new Date('2026-10-08T10:00:00+08:00'));
+    assert.equal(arrived.cash,'91000');assert.equal(arrived.settlement_credits,'1');
+    assert.equal((await broker.account(new Date('2026-10-08T11:00:00+08:00'))).cash,'91000');
+  }finally{await broker.close();db.close();}
 });
 test('parallel entry strategies produce one selected symbol intent and retain actual tracking in snapshots',async()=>{
   const r=await rig();try{

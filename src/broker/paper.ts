@@ -171,9 +171,13 @@ export class PaperBroker implements Broker {
     for (const o of this.ledger.orders) if (active(o) && twDay(new Date(o.created_at)) < twDay(now)) { o.status = 'CANCELLED'; this.dirty = true; }
   }
   private settle(now: Date): void {
-    const today = twDay(now), due = this.ledger.credits!.filter(x => x.due <= today);
+    // Settlement date is not the same as cash already arriving at midnight/open.
+    // Use an explicit T+2 10:00 simulation assumption; production cash is read
+    // from the broker/bank and never inferred from these simulated credits.
+    const arrived=(x:{due:string}):boolean=>Date.parse(x.due+'T10:00:00+08:00')<=now.getTime();
+    const due = this.ledger.credits!.filter(arrived);
     this.ledger.cash = due.reduce((sum,x) => sum.plus(x.amount),d(this.ledger.cash)).toFixed();
-    this.ledger.credits = this.ledger.credits!.filter(x => x.due > today);
+    this.ledger.credits = this.ledger.credits!.filter(x => !arrived(x));
   }
   fillCount():number{return this.ledger.fills!.length;}
   fills(start=0): SimulatedFill[] { return structuredClone(this.ledger.fills!.slice(start)); }
@@ -199,7 +203,7 @@ export class PaperBroker implements Broker {
     const account = AccountSchema.parse({asof:now.toISOString(),cash:this.ledger.cash,settlement_debits:'0',
       settlement_credits:this.ledger.credits!.reduce((sum,x) => sum.plus(x.amount),d(0)).toFixed(),
       positions,orders:structuredClone(this.ledger.orders),complete:true,
-      issue:this.settleSales ? '模擬帳務：買款即時預留、賣款 T+2 可用' : '模擬成交；未模擬實際 T+2 入扣款與券商拒單',
+      issue:this.settleSales ? '模擬帳務：買款即時預留、賣款假設 T+2 10:00 入帳；實盤依核實現金' : '模擬成交；未模擬實際 T+2 入扣款與券商拒單',
       daily_buy_count:buys.length,daily_buy_amount:buys.reduce((sum,o) => sum.plus(d(o.limit_price).times(active(o) ? o.shares : o.filled)),d(0)).toFixed()});
     this.dirty = false; return account;
   }
