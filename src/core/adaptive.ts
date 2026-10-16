@@ -28,7 +28,9 @@ export function adaptiveSetups(symbol:string,f:Features|undefined,q:Quote,now:Da
   const atr=d(f.atr14),last=d(q.last),ma=d(f.ma20),res=d(f.resistance20),support=d(f.support20),out:Decision[]=[];
   const add=(kind:Decision['entry_strategy'],trigger:Decimal,ceiling:Decimal,stop:Decimal,target:Decimal,rebound:string|null=null)=>{
     const limit=roundPrice(ceiling),sl=roundPrice(stop),tp=roundPrice(target);
-    if(!d(sl).gt(0)||!d(sl).lt(limit)||!d(tp).gt(limit)||!trigger.gt(0))return;
+    const requiredFloor=kind==='BREAKOUT_CONFIRM'?Decimal.max(trigger,f.ma60!):d(f.ma60!);
+    if(!d(sl).gt(0)||!d(sl).lt(limit)||!d(tp).gt(limit)||!trigger.gt(0)
+      ||d(roundPrice(requiredFloor,false)).gt(limit))return;
     out.push({symbol,action:'BUY',shares:1,limit_price:limit,entry_when:kind==='PULLBACK_REBOUND'?'REBOUND':kind==='BREAKOUT_CONFIRM'?'ABOVE':'IMMEDIATE',
       trigger_price:roundPrice(trigger,false),rebound_fraction:rebound,entry_strategy:kind,tracking_timeout_minutes:s?.entry_tracking_minutes??120,
       confirmation_ticks:2,confirmation_seconds:30,smart:{stop_price:sl,take_profit:tp,trailing_activate:null,trailing_fraction:null,reward_target:tp},

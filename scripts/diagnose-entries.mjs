@@ -1,4 +1,4 @@
-import {writeFile} from 'node:fs/promises';
+import {writeFile,mkdir} from 'node:fs/promises';
 import {runBacktest} from '../dist/src/core/backtest.js';
 import {syntheticDataset} from '../dist/src/core/backtest-data.js';
 import {SettingsSchema} from '../dist/src/core/models.js';
@@ -6,6 +6,7 @@ import {replayCapitalSettings} from '../dist/src/core/capital.js';
 
 // Designed data only: records the decision path without exporting account data.
 const start=process.argv[2]??'2026-08-03',end=process.argv[3]??'2026-08-14';
+await mkdir('validation-output',{recursive:true});
 const data=syntheticDataset(start,end),seen=new Map(),states={},reasons={},examples=[];
 const report=await runBacktest({start,end,source:'sample',strategy:'rules',optimization:'entries',
   initial_cash:'100000',capital_profile:'custom',cost_profile:'conservative',slippage_fraction:'0.001',

@@ -8,6 +8,7 @@ import {replayCapitalSettings} from '../dist/src/core/capital.js';
 import {roundPrice} from '../dist/src/core/risk.js';
 
 const modes=['baseline','entries','exits','allocation','integrated'];
+const outputDir=process.env.VALIDATION_OUTPUT_DIR??'validation-output';
 const common={strategy:'rules',initial_cash:'100000',capital_profile:'custom',cost_profile:'conservative',
   slippage_fraction:'0.001',entry_cadence:'market',strategy_schedule:'fixed',strategy_times:['09:15','11:45'],
   whole_lots:true,participation:'0.01',monitor_interval_seconds:300};
@@ -34,16 +35,16 @@ async function run(data,start,end,optimization,settings=base){
     waits:r.entry_diagnostics?.waits?.slice(0,6),idle:r.entry_diagnostics?.idle_reasons?.filter(x=>x.samples)}));
   return result;
 }
-await mkdir('validation-output',{recursive:true});
+await mkdir(outputDir,{recursive:true});
 const observed=validateDataset(JSON.parse(inflateSync(Buffer.from((await readFile('tests/fixtures/observed-market-v022.deflate.b64','utf8')).trim(),'base64')).toString('utf8')));
 const observedReport={...header(observed,'2026-09-15','2026-10-15'),results:[]};
 for(const mode of modes){observedReport.results.push(await run(observed,'2026-09-15','2026-10-15',mode));
-  await writeFile('validation-output/observed-comparison.json',JSON.stringify(observedReport,null,2)+'\n');}
+  await writeFile(outputDir+'/observed-comparison.json',JSON.stringify(observedReport,null,2)+'\n');}
 
 const start='2026-08-03',end='2026-10-15',sample=syntheticDataset(start,end);
 const sampleReport={...header(sample,start,end),observation_step_minutes:10,results:[]};
 for(const mode of modes){sampleReport.results.push(await run(sample,start,end,mode));
-  await writeFile('validation-output/synthetic-comparison.json',JSON.stringify(sampleReport,null,2)+'\n');}
+  await writeFile(outputDir+'/synthetic-comparison.json',JSON.stringify(sampleReport,null,2)+'\n');}
 
 const configs=[
   {name:'current',changes:{}},
@@ -61,9 +62,9 @@ for(const config of configs){
   const settings=SettingsSchema.parse({...base,...config.changes}),row={...config};
   for(const [split,[from,to]] of Object.entries(grid.split))row[split]=await run(sample,from,to,'integrated',settings);
   grid.results.push(row);
-  await writeFile('validation-output/parameter-sensitivity.json',JSON.stringify(grid,null,2)+'\n');
+  await writeFile(outputDir+'/parameter-sensitivity.json',JSON.stringify(grid,null,2)+'\n');
 }
-await writeFile('validation-output/parameter-sensitivity.json',JSON.stringify(grid,null,2)+'\n');
+await writeFile(outputDir+'/parameter-sensitivity.json',JSON.stringify(grid,null,2)+'\n');
 
 function stressData(kind){
   const raw=structuredClone(sample);
@@ -92,7 +93,7 @@ for(const kind of ['CHOP','TREND','GAP','ILLIQUID']){
   const data=stressData(kind),entry={kind,dataset_sha256:digest(data),results:[]};
   for(const mode of modes)entry.results.push(await run(data,'2026-09-14','2026-10-15',mode));
   stress.cases.push(entry);
-  await writeFile('validation-output/stress-comparison.json',JSON.stringify(stress,null,2)+'\n');
+  await writeFile(outputDir+'/stress-comparison.json',JSON.stringify(stress,null,2)+'\n');
 }
-await writeFile('validation-output/stress-comparison.json',JSON.stringify(stress,null,2)+'\n');
+await writeFile(outputDir+'/stress-comparison.json',JSON.stringify(stress,null,2)+'\n');
 console.log('STRATEGY_VALIDATION_COMPLETED');

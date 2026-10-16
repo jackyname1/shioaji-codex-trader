@@ -36,6 +36,12 @@ test('three parallel setups use completed features, distinct confirmation rules 
   assert.equal(adaptiveSetups('9001',{...f,rsi14:90},q('101'),now).length,0);
   assert.equal(adaptiveSetups('9001',f,q('130'),now).length,0);
 });
+test('program setup generation excludes impossible MA floors and breakout triggers above the frozen ceiling',()=>{
+  const invalidRebound=adaptiveSetups('9001',{...f,ma5:30.1,ma20:30,ma60:29.9,atr14:1,support20:28,resistance20:35},q('29'),now);
+  assert.equal(invalidRebound.length,0);
+  const invalidBreakout=adaptiveSetups('9001',{...f,ma5:30,ma20:29,ma60:28,atr14:.05,support20:27,resistance20:31},q('31'),now);
+  assert.equal(invalidBreakout.length,0);
+});
 test('rebound preserves the low across price updates, confirms different trades and cannot rearm itself after expiry',()=>{
   let t=trackEntry(undefined,reb,'p',q('100'),now.toISOString());
   t=trackEntry(t,reb,'p',q('98',10),now.toISOString());assert.equal(t.low_water,'98');
@@ -138,6 +144,35 @@ test('program order prices follow the executable ask with bounded slippage, not 
     const capped=executionLot({...ticket,condition:{...decision,limit_price:'30.05'}},quote(),account(),instrument(),risk,now,'100000',undefined);
     assert.equal(capped.limit_price,'30.05');
   }finally{db.close();}
+});
+test('a program rebound buys only after the recorded low actually recovers and confirms twice',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,adaptive_entries:true,min_entry_reward_risk:'1.2'});r.market.depth=999;r.market.marketPrice='29.5';
+    const snap=await r.engine.snapshot(now);snap.features['9001']={...f,ma5:30,ma20:29.5,ma60:28,atr14:.5,support20:28.7,resistance20:32};
+    await r.engine.activate({snapshot_id:snap.snapshot_id,expires_at:new Date(now.getTime()+7200000).toISOString(),stance:'BUY_ALLOWED',
+      candidates:['9001'],decisions:[],screening:null,summary:'rebound execution'} as Analysis,snap,now);
+    await r.engine.tick(now);r.market.marketPrice='29';await r.engine.tick(new Date(now.getTime()+30000));
+    assert.equal(r.store.orders().length,0);r.market.marketPrice='29.2';await r.engine.tick(new Date(now.getTime()+60000));
+    assert.equal(r.store.orders().length,0);await r.engine.tick(new Date(now.getTime()+90000));
+    const buy=r.store.orders().find(o=>o.action==='BUY')!;assert.ok(buy);assert.equal(buy.entry_strategy,'PULLBACK_REBOUND');
+    await r.engine.tick(new Date(now.getTime()+120000));assert.ok(r.broker.fills().some(f=>f.action==='BUY'));
+    assert.equal(r.store.orders().filter(o=>o.action==='BUY').length,1);
+  }finally{await dispose(r);}
+});
+test('a program breakout requires volume and persistent trades above resistance without raising its fixed target',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,adaptive_entries:true,max_order_fraction:'0.2',min_entry_reward_risk:'1.2'});r.market.depth=999;r.market.marketPrice='30.9';
+    const snap=await r.engine.snapshot(now);snap.features['9001']={...f,ma5:30,ma20:29,ma60:28,atr14:1,support20:25,resistance20:31};
+    await r.engine.activate({snapshot_id:snap.snapshot_id,expires_at:new Date(now.getTime()+7200000).toISOString(),stance:'BUY_ALLOWED',
+      candidates:['9001'],decisions:[],screening:null,summary:'breakout execution'} as Analysis,snap,now);
+    await r.engine.tick(now);const setup=structuredClone(r.engine.adaptiveCandidates().find(d=>d.entry_strategy==='BREAKOUT_CONFIRM'))!;
+    assert.ok(setup);assert.equal(r.store.orders().length,0);r.market.marketPrice='31.1';
+    await r.engine.tick(new Date(now.getTime()+30000));assert.equal(r.store.orders().length,0);
+    await r.engine.tick(new Date(now.getTime()+60000));const buy=r.store.orders().find(o=>o.action==='BUY')!;
+    assert.ok(buy);assert.equal(buy.entry_strategy,'BREAKOUT_CONFIRM');assert.ok(d(buy.limit_price).lte(setup.limit_price));
+    assert.deepEqual(r.engine.adaptiveCandidates().find(d=>d.entry_strategy==='BREAKOUT_CONFIRM'),setup);
+    await r.engine.tick(new Date(now.getTime()+90000));assert.ok(r.broker.fills().some(f=>f.action==='BUY'));
+  }finally{await dispose(r);}
 });
 test('infeasible buys are preflighted and refusals do not repeat merely because audit messages scroll away',async()=>{
   const r=await rig();try{
