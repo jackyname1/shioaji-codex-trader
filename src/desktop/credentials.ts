@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { brokerOrigin } from './broker-runtime.js';
 import { BrokerHealthSchema, marketReady,BrokerError } from '../broker/health.js';
 import {RequestDiagnostics,type BrokerDiagnostics} from '../broker/diagnostics.js';
+import {NativeStartup} from './native-startup.js';
 
 export const ConnectionInputSchema = z.strictObject({
   api_key: z.string().trim().min(1).max(4096), secret_key: z.string().trim().min(1).max(4096),
@@ -77,6 +78,7 @@ export class NativeConnection {
   private stop=new AbortController();
   private signature='';private identity='';private version:string|null=null;private health?:z.infer<typeof BrokerHealthSchema>;
   private caIssue='';
+  private startup=new NativeStartup();private caFallback=false;private healthMalformed=false;
   private records=new RequestDiagnostics(Date.now);
   private readonly timeoutMs:number;private readonly pollMs:number;
   private run: Execute; private fetcher: typeof fetch; private launch: typeof spawn; private origin: () => Promise<string>;
@@ -89,12 +91,13 @@ export class NativeConnection {
   get hasLoginIdentity():boolean{return !!this.identity;}
   sameLogin(input:ConnectionInput):boolean{return this.identity===createHash('sha256').update(JSON.stringify([input.api_key,input.secret_key])).digest('hex');}
   diagnostics():BrokerDiagnostics{return {version:this.version,stream_connected:false,generation:0,trade_cache:null,
-    ...(this.health?{health:this.health}:{}),startup:{phase:this.phase,issue:this.phase==='failed'?this.status:this.caIssue},endpoints:this.records.snapshot()};}
+    ...(this.health?{health:this.health}:{}),startup:{phase:this.phase,issue:this.phase==='failed'?this.status:this.caIssue,
+      code:this.startup.code,elapsed_ms:this.startup.elapsedMs,process_exit_code:this.startup.exitCode,process_signal:this.startup.signal,ca_fallback:this.caFallback},endpoints:this.records.snapshot()};}
   async start(raw: unknown): Promise<ConnectionInput> {
     const input = ConnectionInputSchema.parse(raw);
     const signature=createHash('sha256').update(JSON.stringify([input.api_key,input.secret_key,input.ca_path,input.ca_password])).digest('hex');
-    if(this.connected&&this.signature===signature&&await this.available(this.baseUrl)&&this.connected)return input;
-    let stage='CA',effective=input;this.caIssue='';
+    if(this.connected&&!this.caFallback&&this.signature===signature&&await this.available(this.baseUrl)&&this.connected)return input;
+    let stage='CA',effective=input;this.caIssue='';this.caFallback=false;this.startup=new NativeStartup();
     try {
     if (input.ca_path) {
       const file = await stat(input.ca_path).catch(() => undefined);
@@ -102,20 +105,27 @@ export class NativeConnection {
         effective={...input,ca_path:'',ca_password:''};this.caIssue='CA 憑證無法讀取；行情與帳務仍可登入，實盤委託會繼續核對有效 CA';
       }
     }
-    await this.close();
+    await this.close();this.resetHealth();
     this.phase='starting';this.status='正在啟動內建 Shioaji';stage='runtime';
     const binary = await this.binary(); this.baseUrl = await this.origin(); const url = new URL(this.baseUrl), port = url.port;
     if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !port) throw new Error('無法建立內建 Shioaji 連線');
     await mkdir(this.root, { recursive: true, mode: 0o700 });
-    const env = {...brokerEnvironment(process.env,effective),SJ_HTTP_ADDR:'127.0.0.1:'+port,SJ_HOME_PATH:this.root,SJ_HTTP_LOG:'false',SJ_HTTP_CORS:'false',SJ_UDS_DISABLE:'true'}, options = { cwd: this.root, env, timeout: 60000, windowsHide: true };
+    const options = { cwd: this.root, env:brokerEnvironment(process.env,effective), timeout: 60000, windowsHide: true };
     this.status = '正在登入 Shioaji，等待行情服務就緒';
       const help = await this.run(binary, ['server', 'start', '--help'], { ...options, env: brokerEnvironment(process.env, { ...input, api_key: '', secret_key: '', ca_path: '', ca_password: '' }) });
       if (!help.stdout.includes('--no-open')) throw new Error('版本不支援');
-      this.stop=new AbortController();
-      const child=this.launch(binary,['server','start','--no-open','--production'],{cwd:this.root,env,windowsHide:true,stdio:'ignore'});
-      this.owned=child;let failed=false;child.on('error',()=>{failed=true;});
-      child.on('exit',()=>{failed=true;if(this.owned===child){this.healthy=false;this.phase='failed';this.status='Shioaji 已斷線，請重新連線';}});
+      for(let attempt=0;;attempt++) {
+      this.stop=new AbortController();const startup=this.startup=new NativeStartup();
+      const env={...brokerEnvironment(process.env,effective),SJ_HTTP_ADDR:'127.0.0.1:'+port,SJ_HOME_PATH:this.root,SJ_HTTP_LOG:'false',SJ_HTTP_CORS:'false',SJ_UDS_DISABLE:'true'};
+      const child=this.launch(binary,['server','start','--no-open','--production'],{cwd:this.root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+      this.owned=child;let failed=false,spawnError=false;
+      child.stdout?.on('data',(chunk:Buffer)=>{if(this.owned===child&&this.phase==='authenticating')startup.consume('stdout',chunk);});
+      child.stderr?.on('data',(chunk:Buffer)=>{if(this.owned===child&&this.phase==='authenticating')startup.consume('stderr',chunk);});
+      child.on('error',()=>{failed=true;spawnError=true;});
+      child.on('exit',(code,signal)=>{failed=true;if(this.owned===child){startup.exited(code,signal);this.healthy=false;
+        if(this.phase==='ready'){this.phase='failed';this.status=startup.failure('PROCESS_EXIT');}}});
       stage='login';this.phase='authenticating';this.status='正在登入 Shioaji，等待行情服務就緒';
+      try {
       const deadline=Date.now()+this.timeoutMs; let ready=false;
       while(Date.now()<deadline) { this.stop.signal.throwIfAborted();if(failed)throw new Error('啟動失敗');if (await this.available(this.baseUrl)) {ready=true;break;} await delay(this.pollMs,undefined,{signal:this.stop.signal}); }
       this.stop.signal.throwIfAborted(); if(failed)throw new Error('啟動失敗');
@@ -126,21 +136,35 @@ export class NativeConnection {
       this.healthy=true;this.hasCa=!!effective.ca_path&&this.health?.ca_expired===false;
       this.signature=signature;this.version=info.version&&/^[\d.]+(?:[-\w.]*)$/.test(info.version)?info.version:null;
       this.identity=createHash('sha256').update(JSON.stringify([input.api_key,input.secret_key])).digest('hex');
-      this.phase='ready';this.status = 'Shioaji 已連線 · 真實行情'; return input;
-    } catch { await this.close();this.phase='failed';this.status=stage==='CA'?'CA 憑證無法讀取，請重新選取 .pfx／.p12 檔案':stage==='runtime'
+      this.startup.discard();this.phase='ready';this.status = 'Shioaji 已連線 · 真實行情'; return input;
+      } catch(error) {
+        // Only an explicit native CA error permits one retry without the optional CA.
+        // Keep saved credentials intact and never claim trading readiness after this fallback.
+        if(attempt===0&&effective.ca_path&&this.startup.caFailure&&!this.stop.signal.aborted) {
+          this.caIssue=this.startup.failure('CA_INVALID')+'；已停用本次 CA，行情與帳務仍可登入，實盤需重新核對有效 CA';
+          await this.close();effective={...effective,ca_path:'',ca_password:''};this.caFallback=true;this.resetHealth();continue;
+        }
+        if(stage==='login')this.status=this.startup.failure(spawnError?'PROCESS_START':failed?'PROCESS_EXIT':this.healthMalformed?'HEALTH_SCHEMA':'STARTUP_TIMEOUT',this.health);
+        throw error;
+      }
+      }
+    } catch { const loginIssue=this.status;this.startup.discard();await this.close();this.phase='failed';this.status=stage==='CA'?'CA 憑證無法讀取，請重新選取 .pfx／.p12 檔案':stage==='runtime'
       ?'內建 Shioaji 無法啟動，請確認安裝檔完整':stage==='info'?'Shioaji 未取得正式行情服務，請重新連線'
-      :'Shioaji 登入未完成，請核對 API Key、Secret Key、生產權限及允許的 IP';throw new BrokerError(this.status); }
+      :loginIssue;throw new BrokerError(this.status); }
   }
+  private resetHealth():void {this.health=undefined;this.version=null;this.healthMalformed=false;}
   private async read(path:string,timeout:number):Promise<unknown>{
     this.records.attempt(path);
+    let recorded=false;
     try{const response=await this.fetcher(this.baseUrl+'/api/v1'+path,{redirect:'error',signal:AbortSignal.timeout(timeout)});
-      if(!response.ok){this.records.failure(path,`Shioaji ${path} 讀取失敗（HTTP ${response.status}）`,response.status);await response.body?.cancel();throw new Error('HTTP');}
+      if(!response.ok){this.records.failure(path,`Shioaji ${path} 讀取失敗（HTTP ${response.status}）`,response.status);recorded=true;await response.body?.cancel();throw new Error('HTTP');}
       const body:unknown=await response.json();this.records.success(path);return body;
-    }catch{const rows=this.records.snapshot();if(!rows.find(r=>r.endpoint===path)?.issue)this.records.failure(path,`Shioaji ${path} 尚未回應或回應格式不符`);throw new Error('Shioaji 服務未就緒');}
+    }catch{if(!recorded)this.records.failure(path,`Shioaji ${path} 尚未回應或回應格式不符`);throw new Error('Shioaji 服務未就緒');}
   }
   private async available(baseUrl: string): Promise<boolean> {
+    this.healthMalformed=false;
     try {this.health=BrokerHealthSchema.parse(await this.read('/health',1200));return marketReady(this.health);}
-    catch { return false; }
+    catch(error) {this.healthMalformed=error instanceof z.ZodError;return false;}
   }
   async close(): Promise<void> {
     this.stop.abort();this.healthy=false;this.hasCa=false;this.signature='';this.identity='';this.phase='idle';this.status='Shioaji 尚未登入';const child=this.owned;this.owned=undefined;

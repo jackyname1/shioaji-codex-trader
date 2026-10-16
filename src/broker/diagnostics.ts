@@ -8,7 +8,7 @@ export interface EndpointDiagnostic {
 export interface BrokerDiagnostics {
   app_version?:string;
   version:string|null;stream_connected:boolean;generation:number;trade_cache:string|null;health?:BrokerHealth;
-  startup?:{phase:string;issue:string};
+  startup?:{phase:string;issue:string;code?:string;elapsed_ms?:number;process_exit_code?:number|null;process_signal?:string|null;ca_fallback?:boolean};
   workspace?:import('../desktop/workspace-profile.js').WorkspaceDiagnostic;
   endpoints:EndpointDiagnostic[];
 }
