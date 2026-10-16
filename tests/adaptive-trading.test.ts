@@ -13,7 +13,10 @@ import {Engine} from '../src/core/engine.js';
 import {programAnalysis} from '../src/core/program-strategy.js';
 import {HistoricalMarket,validateDataset,syntheticDataset,type HistoryDataset} from '../src/core/backtest-data.js';
 import {runBacktest} from '../src/core/backtest.js';
-import {rig,now,quote,account,order,snapshot} from './helpers.js';
+import {executionLot,type ExecutionTicket} from '../src/core/execution.js';
+import {Risk} from '../src/core/risk.js';
+import {TradingCalendar} from '../src/core/calendar.js';
+import {rig,now,quote,account,order,snapshot,instrument} from './helpers.js';
 const f:Features={sufficient:true,sessions:100,asof:'2026-10-07',ma5:102,ma20:100,ma60:95,atr14:4,
   support20:94,resistance20:104,rsi14:60,volume_ratio20:1.5,return20:.1,daily_amount:'100000000'};
 const q=(price:string,seconds=0)=>({...quote(new Date(now.getTime()+seconds*1000)),last:price,bid:price,ask:price,bid_shares:999,ask_shares:999});
@@ -107,6 +110,34 @@ test('parallel entry strategies produce one selected symbol intent and retain ac
     await r.engine.tick(new Date(now.getTime()+90000));assert.equal(r.store.orders().length,1);
     assert.ok(r.store.entryTracks().some(t=>t.strategy==='TREND_CONTINUATION'));
   }finally{await dispose(r);}
+});
+test('a frozen rebound does not suppress a later confirmed trend in the same plan',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,adaptive_entries:true,min_entry_reward_risk:'1.2'});r.market.depth=999;r.market.marketPrice='29.5';
+    const snap=await r.engine.snapshot(now);snap.features['9001']={...f,ma5:30,ma20:29.5,ma60:28,atr14:.5,support20:28.5,resistance20:32};
+    await r.engine.activate({snapshot_id:snap.snapshot_id,expires_at:new Date(now.getTime()+7200000).toISOString(),stance:'BUY_ALLOWED',
+      candidates:['9001'],decisions:[],screening:null,summary:'late independent trend'} as Analysis,snap,now);
+    await r.engine.tick(now);
+    const rebound=structuredClone(r.engine.adaptiveCandidates().find(d=>d.entry_strategy==='PULLBACK_REBOUND'));
+    assert.ok(rebound);assert.equal(r.engine.adaptiveCandidates().some(d=>d.entry_strategy==='TREND_CONTINUATION'),false);
+    r.market.marketPrice='30';await r.engine.tick(new Date(now.getTime()+30000));
+    assert.ok(r.engine.adaptiveCandidates().some(d=>d.entry_strategy==='TREND_CONTINUATION'));
+    assert.deepEqual(r.engine.adaptiveCandidates().find(d=>d.entry_strategy==='PULLBACK_REBOUND'),rebound);
+    await r.engine.tick(new Date(now.getTime()+60000));await r.engine.tick(new Date(now.getTime()+90000));
+    const buys=r.store.orders().filter(o=>o.action==='BUY');assert.equal(buys.length,1);assert.equal(buys[0]!.entry_strategy,'TREND_CONTINUATION');
+  }finally{await dispose(r);}
+});
+test('program order prices follow the executable ask with bounded slippage, not an unnecessarily high setup ceiling',()=>{
+  const decision:Decision={...reb,entry_strategy:'PULLBACK_REBOUND',limit_price:'32',smart:{...spec,stop_price:'29',take_profit:'35'}};
+  const ticket:ExecutionTicket={id:'bounded',key:'',queued_at:now.toISOString(),state:'QUEUED',order:order({limit_price:'32'}),
+    source:'RULE',condition:decision,smart:decision.smart!,trigger:'test',settings_key:'',generation:0};
+  const s=SettingsSchema.parse({mode:'demo',simulation_slippage_fraction:'0.001',min_entry_reward_risk:'1.2'});
+  const db=new Store(':memory:');try{
+    const risk=new Risk(s,new TradingCalendar(db,true)),before=JSON.stringify(decision),bounds=executionLot(ticket,quote(),account(),instrument(),risk,now,'100000',undefined);
+    assert.equal(bounds.limit_price,'30.1');assert.ok(bounds.max_shares>0);assert.equal(JSON.stringify(decision),before);
+    const capped=executionLot({...ticket,condition:{...decision,limit_price:'30.05'}},quote(),account(),instrument(),risk,now,'100000',undefined);
+    assert.equal(capped.limit_price,'30.05');
+  }finally{db.close();}
 });
 test('infeasible buys are preflighted and refusals do not repeat merely because audit messages scroll away',async()=>{
   const r=await rig();try{

@@ -374,10 +374,14 @@ export class Engine {
       let cache=this.store.get<{plan_id:string;decisions:import('./models.js').Decision[];checked:string[];selected?:import('./models.js').Decision[]}>('adaptive_setups');
       if(cache?.plan_id!==plan.id)cache={plan_id:plan.id,decisions:[],checked:[]};
       for(const w of this.watch.entries.filter(w=>w.eligible&&w.state==='OBSERVE')){
-        if(cache.decisions.some(d=>d.symbol===w.symbol)||decisions.some(d=>d.symbol===w.symbol&&d.action==='SELL')||this.account.positions.some(p=>p.symbol===w.symbol&&p.shares))continue;
-        const q=this.quotes.get(w.symbol+':true');
+        if(decisions.some(d=>d.symbol===w.symbol&&d.action==='SELL')||this.account.positions.some(p=>p.symbol===w.symbol&&p.shares))continue;
+        const q=this.quotes.get(w.symbol+':true')??(this.settings.whole_lots?this.quotes.get(w.symbol+':false'):undefined);
         if(!q||q.simulated||ageSeconds(now,q.trade_at)<0||ageSeconds(now,q.trade_at)>this.settings.quote_max_age)continue;
-        cache.decisions.push(...adaptiveSetups(w.symbol,this.watchFeatures[w.symbol],q,now,this.settings));if(!cache.checked.includes(w.symbol))cache.checked.push(w.symbol);
+        // Freeze each strategy independently. An earlier rebound must not prevent a
+        // trend/breakout setup from appearing later in the same plan.
+        const existing=new Set(cache.decisions.filter(d=>d.symbol===w.symbol).map(d=>d.entry_strategy));
+        cache.decisions.push(...adaptiveSetups(w.symbol,this.watchFeatures[w.symbol],q,now,this.settings)
+          .filter(d=>!existing.has(d.entry_strategy)));if(!cache.checked.includes(w.symbol))cache.checked.push(w.symbol);
       }
       this.store.set('adaptive_setups',cache);this.observeEntries(now);
       const candidates=cache.decisions.filter(d=>!this.account!.positions.some(p=>p.symbol===d.symbol&&p.shares)

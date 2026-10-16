@@ -61,9 +61,11 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     if(ticket.smart.take_profit)max=Decimal.min(max,ticket.smart.take_profit);
   }
   const minPrice=roundPrice(min,false),maxPrice=roundPrice(max);
-  // Program confirmations may cross the current ask only inside their frozen strategy ceiling.
-  // Size and risk are computed at that worst permitted price; fills still require a later event.
-  const price=roundPrice(ticket.order.action==='BUY'?(ticket.condition?.entry_strategy?d(maxPrice):Decimal.min(q.ask,maxPrice)):
+  // A setup ceiling is not a requirement to pay that entire price. Use a bounded
+  // executable ask, allowing the configured simulation slippage, and audit risk
+  // at this actual order limit. The frozen ceiling/target are never raised.
+  const programAsk=d(q.ask).times(d(1).plus(s.simulation_slippage_fraction));
+  const price=roundPrice(ticket.order.action==='BUY'?(ticket.condition?.entry_strategy?Decimal.min(roundPrice(programAsk,false),maxPrice):Decimal.min(q.ask,maxPrice)):
     Decimal.max(q.bid,minPrice),ticket.order.action!=='BUY');
   const test=(shares:number):string[]=>{
     const reasons=risk.check({...ticket.order,lot,shares,limit_price:price},account,q,instrument,now,baseline,false,lastTrade);
