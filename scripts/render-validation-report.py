@@ -6,6 +6,11 @@ root = Path(__file__).resolve().parents[1]
 comparison = json.loads((root/'validation/comparison.json').read_text())
 audit = json.loads((root/'validation/v022-log-audit.json').read_text())
 checks = json.loads((root/'validation/checks.json').read_text())
+ci = checks.get('ci_validation', {})
+ci_passed = ci.get('status') == 'PASSED'
+if ci_passed:
+    assert len(ci['jobs']) == 3 and all(job['conclusion'] == 'success' for job in ci['jobs'])
+    assert ci['gui']['source'] == ci['gui']['packaged'] == 'PASSED'
 assert comparison['status'] == 'COMPLETED' and comparison['completed_cases'] == comparison['expected_cases'] == 17
 assert all(r['status'] == 'COMPLETED' for r in comparison['results'])
 labels = {'v022':'v0.2.2 原程式策略', 'entries':'只改三策略進場', 'exits':'只改智慧退場', 'allocation':'只改動態配置',
@@ -13,10 +18,10 @@ labels = {'v022':'v0.2.2 原程式策略', 'entries':'只改三策略進場', 'e
 order = list(labels)
 fmt = lambda v, n=2: '—' if v is None else f'{float(v):,.{n}f}'
 
-lines = ['# v0.2.3 候選版驗證報告', '',
-'驗證日期：2026-10-16（台北）。狀態：程式與本地測試完成；發布未通過驗收。', '',
+lines = ['# v0.2.3 驗證報告' if ci_passed else '# v0.2.3 候選版驗證報告', '',
+'驗證日期：2026-10-16（台北）。狀態：Linux／Windows、來源與封裝 GUI 已通過；本紀錄為 PR 驗收快照。' if ci_passed else '驗證日期：2026-10-16（台北）。狀態：程式與本地測試完成；發布未通過驗收。', '',
 '**結論：本次資料不支持全面啟用三策略進場與動態配置，不能宣稱已提高長期風險調整後收益。** 開發區間較好的配置，在樣本外未勝出且回撤增加；因此預設保留原趨勢進場及原配置，加入智慧保護，三策略與動態配置列為研究選項。沒有用提高收益目標、取消風控或調整樣本外參數製造勝出結果。', '',
-'尚未合併、建立 v0.2.3 Tag、Release 或 EXE。首次 GitHub runner 在開始執行步驟前失敗，Windows 來源／封裝 GUI 與新截圖尚未驗收；最新建置狀態以 [PR #26](https://github.com/jackyname1/shioaji-codex-trader/pull/26) 為準。已發布的 v0.2.2 保留可回復。', '',
+'公開 repo 後已恢復建置並完成跨平台與來源／封裝 GUI 驗收，實際 Windows 截圖與雜湊已保存。合併後由 main 工作流程重新建置、核對並發布；最終下載與資產以 [v0.2.3 Release](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.3) 為準。v0.2.2 保留可回復。' if ci_passed else '尚未合併、建立 v0.2.3 Tag、Release 或 EXE。首次 GitHub runner 在開始執行步驟前失敗，Windows 來源／封裝 GUI 與新截圖尚未驗收；最新建置狀態以 [PR #26](https://github.com/jackyname1/shioaji-codex-trader/pull/26) 為準。已發布的 v0.2.2 保留可回復。', '',
 '## 原始 v0.2.2 執行紀錄核帳', '',
 '這一段對應使用者提供的原始 JSON，與下方另外下載的長期間日 K 比較分開計算。原始 JSON 未包含完整分鐘行情，所以不能忠實重跑原來 Codex 選股的成交路徑。原始帳戶快照及模型完整輸入未上傳到 Git。', '',
 '| 項目 | 原始紀錄核對 |','|---|---:|']
@@ -39,11 +44,11 @@ f'原始檔 SHA256：`{audit["source_sha256"]}`。可重現核帳程式：`scrip
 '| 賣款在 T+2 一開始便可使用；交易日與交割日混用 | 改為交割營業日 T+2 11:00 才可用；春節前「休市但辦理交割」分開建模；颱風休市連同交割順延。 |',
 '| 歷年日曆錯用 queryYear，官方回傳當年度 | 改用官網表單的 date=YYYY0101；仍驗證回傳年份，禁止拿錯年份代替。 |',
 '| 長回測逐次解析全部歷史委託 | SQL 索引、單筆查詢、異動游標；離線無新鮮價格時省略重複副作用，與完整 GUI 路徑的成交、成本、權益、回撤逐項比對。 |',
-'| 持倉主圖需要更完整、可刷新的明細 | 保留切換股票／清舊圖／鍵盤與回放截止保護；新增含買費成本、股數、浮損益、比例、保本／有效底線、追蹤期限與阻擋原因。Windows 實際畫面仍待驗收。 |', '',
+'| 持倉主圖需要更完整、可刷新的明細 | 保留切換股票／清舊圖／鍵盤與回放截止保護；新增含買費成本、股數、浮損益、比例、保本／有效底線、追蹤期限與阻擋原因。 |', '',
 '盤後 review_only 不進場、缺少行情不授權、今日新增零股不能當日賣出，都維持為安全規則。沒有把這些限制當成 Bug。', '',
 '## 參數與預設', '',
 '以下硬性數字採使用者原積極回測配置；沒有提高風險上限。既有設定讀取時保留其數值，模式啟動為 paper、自動執行關閉。', '',
-'| 項目 | v0.2.2 基準 | v0.2.3 候選版 |','|---|---|',
+'| 項目 | v0.2.2 基準 | v0.2.3 |','|---|---|',
 '| 目標／最大持倉 | 70%／80% | 70%／80% |','| 最低現金保留 | 20% | 20% |','| 單筆／單檔上限 | 20%／25% | 20%／25% |',
 '| 單筆名目風險／日損失停買 | 1.25%／2% | 1.25%／2%，日損失按日鎖定 |',
 '| 每日買進額度／筆數 | 60%／8 筆 | 60%／8 筆 |','| 淨報酬風險比 | 1.2 | 1.2 |',
@@ -94,8 +99,8 @@ lines += ['', '勝率及 Profit Factor 依已完整結束的同股 FIFO 持倉�
 '最新本地測試結果、Node 版本及來源檔雜湊記錄於 [checks.json](../validation/checks.json)。新增測試覆蓋三種訊號、固定目標、失效／超時、成本與股數、重啟保護、日損失鎖定、T+2 11:00、交割營業日、颱風休市、錯年日曆、重複委託、部分成交、零深度與連續跌停穿價；離線快速路徑與完整事件路徑的實際模擬成交、成本、權益及回撤一致。', '',
 f'本地 `npm test`：{checks["local_tests"]["total"]} 項，{checks["local_tests"]["passed"]} 通過、{checks["local_tests"]["failed"]} 失敗、{checks["local_tests"]["skipped"]} 跳過。完整輸出：[local-tests.txt](../validation/local-tests.txt)。17 份完整回測報告另經獨立封存程式驗證：摘要一致、成交必須晚於提交、買賣遵守限價、賣出不超過前日庫存、費稅與權益勾稽、觸發及提交事件都有訂單識別。', '',
 '[run-audits.zip](../validation/run-audits.zip) 保存 17 份完整 JSON.gz（含 workflow、orders、fills、daily_equity、settings），各檔 SHA256 見 [execution-audit-manifest.json](../validation/execution-audit-manifest.json) 與 comparison.json。這些都是隔離公開行情模擬，不包含使用者的帳戶原始紀錄。', '',
-'首次 GitHub Linux／Windows 工作在分配 runner 前結束，無步驟、無建置日誌，原因尚未取得，不能推定為測試通過或程式測試失敗。Windows 原始與封裝 GUI、實際截圖、EXE、簽章與發布資產雜湊均待驗證。此環境也未能提供可用的原生桌面顯示後端；Linux headless Electron 沒有通過 GUI。', '',
-'[AGENTS.md](../AGENTS.md) 要求「Never publish failed builds or claim an EXE is available before release assets and their hashes are verified.」及 Linux／Windows、來源／封裝 GUI 和本版 Windows 截圖驗收。本次不繞過這些條件，保留 PR 草稿；v0.2.3 Tag／Release 尚未建立。', '',
+'首次 CI 在分配 runner 前結束；公開 repo 後重新執行成功。Linux 與 Windows 單元／整合、Windows 原生組件、來源及封裝 GUI 均通過；實際畫面與來源／影像雜湊見 [截圖紀錄](screenshots/provenance.json)。本機 Linux headless 嘗試未通過 GUI，未用它代替 Windows 驗收。簽章工具會如實記錄未配置憑證的 unsigned 狀態，沒有冒稱可信發行者。' if ci_passed else '首次 GitHub Linux／Windows 工作在分配 runner 前結束，無步驟、無建置日誌，原因尚未取得，不能推定為測試通過或程式測試失敗。Windows 原始與封裝 GUI、實際截圖、EXE、簽章與發布資產雜湊均待驗證。此環境也未能提供可用的原生桌面顯示後端；Linux headless Electron 沒有通過 GUI。', '',
+'[AGENTS.md](../AGENTS.md) 的跨平台、來源／封裝 GUI 與本版 Windows 截圖驗收已完成。合併後 main 再次建置，發布器核對成品、費用範例、簽章報告及 SHA256 才上傳發布；最終資產以 Release 的 SHA256SUMS.txt 為準。' if ci_passed else '[AGENTS.md](../AGENTS.md) 要求「Never publish failed builds or claim an EXE is available before release assets and their hashes are verified.」及 Linux／Windows、來源／封裝 GUI 和本版 Windows 截圖驗收。本次不繞過這些條件，保留 PR 草稿；v0.2.3 Tag／Release 尚未建立。', '',
 '## 重現', '', '```bash', 'npm ci', 'npm test',
 'git worktree add ../baseline-v022 df744f638b1013b9d644218818862e8e19180872', 'npm --prefix ../baseline-v022 ci', 'npm --prefix ../baseline-v022 run build',
 'node scripts/compare-v023.mjs validation/twse-daily.json.gz ../baseline-v022 validation/comparison.json',
@@ -115,5 +120,16 @@ f'本地 `npm test`：{checks["local_tests"]["total"]} 項，{checks["local_test
 '2. 重新驗證進場目標與訊號選擇，使用當時成分的較廣股票池及多市場階段 walk-forward；保留失敗組別，使用未開封的新驗證期間。',
 '3. 以波動、相關性、跳空與組合回撤預算改進配置，而非只追求 70% 持倉。新配置須先通過扣成本後樣本外門檻。', '',
 '官方依據：[交易／T+2 制度](https://www.twse.com.tw/zh/products/system/trading.html)、[年曆查詢表單](https://www.twse.com.tw/zh/trading/holiday.html)、[2026/7/10 休市及交割順延公告](https://www.twse.com.tw/staticFiles/news/news/tsecnews/8a8216d69ef76943019f46cb86ae0110.pdf)。公開行情各次請求與原始回應雜湊見 [market-provenance.json](../validation/market-provenance.json)。', '']
+if ci_passed:
+    evidence = ['### Windows 與 Linux 驗收證據', '',
+                f'驗收來源 Commit：`{ci["source_commit"]}`；[CI 執行]({ci["run_url"]})。這是發布前快照，後續 main 發布結果以 Release 為準。', '',
+                '| 工作 | 結果 | 通過／失敗／跳過 |', '|---|---|---|']
+    for job in ci['jobs']:
+        tests = job.get('tests')
+        counts = f'{tests["passed"]}／{tests["failed"]}／{tests["skipped"]}' if tests else '封裝 GUI PASSED'
+        evidence.append(f'| [{job["name"]}]({job["url"]}) | {job["conclusion"]} | {counts} |')
+    evidence += ['', '實際 CI 逐步紀錄與雜湊：[ci-transcripts.zip](verification-v0.2.3/ci-transcripts.zip)。全程使用隔離測試資料，未登入券商或送出真實委託。', '']
+    at = lines.index('## 重現')
+    lines[at:at] = evidence
 (root/'docs/V0.2.3_VALIDATION.md').write_text('\n'.join(lines))
 print('Rendered docs/V0.2.3_VALIDATION.md from 17 completed comparisons')

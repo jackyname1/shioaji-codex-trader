@@ -1,6 +1,6 @@
 {
-  "recorded_at_utc": "2026-10-16T07:27:27.877683+00:00",
-  "version": "0.2.3-candidate",
+  "recorded_at_utc": "2026-10-16T08:23:11.378104+00:00",
+  "version": "0.2.3",
   "mode": "paper; auto_execute disabled at startup",
   "baseline_remote_commit": "df744f638b1013b9d644218818862e8e19180872",
   "local_tests": {
@@ -26,7 +26,7 @@
     "scripts/prepare-broker.ts": "ff2c081a0c44f32d5054528a250da33fe704b7b183a909790b6e9e82241fb4bd",
     "scripts/publish-release.mjs": "66fa1378bab5ce1c9069869661e050b2f842ff9b017d24f62a715fa915e19564",
     "scripts/release-assets.ts": "2c20d3f09215d12e3430ea5fa7808548f480104a3ce2587733dd4b4116ecae8c",
-    "scripts/render-validation-report.py": "c851b1b0ca55803fd9b5cb7a6cf858c0a8da18ae2d76e0f4450a09909772c7d2",
+    "scripts/render-validation-report.py": "aaba87847c41491c164819b39e6098761d9ac79b21449c14cd939a241d0a936d",
     "scripts/reset-release.mjs": "33d7497951a0c6cfbb78f1ee526de2063892766a4c29b3fee3062b5a7114d7ec",
     "scripts/retire-legacy-releases.mjs": "bec921ba4aefa9fc8a9ba28da2a22a26e9aee722402505fdd2d9aa7ecb91cef7",
     "scripts/save-windows-captures.mjs": "6bb80ea5a49820711925861dd6e701617f65097ae1cc5c47bb2a9d7e4ddc47d0",
@@ -168,23 +168,89 @@
     "windows": "failure before runner/steps",
     "packaged_windows": "skipped",
     "reason": "Unavailable: job steps empty; no downloadable logs",
-    "latest_status": "Consult PR #26; this is the initial observed run, not a successful validation of final source."
+    "latest_status": "Consult PR #26; this is the initial observed run, not a successful validation of final source.",
+    "note": "Historical initial failed run; it was later deleted during user cleanup. Successful replacement validation is recorded in ci_validation."
   },
   "gui": {
     "linux_headless": "NOT_PASSED: Electron exited 139 during INITIALIZING; no valid capture",
-    "windows_source": "PENDING",
-    "windows_packaged": "PENDING",
-    "windows_v023_screenshots": "PENDING",
-    "release_assets_and_signature": "PENDING"
+    "windows_source": "PASSED",
+    "windows_packaged": "PASSED",
+    "windows_v023_screenshots": "VERIFIED: seven actual Windows captures and source/bundle/image hashes",
+    "release_assets_and_signature": "PR package and signature-state checks PASSED; final main asset hashes gated by the publisher"
   },
   "live_broker": {
     "login_performed": false,
     "orders_submitted": false
   },
   "publication": {
-    "merged": false,
-    "tag_created": false,
-    "release_created": false,
-    "blocking_requirement": "AGENTS.md requires Linux/Windows checks, source/packaged GUI and verified Windows captures/assets before merge/release"
+    "recorded_before_merge": true,
+    "status": "PR_VALIDATED_PENDING_MAIN_PUBLICATION",
+    "release_url": "https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.3",
+    "policy": "Main must rebuild, verify packaged GUI and all asset hashes before publishing."
+  },
+  "source_hash_note": "Application and test files are unchanged from verified commit 990e525; the Python report generator now renders the observed successful CI state and passed py_compile.",
+  "ci_validation": {
+    "status": "PASSED",
+    "source_commit": "990e5254a752020ec59fe471a980a8c5078d83cd",
+    "run_id": 38871229934,
+    "attempt": 2,
+    "run_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/38871229934/attempts/2",
+    "jobs": [
+      {
+        "id": 116877745108,
+        "name": "test (ubuntu-latest)",
+        "conclusion": "success",
+        "tests": {
+          "total": 295,
+          "passed": 295,
+          "failed": 0,
+          "skipped": 0
+        },
+        "url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/38871229934/job/116877745108"
+      },
+      {
+        "id": 116877744833,
+        "name": "test (windows-latest)",
+        "conclusion": "success",
+        "tests": {
+          "total": 295,
+          "passed": 295,
+          "failed": 0,
+          "skipped": 0
+        },
+        "url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/38871229934/job/116877744833"
+      },
+      {
+        "id": 116878858160,
+        "name": "Windows packaged application",
+        "conclusion": "success",
+        "url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/38871229934/job/116878858160"
+      }
+    ],
+    "gui": {
+      "source": "PASSED",
+      "packaged": "PASSED",
+      "version": "0.2.3",
+      "viewports": [
+        "1366x768",
+        "1600x960",
+        "1920x1080"
+      ]
+    },
+    "transcript_manifest": {
+      "source_commit": "990e5254a752020ec59fe471a980a8c5078d83cd",
+      "run_id": 38871229934,
+      "attempt": 2,
+      "normalization": "UTF-8 transcript with CRLF normalized to LF; content otherwise retained",
+      "sha256": {
+        "windows-source.txt": "7c98969ef0530e20820481e14031c6563d47b565d2d69402a3b6c74d260fb7b8",
+        "linux.txt": "2ade76a6b02ab2e280f52cd00cd3f42ddb77b533b9745c7324e656d8c805b93d",
+        "packaged-windows.txt": "a17617b832eacca7b60640c8bac13e5cc9963ae81c57dd60dfd46d8241ec1c36"
+      }
+    },
+    "transcript_archive_sha256": "1e96b63d2458fc33142df7ad030a4a467c804c7039839a3a26dfbb9c41b3cfaa",
+    "capture_commit": "5ca55259323284372199def10db5f151047cbcb4",
+    "capture_digest": "sha256:f3646d960c1bab23deb9525b4f509c0e2aa62c6fcede57cee48f1a8a1ea9a36d",
+    "signing": "No signing certificate configured; explicitly unsigned, verification report generated."
   }
 }
