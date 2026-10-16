@@ -64,7 +64,8 @@ export function adaptProtection(p:Protection,position:Position,atr:number|undefi
     p.spec.trailing_activate=entry.plus(Decimal.max(d(p.initial_risk).times('1.25'),vol.times('1.5'),entry.times('.025'))).toFixed();
     p.spec.trailing_fraction=Decimal.max('.02',Decimal.min('.08',vol.times('1.8').div(entry))).toFixed();
   }
-  p.trailing_distance=vol.times('1.8').toFixed();
+  // ATR defaults never widen an explicitly tighter percentage trail.
+  p.trailing_distance=Decimal.min(vol.times('1.8'),entry.times(p.spec.trailing_fraction!)).toFixed();
 }
 export function evaluate(protection: Protection, price: string,tradeAt?:string): string {
   if(tradeAt&&protection.observed_at&&Date.parse(tradeAt)<Date.parse(protection.observed_at))return '';

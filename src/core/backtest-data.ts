@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { csvRows } from './facts.js';
 import { Store } from './store.js';
-import { TradingCalendar } from './calendar.js';
+import { TradingCalendar,applyCalendarExceptions } from './calendar.js';
 import { roundPrice, tickSize } from './risk.js';
 import { addDays, d, twDay, twClock, SessionSchema,type SessionDay, type Account, type Bar, type Candidate, type Instrument, type Order, type Quote } from './models.js';
 import type { Broker } from '../broker/types.js';
@@ -77,7 +77,7 @@ export function validateDataset(input: HistoryDataset): HistoryDataset {
       if(days.has(key))throw new Error('回測暖機日 K 每檔每日只能有一筆');days.add(key);}
   }
   const normalization={duplicates:(input.normalization?.duplicates??0)+normalized.duplicates+(dailyNormalized?.duplicates??0),revisions:(input.normalization?.revisions??0)+normalized.revisions};
-  return {...input,points:normalized.points,normalization,...(dailyHistory?{daily_history:dailyHistory}:{}),...(minuteStarts?{minute_starts:minuteStarts}:{}),...(input.calendar?{calendar:input.calendar.map(s=>SessionSchema.parse(s))}:{}),
+  return {...input,points:normalized.points,normalization,...(dailyHistory?{daily_history:dailyHistory}:{}),...(minuteStarts?{minute_starts:minuteStarts}:{}),...(input.calendar?{calendar:applyCalendarExceptions(input.calendar.map(s=>SessionSchema.parse(s)))}:{}),
     ...(input.daily_universe?{daily_universe:DailyUniverseSchema.parse(input.daily_universe)}:{})};
 }
 export function csvDataset(text: string): HistoryDataset {

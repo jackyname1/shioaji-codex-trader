@@ -51,6 +51,8 @@ right 為 VALUE 時 value 是十進位常數字串；right 為同一組行情／
 screening.entry 可為 null（僅選股）或提供 MULTI、TREND、BREAKOUT20、PULLBACK20 的受限進場規則。
 MULTI 同時比較三種訊號，依突破確認、已完成回檔反彈、趨勢延續的優先順序，每檔共用去重識別。目標只能來自已完成支撐壓力／區間投射，不依所需報酬比抬高。
 回檔追蹤超時或跌破支撐停損後，等待新策略才重新啟動。adaptive_protection=true 時本機會為持倉補上 ATR 移動保護與費稅保本底線，底線不下降；保本不保證跳空時不虧損。
+目前預設保留原趨勢進場與原單筆配置，加入智慧保護；三策略並行與動態配置仍屬研究選項，樣本外驗證未支持預設全面啟用，不可宣稱已證明優於基準。
+account.daily_loss_blocked=true 代表當日曾超過日損失限制，後續即使權益回升也不得新增 BUY。
 規則只會套用到已確認資格、有足夠已完成日 K 的普通股票；可自動加入新觀測股，不需要固定股票名單。
 若你啟用 screening.entry，代表授權程式在策略有效期間對任何符合這套條件的觀測股自動產生買進提案。
 allocation_fraction 不得超過 hard_limits.max_order_fraction，且至多 0.20；每檔每輪只進場一次，仍須硬性風控核准。

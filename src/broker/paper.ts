@@ -117,7 +117,7 @@ export class PaperBroker implements Broker {
           }
           const proceeds = amount.minus(extraFee).minus(extraTax); realized = proceeds.minus(cost).toFixed();
           if (this.settleSales && proceeds.gte(0)) {
-            let due = '9999-12-31'; try { due = this.calendar.next(this.calendar.next(twDay(now))); } catch { /* Do not recycle unverified settlement credits. */ }
+            let due = '9999-12-31'; try { due = this.calendar.nextSettlement(this.calendar.nextSettlement(twDay(now))); } catch { /* Do not recycle unverified settlement credits. */ }
             this.ledger.credits!.push({due,amount:proceeds.toFixed()});
           } else this.ledger.cash = d(this.ledger.cash).plus(proceeds).toFixed();
           bidDepth -= shares;

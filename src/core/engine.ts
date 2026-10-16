@@ -222,12 +222,12 @@ export class Engine {
       &&[q.trade_at,q.book_at].every(at=>ageSeconds(now,at)>=0&&ageSeconds(now,at)<=this.settings.quote_max_age));
     const limits = Object.fromEntries(['whole_lots','min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction',
       'max_exposure_fraction','max_daily_buy_fraction','max_daily_buy_orders','daily_loss_fraction',
-      'price_deviation_fraction','minimum_fee','fee_rate','sell_tax_rate','plan_max_minutes','watch_min_amount','watch_max_symbols'].map(k => [k,this.settings[k as keyof Settings]]));
+      'price_deviation_fraction','minimum_fee','fee_rate','sell_tax_rate','plan_max_minutes','watch_min_amount','watch_max_symbols','entry_strategy_mode','adaptive_protection','dynamic_allocation','risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes'].map(k => [k,this.settings[k as keyof Settings]]));
     return {snapshot_id:randomUUID(),asof:now.toISOString(),synthetic:this.settings.mode === 'demo',review_only:review,
       account:{cash:a.cash,settlement_debits:a.settlement_debits,settlement_credits:a.settlement_credits,
         equity:equity(a).toFixed(),available_cash:cash.available,order_cash_reserved:cash.reserved,
         minimum_cash_reserve:minimum.toFixed(),buying_power:room.gt(0)?room.toFixed():'0',
-        daily_baseline_equity:baseline??null,daily_loss_amount:loss?(loss.gt(0)?loss.toFixed():'0'):null,
+        daily_loss_blocked:this.dailyLossBlocked(now,a),daily_baseline_equity:baseline??null,daily_loss_amount:loss?(loss.gt(0)?loss.toFixed():'0'):null,
         daily_loss_ratio:loss&&d(baseline!).gt(0)?(loss.gt(0)?loss.div(baseline!).toFixed():'0'):null,
         daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
@@ -348,7 +348,7 @@ export class Engine {
     if (!this.canExecute() || !this.plan || Date.parse(this.plan.analysis.expires_at) <= now.getTime()) return;
     const plan = this.plan;
     const decisions=[...plan.analysis.decisions],ruleScores=new Map<string,number>();
-    if(evaluateConditions&&this.settings.auto_watchlist&&plan.analysis.screening?.entry)for(const w of this.watch.entries) {
+    if((evaluateConditions||smartConditions&&plan.analysis.screening?.entry?.signal==='MULTI')&&this.settings.auto_watchlist&&plan.analysis.screening?.entry)for(const w of this.watch.entries) {
       if(decisions.some(d=>d.symbol===w.symbol))continue;
       if(!this.watch.healthy||ageSeconds(now,this.watch.asof)>this.settings.watch_refresh_minutes*120) {
         this.decisionStates.set(w.symbol,{state:'WAIT',reason:'觀測資料更新尚未確認',source:'RULE'});continue;
@@ -405,6 +405,7 @@ export class Engine {
   }
   private async requestExecution(order:Order,now:Date,source:ExecutionTicket['source'],condition?:import('./models.js').Decision,
     smart?:SmartSpec,trigger='',protectionSpec?:SmartSpec):Promise<boolean>{
+    order.trigger_reason=(trigger||condition?.reason||'規則條件已成立').slice(0,3000);
     if(this.settings.codex_enabled&&this.advisorIssue){
       this.decisionStates.set(order.symbol,{state:'WAIT',reason:this.advisorIssue+'；先測試連線或重新分析，未送單',source});return false;
     }
@@ -457,7 +458,8 @@ export class Engine {
     if(ticket.source==='RULE'){
       const w=this.watch.entries.find(w=>w.symbol===ticket.order.symbol);
       if(!w)return '股票已離開監測清單';
-      const result=ruleEntry(this.plan,w,this.watchFeatures[w.symbol],q,this.account,this.settings,now);
+      const track=this.store.entryTracks().find(t=>t.symbol===w.symbol&&t.plan_id===this.plan!.id&&t.lot===(q?.odd===false?'COMMON':'ODD'));
+      const result=ruleEntry(this.plan,w,this.watchFeatures[w.symbol],q,this.account,this.settings,now,track);
       return result.decision?'':result.reason;
     }
     const c=ticket.condition;
@@ -499,7 +501,7 @@ export class Engine {
       lots,features:this.watchFeatures[ticket.order.symbol],instrument:structuredClone(m),
       capital:capitalSnapshot(a,this.settings),
       hard_limits:Object.fromEntries(['min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
-        'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','whole_lots'].map(k=>[k,this.settings[k as keyof Settings]])),
+        'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','whole_lots','entry_strategy_mode','adaptive_protection','dynamic_allocation','risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd'].map(k=>[k,this.settings[k as keyof Settings]])),
       historical_replay:!!this.store.get('historical_replay')};
   }
   finishExecution(id:string,state:string,reason:string,now:Date):void {

@@ -6,16 +6,25 @@ const closed2026 = new Set(['2026-01-01','2026-02-12','2026-02-13','2026-02-15',
   '2026-04-03','2026-04-04','2026-04-05','2026-04-06','2026-05-01','2026-06-19',
   '2026-09-25','2026-09-28','2026-10-09','2026-10-10','2026-10-25','2026-10-26','2026-12-25']);
 const weekday = (day: string): boolean => ![0, 6].includes(new Date(day + 'T00:00:00Z').getUTCDay());
+// Unscheduled closures are explicit official announcements, never inferred from absent prices.
+const exceptionalClosures:Record<string,{source:string;verified_at:string}>={
+  '2026-07-10':{source:'https://www.twse.com.tw/staticFiles/news/news/tsecnews/8a8216d69ef76943019f46cb86ae0110.pdf',verified_at:'2026-07-09T20:11:00+08:00'},
+};
+export const applyCalendarExceptions=(days:SessionDay[]):SessionDay[]=>days.map(day=>exceptionalClosures[day.day]
+  ?{...day,...exceptionalClosures[day.day]!,open:false,settlement_open:false}:day);
 export class TradingCalendar {
   constructor(readonly store: Store, readonly demo = false) {
     if (!store.session('2026-01-01')) {
       const days: SessionDay[] = [];
       for (let day = '2026-01-01'; day < '2027-01-01'; day = addDays(day, 1))
-        days.push({ day, open: weekday(day) && !closed2026.has(day),
-          source: 'https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&queryYear=115',
+        days.push({ day, open: weekday(day) && !closed2026.has(day),settlement_open:['2026-02-12','2026-02-13'].includes(day)||weekday(day)&&!closed2026.has(day),
+          source: 'https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&date=20260101',
           verified_at: '2026-10-08T00:00:00+08:00' });
-      store.saveSessions(days);
+      store.saveSessions(applyCalendarExceptions(days));
     }
+    // Upgrade persisted annual calendars while retaining the announcement's provenance.
+    for(const [day,evidence] of Object.entries(exceptionalClosures))store.saveSessions([{day,open:false,settlement_open:false,...evidence}]);
+    for(const day of ['2026-02-12','2026-02-13']){const existing=store.session(day);if(existing&&!existing.settlement_open)store.saveSessions([{...existing,settlement_open:true}]);}
   }
   isOpen(day: string): boolean { return this.store.session(day)?.open ?? (this.demo && weekday(day)); }
   inSession(now: Date, lot: 'ODD' | 'COMMON' = 'ODD'): boolean {
@@ -27,12 +36,17 @@ export class TradingCalendar {
     for (let n = 1; n < 370; n++) { const candidate = addDays(day, n * direction); if (this.isOpen(candidate)) return candidate; }
     throw new Error('尚未載入相鄰交易日的行事曆');
   }
-  async refresh(year: number, signal?: AbortSignal): Promise<number> {
+  nextSettlement(day:string,direction=1):string {
+    for(let n=1;n<370;n++){const candidate=addDays(day,n*direction),session=this.store.session(candidate);
+      if(session?.settlement_open??this.isOpen(candidate))return candidate;}
+    throw new Error('尚未載入相鄰營業日的交割行事曆');
+  }
+  async refresh(year: number, signal?: AbortSignal,fetcher:typeof fetch=fetch): Promise<number> {
     if (!Number.isInteger(year) || year < 2020 || year > 2100) throw new Error('年份不合法');
-    const source = `https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&queryYear=${year - 1911}`;
-    const response = await fetch(source, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), redirect: 'error' });
+    const source = `https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&date=${year}0101`;
+    const response = await fetcher(source, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), redirect: 'error' });
     if (!response.ok) throw new Error('證交所行事曆無法取得');
-    const days = parseCalendar(await response.json(), year, source);
+    const days = applyCalendarExceptions(parseCalendar(await response.json(), year, source));
     this.store.saveSessions(days); return days.length;
   }
 }
@@ -41,16 +55,18 @@ export function parseCalendar(raw: unknown, year: number, source: string): Sessi
   if (p.stat?.toLowerCase() !== 'ok' || !p.title?.includes(String(year - 1911))
     || JSON.stringify(p.fields?.slice(0, 3)) !== JSON.stringify(['日期','名稱','說明']) || !p.data || p.data.length < 8)
     throw new Error('證交所行事曆欄位或年份不符');
-  const closed = new Set<string>(), opened = new Set<string>();
+  const closed = new Set<string>(), opened = new Set<string>(),settlementOnly=new Set<string>();
   for (const row of p.data) {
     const [day, name] = row;
     if (row.length < 3 || typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)
       || !day.startsWith(String(year)) || Number.isNaN(Date.parse(day)) || typeof name !== 'string')
       throw new Error('行事曆日期格式不符');
     if (name.includes('開始交易日') || name.includes('最後交易日')) opened.add(day); else closed.add(day);
+    if(name.includes('僅辦理結算交割'))settlementOnly.add(day);
   }
   const days: SessionDay[] = [];
   for (let day = `${year}-01-01`; day < `${year + 1}-01-01`; day = addDays(day, 1))
-    days.push({ day, open: opened.has(day) || (weekday(day) && !closed.has(day)), source, verified_at: new Date().toISOString() });
+    days.push({ day, open: opened.has(day) || (weekday(day) && !closed.has(day)),
+      settlement_open:settlementOnly.has(day)||opened.has(day)||weekday(day)&&!closed.has(day),source, verified_at: new Date().toISOString() });
   return days;
 }

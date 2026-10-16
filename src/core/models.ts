@@ -46,6 +46,7 @@ export const OrderSchema = z.strictObject({
   filled: quantity, created_at: timestamp, plan_id: z.string(),
   purpose: z.enum(['ENTRY', 'EXIT', 'PROTECTION', 'EXTERNAL']),
   exit_trigger:z.enum(['STOP','TAKE_PROFIT','TRAILING','BREAKEVEN']).optional(),
+  trigger_reason:z.string().max(3000).optional(),
 }).refine(o => o.filled <= o.shares, '成交量超過委託量');
 export type Order = z.infer<typeof OrderSchema>;
 export const active = (o: Order): boolean => !['FILLED', 'CANCELLED', 'REJECTED'].includes(o.status);
@@ -152,8 +153,8 @@ export const SettingsSchema = z.strictObject({
   account_max_age: quantity.min(1).max(300).default(60), cooldown_seconds: quantity.max(86400).default(120),
   fee_rate: fraction.default('0.001425'), minimum_fee: nonnegative.default('20'),
   sell_tax_rate: fraction.default('0.003'),
-  entry_strategy_mode:z.enum(['legacy','multi']).default('multi'),
-  adaptive_protection:z.boolean().default(true), dynamic_allocation:z.boolean().default(true),
+  entry_strategy_mode:z.enum(['legacy','multi']).default('legacy'),
+  adaptive_protection:z.boolean().default(true), dynamic_allocation:z.boolean().default(false),
   risk_slippage_fraction:fraction.refine(v=>d(v).lte('0.05')).default('0.001'),
   overnight_gap_fraction:fraction.default('0.05'), max_gap_risk_fraction:fraction.default('0.02'),
   min_net_profit_twd:nonnegative.default('60'),
@@ -192,6 +193,7 @@ export function storedSettings(raw: unknown): Settings {
 }
 export const SessionSchema = z.strictObject({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), open: z.boolean(), source: z.string().min(1), verified_at: timestamp,
+  settlement_open:z.boolean().optional(),
 });
 export type SessionDay = z.infer<typeof SessionSchema>;
 export interface Bar { date: string; close: number; high: number; low: number; volume: number; amount?:string }
@@ -203,6 +205,7 @@ export interface Features {
   daily_amount?: string;
   daily_amount_source?:'TRADE_AMOUNT'|'CLOSE_VOLUME_ESTIMATE';
   previous_resistance20?:number; ma20_previous?:number;
+  breakout_base20?:number;breakout_range20?:number;last_close?:number;
 }
 export interface Snapshot {
   snapshot_id: string; asof: string; synthetic: boolean; review_only: boolean;
@@ -210,7 +213,7 @@ export interface Snapshot {
     daily_buy_amount: string; daily_buy_count: number; positions: Position[];
     open_orders: { symbol: string; action: string; shares: number; limit_price: string }[];
     available_cash?:string;buying_power?:string;minimum_cash_reserve?:string;order_cash_reserved?:string;
-    daily_baseline_equity?:string|null;daily_loss_amount?:string|null;daily_loss_ratio?:string|null };
+    daily_loss_blocked?:boolean;daily_baseline_equity?:string|null;daily_loss_amount?:string|null;daily_loss_ratio?:string|null };
   universe: Candidate[]; features: Record<string, Features>; hard_limits: Record<string, unknown>;
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
   smart_tracking?:{entries:EntryTrack[];protections:Protection[]};

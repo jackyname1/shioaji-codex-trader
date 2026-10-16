@@ -2,6 +2,8 @@
 
 **目前版本：[v0.2.2 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.2)** · Windows x64 免安裝
 
+**v0.2.3 候選版：[PR #26](https://github.com/jackyname1/shioaji-codex-trader/pull/26)**。已完成程式修改、本地回歸、原始紀錄核帳及 17 組同資料比較；尚未發布。樣本外結果不支持預設啟用三策略與動態配置，故保留為研究選項，預設使用原趨勢進場、原配置與智慧保護。GitHub runner 尚未啟動，Windows 來源、封裝與實際 GUI 截圖待驗收。完整數據、限制與重現方法見 [v0.2.3 驗證報告](docs/V0.2.3_VALIDATION.md)。以下下載與截圖仍對應已發布的 v0.2.2。
+
 台灣股票桌面工作台：以 Shioaji 取得行情，讓 Codex 設定選股與買賣條件，由程式核對價格、股數、現金及風控。提供即時模擬、歷史回放和實盤帳戶介面；歷史測試使用獨立虛擬帳戶。
 
 ## 這版更新

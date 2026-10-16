@@ -82,3 +82,5 @@ dialog{background:#151d29}.card{background:#101824}.analyst-event{background:#11
 .instrument-panel .conditions-details[open]{margin-top:0}
 
 tr[data-chart-symbol]{cursor:pointer}tr[data-chart-symbol]:hover{background:var(--hover)}tr[data-chart-symbol].selected{background:var(--selected)}tr[data-chart-symbol]:focus-visible{outline:2px solid var(--sky);outline-offset:-2px}.positions-panel td .quiet{padding:0;min-height:20px;color:var(--sky);font-weight:600}
+
+.condition-item{min-width:0;align-items:flex-start}.condition-item strong{min-width:0;overflow-wrap:anywhere;text-align:right}

@@ -6,7 +6,7 @@ import { TradingCalendar } from './calendar.js';
 import { Engine } from './engine.js';
 import { PaperBroker, type SimulatedFill } from '../broker/paper.js';
 import { HistoricalMarket, validateDataset, validDay, type HistoryDataset } from './backtest-data.js';
-import { SettingsSchema, addDays, d, equity, marketValue, twClock, twDay, type Analysis, type Settings, type Snapshot } from './models.js';
+import { SettingsSchema, addDays, ageSeconds,d, equity, marketValue, twClock, twDay, type Analysis, type Settings, type Snapshot } from './models.js';
 import { programAnalysis } from './program-strategy.js';
 import { ReplayClock,validReplaySpeed } from './replay-clock.js';
 import type { WatchState } from './watchlist.js';
@@ -71,7 +71,7 @@ export interface BacktestReport {
     gross_pnl?:string;total_costs?:string;cost_drag_pct?:string;sell_orders?:number;
     average_exposure_pct?:string;max_exposure_pct?:string;exposure_samples?:number;
     trades?:ReturnType<typeof tradeStatistics>;exits?:ReturnType<typeof exitStatistics>;daily_loss_breach_days?:string[];
-    average_close_exposure_pct?:string;daily_sharpe?:string|null};
+    average_close_exposure_pct?:string;daily_sharpe?:string|null;skipped_idle_checks?:number};
   quality:BacktestQuality;positions:import('./models.js').Position[];
   strategy_log:{at:string;review:boolean;stance:string;expires_at:string;summary:string;selected:string[]}[];watch_changes:WatchChange[];
   workflow?:ReplayActivity[];failures?:{at:string;review:boolean;stage:string;issue:string;diagnostic?:CodexFailureDetail}[];normalization?:HistoryDataset['normalization'];
@@ -175,6 +175,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       '回測等待 Codex 時凍結虛擬行情；實盤等待期間價格仍會變動，故無法由回測驗證分析延遲的成交影響']:[])];
   let status:BacktestReport['status']='COMPLETED',calls=0,successes=0,failures=0,currentDay='',lastTime=events[0]!.at,peak=d(request.initial_cash),drawdown=d(0),steps=0,checks=0,lastMonitor='',nextEvent='',lastError='';
   let sizeRequests=0,sizeConfirmations=0,sizeFailures=0,smartChecks=0;
+  let idleSettled=false,skippedIdle=0;
   const entryDiagnostics=new EntryDiagnosticTracker();
   const timeline:NonNullable<BacktestReport['timeline']>=[];
   let exposureSum=d(0),maxExposure=d(0),exposureSamples=0;
@@ -269,18 +270,27 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   };
   try{await engine.start(new Date(events[0]!.at));
     for(let index=0;index<events.length;index++){const event=events[index]!;if(signal.aborted){status='CANCELLED';break;}
-      const smartActive=request.entry_cadence==='market'||engine.plan?.analysis.decisions.some(d=>d.entry_when==='REBOUND')
+      const smartActive=request.entry_cadence==='market'||engine.plan?.analysis.screening?.entry?.signal==='MULTI'||engine.plan?.analysis.decisions.some(d=>d.entry_when==='REBOUND')
         ||store.protections().some(p=>engine.account?.positions.some(x=>x.symbol===p.symbol&&x.shares>0));
       const visibleEvent=event.check||event.watch||event.decision!==undefined||event.close||event.market&&smartActive;
       if(clock)try{await clock.before(event.at,signal,visibleEvent);}catch{if(signal.aborted){status='CANCELLED';break;}throw new Error('回測時間控制失敗');}
       const nextVisible=()=>{
-        const includeMarket=request.entry_cadence==='market'||engine.plan?.analysis.decisions.some(d=>d.entry_when==='REBOUND')
+        const includeMarket=request.entry_cadence==='market'||engine.plan?.analysis.screening?.entry?.signal==='MULTI'||engine.plan?.analysis.decisions.some(d=>d.entry_when==='REBOUND')
           ||store.protections().some(p=>engine.account?.positions.some(x=>x.symbol===p.symbol&&x.shares>0));
         for(let next=index+1;next<events.length;next++){const e=events[next]!;
           if(e.check||e.watch||e.decision!==undefined||e.close||e.market&&includeMarket)return e.at;}
         return '';
       };
       const now=new Date(event.at),day=twDay(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=nextVisible();
+      const freshQuote=[...engine.quotes.values()].some(q=>ageSeconds(now,q.trade_at)>=0&&ageSeconds(now,q.trade_at)<=settings.quote_max_age);
+      // Offline runs may elide repeated stale-data checks. Never skip a price, decision, expiry, settlement clock, close or GUI frame.
+      const expiryPending=engine.plan&&Date.parse(engine.plan.analysis.expires_at)<=now.getTime()&&store.orders(true).some(o=>o.purpose==='ENTRY');
+      if(!clock&&!onFrame&&idleSettled&&!freshQuote&&!event.market&&event.decision===undefined&&!event.close&&twClock(now)!=='11:00'
+        &&!expiryPending&&!engine.pendingExecutions.size){
+        if(event.check){checks++;lastMonitor=event.at;entryDiagnostics.monitor(engine.decisionStates);}skippedIdle++;
+        progress('REPLAY','沒有新鮮價格，重複檢查維持禁止送單');await yieldToEvents();continue;
+      }
+      idleSettled=!freshQuote&&!event.market;
       const revision=store.orderRevision,fillCount=broker.fillCount();
       const decisionsBefore=new Map([...engine.decisionStates].map(([symbol,state])=>[symbol,state.state+':'+state.reason]));
       progress('RECONCILE',`${twClock(now)} 處理價格事件並核對已存在的模擬委託`);
@@ -298,6 +308,8 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       if(event.check||marketEntry)entryDiagnostics.monitor(engine.decisionStates);
       progress('RECONCILE',`${twClock(now)} 核對送單結果、成交股數與模擬帳務`);await engine.reconcile(now,true);
       const changes=store.changedOrders(revision),changed=changes.map(c=>c.order);
+      for(const change of changes.filter(c=>c.created))activity(event.at,'TRIGGER',`${change.order.symbol} ${change.order.action}：${change.order.trigger_reason??'既有策略條件觸發'}`,
+        {symbols:[change.order.symbol],order_id:change.order.local_id,trigger:change.order.exit_trigger??change.order.trigger_reason});
       if(changed.length){activity(event.at,'MONITOR','已完成進出場條件與風控檢查');
         for(const order of changed)activity(event.at,changes.find(c=>c.order.local_id===order.local_id)!.created?'SUBMISSION':'RECONCILE',`${order.symbol} ${order.action} ${order.filled}/${order.shares} 股 · ${order.status} · 限價 ${order.limit_price}`,{symbols:[order.symbol],order_id:order.local_id,trigger:order.exit_trigger,state:order.status});}
       for(const fill of broker.fills(fillCount))activity(event.at,'FILL',`${fill.symbol} ${fill.action} ${fill.shares} 股 @ ${fill.price} · 手續費 ${fill.fee} · 稅 ${fill.tax}`,{symbols:[fill.symbol],order_id:fill.order_id,trigger:fill.exit_trigger});
@@ -339,6 +351,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         trades:tradeStatistics(fills),exits:exitStatistics(store.orders()),daily_loss_breach_days:breachDays,
         average_close_exposure_pct:daily.length?daily.reduce((sum,row)=>sum.plus(row.exposure_pct??0),d(0)).div(daily.length).toFixed(4):'0',
         daily_sharpe:sd>0?String(mean/sd*Math.sqrt(252)):null,
+        skipped_idle_checks:skippedIdle,
         codex_calls:calls,decision_successes:successes,decision_failures:failures,risk_refusals:refusals.n,
         watch_scans:engine.watch.scans,watch_adds:engine.watch.adds,watch_removes:engine.watch.removes,monitor_checks:checks,
         execution_requests:sizeRequests,execution_confirmations:sizeConfirmations,execution_failures:sizeFailures,smart_monitor_checks:smartChecks,

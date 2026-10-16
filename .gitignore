@@ -22,3 +22,7 @@ private/
 /core
 
 /node_modules
+
+validation/run-audits/
+validation/*.case*.json
+__pycache__/

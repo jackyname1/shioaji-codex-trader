@@ -19,6 +19,9 @@ export function indicators(bars: Bar[]): Features {
   result.resistance20 = Math.max(...bars.slice(-20).map(b => b.high));
   if(bars.length>=21){result.previous_resistance20=Math.max(...bars.slice(-21,-1).map(b=>b.high));
     result.ma20_previous=mean(closes.slice(-21,-1));}
+  result.last_close=last.close;
+  if(bars.length>=25){const base=bars.slice(-25,-5);result.breakout_base20=Math.max(...base.map(b=>b.high));
+    result.breakout_range20=result.breakout_base20-Math.min(...base.map(b=>b.low));}
   const averageVolume = mean(bars.slice(-20).map(b => b.volume));
   result.volume_ratio20 = averageVolume ? last.volume / averageVolume : 0;
   result.return20 = last.close / closes.at(-20)! - 1;

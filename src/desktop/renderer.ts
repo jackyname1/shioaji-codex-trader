@@ -25,7 +25,7 @@ const pct=(v:string):string=>fmt(Number(v)*100)+'%';
 const time=(v:string|null|undefined):string=>v?new Date(v).toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,hour:'2-digit',minute:'2-digit'}):'—';
 const stamp=(v:string|null|undefined):string=>v?new Date(v).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
 const phase:Record<string,string>={IDLE:'尚未執行',LOADING:'準備行情',CALENDAR:'交易日曆',UNIVERSE:'股票資料池',HISTORY:'歷史行情',SNAPSHOT:'當時快照',ANALYSIS:'Codex 選股',ACTIVATION:'設定條件',MONITOR:'偵測與送單',RECONCILE:'成交核對',SUBMISSION:'模擬委託',FILL:'模擬成交',RISK:'風控阻擋',CLOSE:'收盤核對',LIMIT:'呼叫上限',REVIEW:'盤後檢討',REPLAY:'事件已完成',COMPLETED:'已完成',PARTIAL:'部分完成',CANCELLED:'已停止',FAILED:'執行失敗'};
-Object.assign(phase,{DATA:'資料就緒',MODEL:'實際模型',RUNNING:'選股與條件分析',HALTED:'Codex 已停止',RECOVERED:'Codex 連線恢復',REASONING:'官方推理摘要',OUTPUT:'完整結構回覆',PLAN:'分析步驟',USAGE:'用量',VALIDATING:'核對輸出',DECISION:'策略決定',
+Object.assign(phase,{TRIGGER:'條件觸發',SIGNAL_STATE:'監測狀態',DATA:'資料就緒',MODEL:'實際模型',RUNNING:'選股與條件分析',HALTED:'Codex 已停止',RECOVERED:'Codex 連線恢復',REASONING:'官方推理摘要',OUTPUT:'完整結構回覆',PLAN:'分析步驟',USAGE:'用量',VALIDATING:'核對輸出',DECISION:'策略決定',
   SIZING:'Codex 確認股數',SIZE_CONFIRM:'數量與風控核對',SIZE_DECISION:'交易數量建議',EXECUTION_RESULT:'本次執行結果',SUBMISSION:'委託送出'});
 const action:Record<string,string>={BUY:'買進',SELL:'賣出',HOLD:'觀望',ADD:'加入',REMOVE:'移除',RETAIN:'保留監控',OBSERVE:'觀測',RETAINED:'保留監控',WAIT:'等待',BLOCKED:'風控／資格阻擋',SUBMITTED:'已送出',FILLED:'已成交',PARTIAL:'部分成交',PENDING:'委託中',CANCEL_PENDING:'撤單核對中',CANCELLED:'已撤單',REJECTED:'已拒絕',UNKNOWN:'結果待核對'};
 Object.assign(action,{SIZING:'Codex 確認股數',SIZE_FAILED:'數量確認未完成',QUEUED:'等待數量確認',RUNNING:'確認股數中'});
@@ -348,9 +348,9 @@ function renderStockDetails():void {
   const conditions:[string,string][]=[['方向',decision? (action[decision.action]??decision.action):plan?plan.analysis.stance:'等待有效策略'],['進場限價',decision?.limit_price??'—'],['觸發條件',decision?triggerText(decision):rules?.signal??'—'],
     ['反彈追蹤',decision?.entry_when==='REBOUND'?tracking?.armed?`低點 ${tracking.low_water} → ${thresholdHint(Number(tracking.low_water)*(1+Number(decision.rebound_fraction)))}`:'尚未跌至門檻':'—'],
     ['額外必要條件',decision?guardText(decision)||'無':'—'],['優先停損',spec?.stop_price??'—'],['固定停利',spec?.take_profit??'未啟用'],['收益目標（不觸發）',spec?.reward_target??spec?.take_profit??'—'],
-    ['追蹤啟動價',spec?.trailing_activate??'—'],['高點回落',spec?.trailing_fraction?`${pct(spec.trailing_fraction)} · ${armed?'已啟動':'待啟動'}`:'—'],
+    ['追蹤啟動價',spec?.trailing_activate?thresholdHint(Number(spec.trailing_activate)):'—'],['高點回落',spec?.trailing_fraction?`${pct(spec.trailing_fraction)} · ${armed?'已啟動':'待啟動'}`:'—'],
     ['移動退場價',armed&&spec?.trailing_fraction?`高點 ${protection!.high_water} → ${thresholdHint(Number(protection!.high_water)*(1-Number(spec.trailing_fraction)))}`:'—']];
-  conditions.push(['有效保護底線',protection?.protected_floor??spec?.stop_price??'—'],['已觀測最高價',protection?.high_water??'—'],
+  conditions.push(['有效保護底線',protection?.protected_floor?thresholdHint(Number(protection.protected_floor)):spec?.stop_price??'—'],['已觀測最高價',protection?.high_water??'—'],
     ['費稅保本價',protection?.break_even_price?`${thresholdHint(Number(protection.break_even_price))} · ${protection.break_even_armed?'已啟動':'待啟動'}`:'—'],
     ['追蹤期限',tracking?.expires_at?stamp(tracking.expires_at):'—']);
   const state=(replay?frame?.decisions:r?.decisions)?.find(x=>x.symbol===selectedSymbol);

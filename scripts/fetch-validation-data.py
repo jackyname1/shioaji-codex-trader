@@ -56,11 +56,30 @@ if __name__ == '__main__':
                                        close=values[3], volume_shares=int(clean(row[1])), amount_twd=clean(row[2])))
                 except ValueError:
                     continue
-    dataset = dict(source='TWSE STOCK_DAY public daily OHLCV; fixed prespecified 10-stock pool', synthetic=False, frequency='DAILY',
+    calendar,calendar_sources=[],[]
+    for year in [2025,2026]:
+        url=f'https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&date={year}0101'
+        path=OUT/f'calendar-{year}.json'
+        if not path.exists():
+            with urllib.request.urlopen(url,timeout=20) as response:
+                path.write_bytes(response.read())
+        raw=path.read_bytes();obj=json.loads(raw)
+        if str(year-1911) not in obj.get('title','') or not all(str(row[0]).startswith(str(year)) for row in obj.get('data',[])):
+            raise ValueError('Official calendar returned a different year; do not use it')
+        calendar_sources.append(dict(year=year,url=url,sha256=hashlib.sha256(raw).hexdigest()))
+        closed={row[0] for row in obj['data'] if '開始交易日' not in row[1] and '最後交易日' not in row[1]}
+        settlement_only={row[0] for row in obj['data'] if '僅辦理結算交割' in row[1]}
+        day=dt.date(year,1,1)
+        while day.year==year:
+            date=day.isoformat();opened=day.weekday()<5 and date not in closed
+            calendar.append(dict(day=date,open=opened,settlement_open=opened or date in settlement_only,source=url,
+                                 verified_at=dt.datetime.now(dt.timezone.utc).isoformat()))
+            day+=dt.timedelta(days=1)
+    dataset = dict(source='TWSE STOCK_DAY public daily OHLCV; fixed prespecified 10-stock pool', synthetic=False, frequency='DAILY',calendar=calendar,
                    points=points, names={}, limitations=['Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.',
                    'Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.',
                    'Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.'])
     OUT.mkdir(exist_ok=True)
     (OUT / 'twse-daily.json').write_text(json.dumps(dataset, ensure_ascii=False))
-    (OUT / 'provenance.json').write_text(json.dumps({'retrieved_at': dt.datetime.now(dt.timezone.utc).isoformat(), 'sources': provenance}, indent=2))
+    (OUT / 'provenance.json').write_text(json.dumps({'retrieved_at': dt.datetime.now(dt.timezone.utc).isoformat(), 'sources': provenance,'calendar_sources':calendar_sources}, indent=2))
     print(json.dumps({'points': len(points), 'sources': len(provenance), 'dataset': str(OUT / 'twse-daily.json')}), flush=True)

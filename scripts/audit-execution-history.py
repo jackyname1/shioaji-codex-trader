@@ -46,6 +46,7 @@ peak, drawdown = initial, D(0)
 for s in snapshots:
     e = D(s['account']['equity']); peak = max(peak, e); drawdown = max(drawdown, (peak-e)/peak*100)
 buy_decisions, trailing = 0, 0
+entry_types=collections.Counter();all_trailing=0
 failures = [dict(asof=e['asof'], message=e['message']) for e in events if e['stage'] == 'FAILED']
 failure_details = []
 for event in events:
@@ -57,6 +58,8 @@ for event in events:
         continue
     ds = a.get('decisions', [])
     buy_decisions += sum(d['action'] == 'BUY' for d in ds)
+    entry_types.update(d['entry_when'] for d in ds if d['action']=='BUY')
+    all_trailing += sum(bool(d.get('smart') and d['smart'].get('trailing_activate') is not None) for d in ds)
     trailing += sum(d['action'] == 'BUY' and d.get('smart') and d['smart'].get('trailing_activate') is not None for d in ds)
     if any(f['asof'] == event['asof'] for f in failures):
         s = next((s for s in full if s['snapshot_id'] == a.get('snapshot_id')), None)
@@ -72,6 +75,9 @@ result = dict(source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(), eve
     profit_factor=str(sum(wins)/sum(losses)), average_close_exposure_pct=str(sum(exposure(s) for s in post.values())/len(post)),
     close_exposure_days=len(post), final_exposure_pct=str(exposure(full[-1])), snapshot_peak_equity=str(peak), snapshot_max_drawdown_lower_bound_pct=str(drawdown),
     buy_proposals=buy_decisions, buy_proposals_with_trailing=trailing, failures=failures, failure_details=failure_details,
+    entry_types=dict(entry_types),all_decisions_with_trailing=all_trailing,
+    logged_risk_events=sum(e['stage']=='RISK' for e in events),
+    distinct_logged_risk_messages=len({e['message'] for e in events if e['stage']=='RISK'}),
     october15_exits_net=sum((D(f['net_pnl']) for f in exits if f['at'].startswith('2026-10-15')),D(0)),
     limitations=['Execution log contains snapshots, not a complete minute path. Intraday max drawdown and unfilled-signal distribution are not recoverable.',
     'Close exposure uses one review snapshot per session. Unrealized PnL includes paid buy fees; future liquidation fees and tax are excluded.'])

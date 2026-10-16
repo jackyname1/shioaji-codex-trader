@@ -1,0 +1,3280 @@
+{
+  "dataset_sha256": "ccd513d90ba3c5249122d80d37e4e899ddb4fb0548d8cc3187cff459949c43f2",
+  "source": "TWSE STOCK_DAY public daily OHLCV; fixed prespecified 10-stock pool",
+  "frequency": "DAILY",
+  "baseline_source": "v0.2.2 original programAnalysis loaded from separately checked out baseline; common corrected execution/accounting/risk engine",
+  "baseline_commit": "df744f638b1013b9d644218818862e8e19180872",
+  "common": {
+    "mode": "paper",
+    "auto_execute": false,
+    "min_cash_fraction": "0.20",
+    "max_order_fraction": "0.20",
+    "order_budget_basis": "EQUITY",
+    "target_exposure_fraction": "0.70",
+    "max_symbol_fraction": "0.25",
+    "max_exposure_fraction": "0.80",
+    "max_daily_buy_fraction": "0.60",
+    "max_daily_buy_orders": 8,
+    "max_trade_risk_fraction": "0.0125",
+    "daily_loss_fraction": "0.02",
+    "min_entry_reward_risk": "1.2",
+    "watch_max_symbols": 16,
+    "fee_rate": "0.001425",
+    "minimum_fee": "20",
+    "sell_tax_rate": "0.003",
+    "risk_slippage_fraction": "0.001",
+    "max_gap_risk_fraction": "0.02",
+    "overnight_gap_fraction": "0.05",
+    "min_net_profit_twd": "60"
+  },
+  "baseline_program_sha256": "00dd83eb8701244ad25b9389c42f5f5f7549d615e184c8b79a3dc77cb60a7c5d",
+  "limitations": [
+    "Not a rerun of the original model-selected September/October trades: the exported execution log lacks their complete minute dataset.",
+    "All five cases share the same corrected fills, fee/tax rounding, T+2 availability at 11:00, daily-loss latch and cost/stress gates.",
+    "Daily OHLC uses only prior completed bars and modeled open/close fills, not intraday path reconstruction.",
+    "The OOS split was fixed before results; this is one fixed liquid-stock pool with survivorship and unadjusted corporate-action limitations."
+  ],
+  "phase": "all",
+  "expected_cases": 17,
+  "completed_cases": 17,
+  "status": "COMPLETED",
+  "results": [
+    {
+      "period": "development",
+      "variant": "v022",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "development-v022.json.gz",
+        "sha256": "604a295e8d952d885306f113e1c41d698eb38b72d1e1603dbe7cd15141dbed54"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "101755.75",
+        "settlement_credits": "0",
+        "stock_value": "16933.00",
+        "final_equity": "118688.75",
+        "net_pnl": "18688.75",
+        "return_pct": "18.6888",
+        "realized_pnl": "19498.55",
+        "unrealized_pnl": "-809.80",
+        "fees": "4650.00",
+        "taxes": "2588.00",
+        "gross_pnl": "25926.75",
+        "total_costs": "7238.00",
+        "cost_drag_pct": "7.2380",
+        "sell_orders": 58,
+        "max_drawdown_pct": "5.3919",
+        "filled_orders": 215,
+        "fill_count": 215,
+        "winning_sell_fill_pct": "43.10",
+        "trades": {
+          "closed_trades": 54,
+          "winning_trades": 23,
+          "losing_trades": 31,
+          "win_rate_pct": "42.5926",
+          "average_win": "1495.1739",
+          "average_loss": "480.3371",
+          "average_win_loss_ratio": "3.1128",
+          "profit_factor": "2.3095",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "881.4",
+            "-1432.15000000000000000000000001",
+            "2766.4",
+            "-322.5",
+            "-315",
+            "185",
+            "982",
+            "-104.3",
+            "208.5",
+            "63",
+            "490.4",
+            "8581",
+            "259",
+            "1062",
+            "-106.4",
+            "-60.45",
+            "-155",
+            "4047",
+            "104",
+            "353.35",
+            "783",
+            "-834",
+            "-325.2",
+            "869.1",
+            "-153.5",
+            "-382.95",
+            "-379.5",
+            "-424",
+            "-626",
+            "-276.3",
+            "-404",
+            "-308",
+            "707.6",
+            "-259.7500000000000000000000001",
+            "-195",
+            "51.8",
+            "3915.5",
+            "-1526.5",
+            "-627",
+            "3685",
+            "-634",
+            "1440.94999999999999999999999997",
+            "-88.6",
+            "1226",
+            "1324",
+            "-1130",
+            "-431.75",
+            "-413.5",
+            "-410.6",
+            "-1391",
+            "-435",
+            "-723",
+            "403",
+            "-15.5"
+          ]
+        },
+        "exits": {
+          "STOP": {
+            "submitted": 22,
+            "filled": 21,
+            "rejected": 0
+          },
+          "TRAILING": {
+            "submitted": 39,
+            "filled": 37,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [],
+        "average_close_exposure_pct": "55.4855",
+        "daily_sharpe": "1.8536057596699962",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 236,
+        "watch_scans": 1338,
+        "watch_adds": 185,
+        "watch_removes": 182,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "55.4678",
+        "max_exposure_pct": "80.3210",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "OTHER": 1106,
+          "TRIGGER": 7111,
+          "DATA": 61768,
+          "POSITION_OR_RISK_LIMIT": 16430,
+          "COST": 341,
+          "BUYING_POWER": 27,
+          "REWARD_RISK": 256
+        },
+        "state_transitions": 2842,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60272
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 24667
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1496
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 604
+          }
+        ],
+        "buy_orders": 162,
+        "filled_buy_orders": 157,
+        "unfilled_buy_orders": 5
+      },
+      "quality": {
+        "sessions": 223,
+        "covered_sessions": 223,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 75,
+          "2002": 75,
+          "2303": 75,
+          "2308": 75,
+          "2317": 75,
+          "2330": 75,
+          "2454": 75,
+          "2603": 75,
+          "2881": 75,
+          "2882": 75
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-03-31T05:30:00.000Z",
+          "2002": "2026-03-31T05:30:00.000Z",
+          "2303": "2026-03-31T05:30:00.000Z",
+          "2308": "2026-03-31T05:30:00.000Z",
+          "2317": "2026-03-31T05:30:00.000Z",
+          "2330": "2026-03-31T05:30:00.000Z",
+          "2454": "2026-03-31T05:30:00.000Z",
+          "2603": "2026-03-31T05:30:00.000Z",
+          "2881": "2026-03-31T05:30:00.000Z",
+          "2882": "2026-03-31T05:30:00.000Z"
+        },
+        "strategy_slots": 446,
+        "successful_strategies": 446,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 223
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "development",
+      "variant": "entries",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "development-entries.json.gz",
+        "sha256": "93ab8a3a39be3e904860dd0b8f36c9a4849fb5c5f5c089085883defb26f138cd"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "102853.1",
+        "settlement_credits": "0",
+        "stock_value": "0.00",
+        "final_equity": "102853.10",
+        "net_pnl": "2853.10",
+        "return_pct": "2.8531",
+        "realized_pnl": "2853.10",
+        "unrealized_pnl": "0.00",
+        "fees": "888.00",
+        "taxes": "423.00",
+        "gross_pnl": "4164.10",
+        "total_costs": "1311.00",
+        "cost_drag_pct": "1.3110",
+        "sell_orders": 14,
+        "max_drawdown_pct": "1.9938",
+        "filled_orders": 43,
+        "fill_count": 43,
+        "winning_sell_fill_pct": "42.86",
+        "trades": {
+          "closed_trades": 14,
+          "winning_trades": 6,
+          "losing_trades": 8,
+          "win_rate_pct": "42.8571",
+          "average_win": "986.6667",
+          "average_loss": "383.3625",
+          "average_win_loss_ratio": "2.5737",
+          "profit_factor": "1.9303",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "-534.2",
+            "-754.5",
+            "730",
+            "334",
+            "2432",
+            "-647",
+            "306",
+            "-372",
+            "-270",
+            "1514",
+            "-190.2",
+            "-276",
+            "604",
+            "-23"
+          ]
+        },
+        "exits": {
+          "STOP": {
+            "submitted": 8,
+            "filled": 8,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [],
+        "average_close_exposure_pct": "10.5462",
+        "daily_sharpe": "0.871500191699314",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 1338,
+        "watch_adds": 274,
+        "watch_removes": 271,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "10.5468",
+        "max_exposure_pct": "28.6723",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "NO_CANDIDATE": 1360,
+          "TRIGGER": 10558,
+          "DATA": 61691,
+          "COST": 140,
+          "POSITION_OR_RISK_LIMIT": 3657,
+          "REWARD_RISK": 167,
+          "OTHER": 111,
+          "BUYING_POWER": 1
+        },
+        "state_transitions": 2676,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60437
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 15592
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1254
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 224
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 178
+          }
+        ],
+        "buy_orders": 29,
+        "filled_buy_orders": 29,
+        "unfilled_buy_orders": 0
+      },
+      "quality": {
+        "sessions": 223,
+        "covered_sessions": 223,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 75,
+          "2002": 75,
+          "2303": 75,
+          "2308": 75,
+          "2317": 75,
+          "2330": 75,
+          "2454": 75,
+          "2603": 75,
+          "2881": 75,
+          "2882": 75
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-03-31T05:30:00.000Z",
+          "2002": "2026-03-31T05:30:00.000Z",
+          "2303": "2026-03-31T05:30:00.000Z",
+          "2308": "2026-03-31T05:30:00.000Z",
+          "2317": "2026-03-31T05:30:00.000Z",
+          "2330": "2026-03-31T05:30:00.000Z",
+          "2454": "2026-03-31T05:30:00.000Z",
+          "2603": "2026-03-31T05:30:00.000Z",
+          "2881": "2026-03-31T05:30:00.000Z",
+          "2882": "2026-03-31T05:30:00.000Z"
+        },
+        "strategy_slots": 446,
+        "successful_strategies": 446,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 223
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期",
+        "僅 14 筆有賣出成交的委託（14 筆賣出成交明細），小樣本不能證明策略有效；成交比例不是完整交易勝率"
+      ]
+    },
+    {
+      "period": "development",
+      "variant": "exits",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "development-exits.json.gz",
+        "sha256": "e6fe8658ae549a47d52aad7b6bfa7f0fff54ede609dba6d7b138a04d4e14f5e4"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "102847.1",
+        "settlement_credits": "0",
+        "stock_value": "16933.00",
+        "final_equity": "119780.10",
+        "net_pnl": "19780.10",
+        "return_pct": "19.7801",
+        "realized_pnl": "20589.90",
+        "unrealized_pnl": "-809.80",
+        "fees": "4679.00",
+        "taxes": "2603.00",
+        "gross_pnl": "27062.10",
+        "total_costs": "7282.00",
+        "cost_drag_pct": "7.2820",
+        "sell_orders": 58,
+        "max_drawdown_pct": "5.6152",
+        "filled_orders": 217,
+        "fill_count": 217,
+        "winning_sell_fill_pct": "44.83",
+        "trades": {
+          "closed_trades": 54,
+          "winning_trades": 24,
+          "losing_trades": 30,
+          "win_rate_pct": "44.4444",
+          "average_win": "1484.5542",
+          "average_loss": "501.3133",
+          "average_win_loss_ratio": "2.9613",
+          "profit_factor": "2.3691",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "881.4",
+            "-1432.15000000000000000000000001",
+            "2766.4",
+            "-322.5",
+            "-315",
+            "185",
+            "982",
+            "-104.3",
+            "208.5",
+            "63",
+            "490.4",
+            "8581",
+            "259",
+            "1062",
+            "-106.4",
+            "209.05",
+            "-155",
+            "4047",
+            "50",
+            "352.15",
+            "1386",
+            "-834",
+            "-426.2",
+            "875.75",
+            "-137",
+            "-682.1",
+            "-382.95",
+            "-424",
+            "-710",
+            "-320.8",
+            "-404",
+            "-308",
+            "710.3",
+            "-261",
+            "-195",
+            "51.8",
+            "3915.5",
+            "-1167.5",
+            "-636.4",
+            "3685",
+            "-634",
+            "1359.05",
+            "-120",
+            "1782",
+            "1324",
+            "-1135.2",
+            "-433",
+            "-413.5",
+            "-414.9",
+            "-1391",
+            "-435",
+            "-723",
+            "403",
+            "-15.5"
+          ]
+        },
+        "exits": {
+          "STOP": {
+            "submitted": 22,
+            "filled": 21,
+            "rejected": 0
+          },
+          "TRAILING": {
+            "submitted": 37,
+            "filled": 35,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [],
+        "average_close_exposure_pct": "56.0956",
+        "daily_sharpe": "1.9251908787122447",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 202,
+        "watch_scans": 1338,
+        "watch_adds": 184,
+        "watch_removes": 181,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "56.0772",
+        "max_exposure_pct": "80.3210",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "OTHER": 1105,
+          "TRIGGER": 7074,
+          "DATA": 61737,
+          "POSITION_OR_RISK_LIMIT": 16536,
+          "COST": 474,
+          "BUYING_POWER": 34,
+          "REWARD_RISK": 115
+        },
+        "state_transitions": 2850,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60239
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 24750
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1498
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 588
+          }
+        ],
+        "buy_orders": 165,
+        "filled_buy_orders": 159,
+        "unfilled_buy_orders": 6
+      },
+      "quality": {
+        "sessions": 223,
+        "covered_sessions": 223,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 75,
+          "2002": 75,
+          "2303": 75,
+          "2308": 75,
+          "2317": 75,
+          "2330": 75,
+          "2454": 75,
+          "2603": 75,
+          "2881": 75,
+          "2882": 75
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-03-31T05:30:00.000Z",
+          "2002": "2026-03-31T05:30:00.000Z",
+          "2303": "2026-03-31T05:30:00.000Z",
+          "2308": "2026-03-31T05:30:00.000Z",
+          "2317": "2026-03-31T05:30:00.000Z",
+          "2330": "2026-03-31T05:30:00.000Z",
+          "2454": "2026-03-31T05:30:00.000Z",
+          "2603": "2026-03-31T05:30:00.000Z",
+          "2881": "2026-03-31T05:30:00.000Z",
+          "2882": "2026-03-31T05:30:00.000Z"
+        },
+        "strategy_slots": 446,
+        "successful_strategies": 446,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 223
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "development",
+      "variant": "allocation",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "development-allocation.json.gz",
+        "sha256": "c55ad1bd5c2c21eca09b7feb9ed2ce1cc1581c818e8e785d53ef934408e968c0"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "71188.2",
+        "settlement_credits": "0",
+        "stock_value": "54185.00",
+        "final_equity": "125373.20",
+        "net_pnl": "25373.20",
+        "return_pct": "25.3732",
+        "realized_pnl": "27484.20",
+        "unrealized_pnl": "-2111.00",
+        "fees": "2912.00",
+        "taxes": "2625.00",
+        "gross_pnl": "30910.20",
+        "total_costs": "5537.00",
+        "cost_drag_pct": "5.5370",
+        "sell_orders": 41,
+        "max_drawdown_pct": "7.2664",
+        "filled_orders": 107,
+        "fill_count": 107,
+        "winning_sell_fill_pct": "70.73",
+        "trades": {
+          "closed_trades": 39,
+          "winning_trades": 27,
+          "losing_trades": 12,
+          "win_rate_pct": "69.2308",
+          "average_win": "1565.5926",
+          "average_loss": "1232.2333",
+          "average_win_loss_ratio": "1.2705",
+          "profit_factor": "2.8587",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "992",
+            "-1305.4",
+            "3050.9",
+            "-774.4",
+            "572",
+            "1366",
+            "592.5",
+            "-481.2",
+            "255",
+            "5596.5",
+            "1144",
+            "2960",
+            "186.2",
+            "-176.8",
+            "80",
+            "2734",
+            "1400",
+            "-614",
+            "533",
+            "5",
+            "-988.4",
+            "-1473",
+            "-459.6",
+            "1753.5",
+            "48.4",
+            "306.6",
+            "4557.4",
+            "-2082.5",
+            "4022",
+            "1301.9",
+            "221.6",
+            "2341",
+            "3525",
+            "876",
+            "-1664.5",
+            "-2926",
+            "-1841",
+            "1817",
+            "33.5"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 33,
+            "filled": 32,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2026-03-23"
+        ],
+        "average_close_exposure_pct": "58.5689",
+        "daily_sharpe": "1.94549726423438",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 64,
+        "watch_scans": 1338,
+        "watch_adds": 215,
+        "watch_removes": 212,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "58.5059",
+        "max_exposure_pct": "72.3814",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "OTHER": 995,
+          "TRIGGER": 8332,
+          "DATA": 61272,
+          "COST": 378,
+          "POSITION_OR_RISK_LIMIT": 12879,
+          "BUYING_POWER": 368,
+          "REWARD_RISK": 73,
+          "DAILY_LOSS": 2
+        },
+        "state_transitions": 2935,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 59843
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 22606
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1429
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 421
+          }
+        ],
+        "buy_orders": 83,
+        "filled_buy_orders": 66,
+        "unfilled_buy_orders": 17
+      },
+      "quality": {
+        "sessions": 223,
+        "covered_sessions": 223,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 75,
+          "2002": 75,
+          "2303": 75,
+          "2308": 75,
+          "2317": 75,
+          "2330": 75,
+          "2454": 75,
+          "2603": 75,
+          "2881": 75,
+          "2882": 75
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-03-31T05:30:00.000Z",
+          "2002": "2026-03-31T05:30:00.000Z",
+          "2303": "2026-03-31T05:30:00.000Z",
+          "2308": "2026-03-31T05:30:00.000Z",
+          "2317": "2026-03-31T05:30:00.000Z",
+          "2330": "2026-03-31T05:30:00.000Z",
+          "2454": "2026-03-31T05:30:00.000Z",
+          "2603": "2026-03-31T05:30:00.000Z",
+          "2881": "2026-03-31T05:30:00.000Z",
+          "2882": "2026-03-31T05:30:00.000Z"
+        },
+        "strategy_slots": 446,
+        "successful_strategies": 446,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 223
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "development",
+      "variant": "combined",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "development-combined.json.gz",
+        "sha256": "f93b931df8f6859a40ce10c67c27d6a48a73cc93d01c8ccddb0456346c35474a"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "104533.15",
+        "settlement_credits": "0",
+        "stock_value": "0.00",
+        "final_equity": "104533.15",
+        "net_pnl": "4533.15",
+        "return_pct": "4.5332",
+        "realized_pnl": "4533.15",
+        "unrealized_pnl": "0.00",
+        "fees": "1328.00",
+        "taxes": "1293.00",
+        "gross_pnl": "7154.15",
+        "total_costs": "2621.00",
+        "cost_drag_pct": "2.6210",
+        "sell_orders": 20,
+        "max_drawdown_pct": "4.8493",
+        "filled_orders": 49,
+        "fill_count": 49,
+        "winning_sell_fill_pct": "45.00",
+        "trades": {
+          "closed_trades": 20,
+          "winning_trades": 9,
+          "losing_trades": 11,
+          "win_rate_pct": "45.0000",
+          "average_win": "1517.3944",
+          "average_loss": "829.4000",
+          "average_win_loss_ratio": "1.8295",
+          "profit_factor": "1.4969",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "362.15",
+            "-1757.6",
+            "2024.5",
+            "1778.5",
+            "1304",
+            "2239",
+            "-707.2",
+            "-26",
+            "656",
+            "-1516",
+            "-82.1",
+            "-1463",
+            "-1",
+            "-889",
+            "2031.4",
+            "-598.4",
+            "-1280",
+            "2522",
+            "739",
+            "-803.1"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 3,
+            "filled": 3,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2025-06-30",
+          "2025-10-13"
+        ],
+        "average_close_exposure_pct": "23.4856",
+        "daily_sharpe": "0.6976909930299775",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 1338,
+        "watch_adds": 272,
+        "watch_removes": 269,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "23.4864",
+        "max_exposure_pct": "69.6691",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "NO_CANDIDATE": 1360,
+          "TRIGGER": 10410,
+          "DATA": 61629,
+          "COST": 57,
+          "BUYING_POWER": 23,
+          "POSITION_OR_RISK_LIMIT": 3892,
+          "REWARD_RISK": 218,
+          "OTHER": 185
+        },
+        "state_transitions": 2713,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60371
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 15675
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1258
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 292
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 178
+          }
+        ],
+        "buy_orders": 30,
+        "filled_buy_orders": 29,
+        "unfilled_buy_orders": 1
+      },
+      "quality": {
+        "sessions": 223,
+        "covered_sessions": 223,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 75,
+          "2002": 75,
+          "2303": 75,
+          "2308": 75,
+          "2317": 75,
+          "2330": 75,
+          "2454": 75,
+          "2603": 75,
+          "2881": 75,
+          "2882": 75
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-03-31T05:30:00.000Z",
+          "2002": "2026-03-31T05:30:00.000Z",
+          "2303": "2026-03-31T05:30:00.000Z",
+          "2308": "2026-03-31T05:30:00.000Z",
+          "2317": "2026-03-31T05:30:00.000Z",
+          "2330": "2026-03-31T05:30:00.000Z",
+          "2454": "2026-03-31T05:30:00.000Z",
+          "2603": "2026-03-31T05:30:00.000Z",
+          "2881": "2026-03-31T05:30:00.000Z",
+          "2882": "2026-03-31T05:30:00.000Z"
+        },
+        "strategy_slots": 446,
+        "successful_strategies": 446,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 223
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "v022",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "out_of_sample-v022.json.gz",
+        "sha256": "6c0c5bd4ccd98f0aec7d8234629ee8486fb956ad48614c057fcc0ffbc7baa4f6"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "27075.75",
+        "settlement_credits": "14743",
+        "stock_value": "72355.25",
+        "final_equity": "114174.00",
+        "net_pnl": "14174.00",
+        "return_pct": "14.1740",
+        "realized_pnl": "13351.35",
+        "unrealized_pnl": "822.65",
+        "fees": "2930.00",
+        "taxes": "1421.00",
+        "gross_pnl": "18525.00",
+        "total_costs": "4351.00",
+        "cost_drag_pct": "4.3510",
+        "sell_orders": 36,
+        "max_drawdown_pct": "5.8567",
+        "filled_orders": 138,
+        "fill_count": 138,
+        "winning_sell_fill_pct": "38.89",
+        "trades": {
+          "closed_trades": 35,
+          "winning_trades": 14,
+          "losing_trades": 21,
+          "win_rate_pct": "40.0000",
+          "average_win": "1962.9286",
+          "average_loss": "672.8405",
+          "average_win_loss_ratio": "2.9174",
+          "profit_factor": "1.9449",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "3039",
+            "2527.4",
+            "-1124.05",
+            "-1464",
+            "302.3",
+            "397.4",
+            "-422",
+            "-553",
+            "-813.7",
+            "-269",
+            "2884.9",
+            "40",
+            "-2385.5",
+            "236",
+            "10897.1",
+            "-533",
+            "-95",
+            "-393",
+            "-522.4",
+            "-357",
+            "-1732",
+            "332.4",
+            "-560",
+            "-421.7",
+            "620",
+            "-262.1",
+            "968",
+            "-257",
+            "4259",
+            "639.5",
+            "338",
+            "-623.2",
+            "-534",
+            "-239",
+            "-569"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 19,
+            "filled": 19,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 18,
+            "filled": 17,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2026-06-08"
+        ],
+        "average_close_exposure_pct": "58.4010",
+        "daily_sharpe": "1.9586111979364413",
+        "skipped_idle_checks": 6432,
+        "codex_calls": 0,
+        "decision_successes": 402,
+        "decision_failures": 0,
+        "risk_refusals": 104,
+        "watch_scans": 804,
+        "watch_adds": 105,
+        "watch_removes": 96,
+        "monitor_checks": 6968,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 402,
+        "average_exposure_pct": "58.2536",
+        "max_exposure_pct": "80.4938",
+        "exposure_samples": 402
+      },
+      "diagnostics": {
+        "strategy_rounds": 268,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 268,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 7236,
+        "reason_categories": {
+          "TRIGGER": 3515,
+          "DATA": 37509,
+          "OTHER": 925,
+          "POSITION_OR_RISK_LIMIT": 9646,
+          "COST": 272,
+          "REWARD_RISK": 56,
+          "BUYING_POWER": 20
+        },
+        "state_transitions": 1703,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 36606
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 14114
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 903
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 320
+          }
+        ],
+        "buy_orders": 107,
+        "filled_buy_orders": 102,
+        "unfilled_buy_orders": 5
+      },
+      "quality": {
+        "sessions": 134,
+        "covered_sessions": 134,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 150,
+          "2002": 150,
+          "2303": 150,
+          "2308": 150,
+          "2317": 150,
+          "2330": 150,
+          "2454": 150,
+          "2603": 150,
+          "2881": 150,
+          "2882": 150
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-10-15T05:30:00.000Z",
+          "2002": "2026-10-15T05:30:00.000Z",
+          "2303": "2026-10-15T05:30:00.000Z",
+          "2308": "2026-10-15T05:30:00.000Z",
+          "2317": "2026-10-15T05:30:00.000Z",
+          "2330": "2026-10-15T05:30:00.000Z",
+          "2454": "2026-10-15T05:30:00.000Z",
+          "2603": "2026-10-15T05:30:00.000Z",
+          "2881": "2026-10-15T05:30:00.000Z",
+          "2882": "2026-10-15T05:30:00.000Z"
+        },
+        "strategy_slots": 268,
+        "successful_strategies": 268,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 134
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "entries",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "out_of_sample-entries.json.gz",
+        "sha256": "7175fcc100294663d5683bfdc171439fd3349573444d4ef6e5925bcfb7e9e785"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "79071.1",
+        "settlement_credits": "3539",
+        "stock_value": "15248.00",
+        "final_equity": "97858.10",
+        "net_pnl": "-2141.90",
+        "return_pct": "-2.1419",
+        "realized_pnl": "-3035.90",
+        "unrealized_pnl": "894.00",
+        "fees": "441.00",
+        "taxes": "167.00",
+        "gross_pnl": "-1533.90",
+        "total_costs": "608.00",
+        "cost_drag_pct": "0.6080",
+        "sell_orders": 7,
+        "max_drawdown_pct": "5.1645",
+        "filled_orders": 22,
+        "fill_count": 22,
+        "winning_sell_fill_pct": "14.29",
+        "trades": {
+          "closed_trades": 7,
+          "winning_trades": 1,
+          "losing_trades": 6,
+          "win_rate_pct": "14.2857",
+          "average_win": "570.3000",
+          "average_loss": "601.0333",
+          "average_win_loss_ratio": "0.9489",
+          "profit_factor": "0.1581",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "-253.4",
+            "570.3",
+            "-411",
+            "-1498.5",
+            "-519.5",
+            "-582.8",
+            "-341"
+          ]
+        },
+        "exits": {
+          "STOP": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 1,
+            "filled": 1,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [],
+        "average_close_exposure_pct": "8.5650",
+        "daily_sharpe": "-1.0334051661780637",
+        "skipped_idle_checks": 6432,
+        "codex_calls": 0,
+        "decision_successes": 402,
+        "decision_failures": 0,
+        "risk_refusals": 1,
+        "watch_scans": 804,
+        "watch_adds": 158,
+        "watch_removes": 150,
+        "monitor_checks": 6968,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 402,
+        "average_exposure_pct": "8.5270",
+        "max_exposure_pct": "29.8895",
+        "exposure_samples": 402
+      },
+      "diagnostics": {
+        "strategy_rounds": 268,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 268,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 7236,
+        "reason_categories": {
+          "TRIGGER": 5935,
+          "NO_CANDIDATE": 748,
+          "DATA": 37543,
+          "REWARD_RISK": 88,
+          "COST": 78,
+          "POSITION_OR_RISK_LIMIT": 2703,
+          "OTHER": 111,
+          "BUYING_POWER": 2
+        },
+        "state_transitions": 1634,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 36771
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 9371
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 772
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 162
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 132
+          }
+        ],
+        "buy_orders": 15,
+        "filled_buy_orders": 15,
+        "unfilled_buy_orders": 0
+      },
+      "quality": {
+        "sessions": 134,
+        "covered_sessions": 134,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 150,
+          "2002": 150,
+          "2303": 150,
+          "2308": 150,
+          "2317": 150,
+          "2330": 150,
+          "2454": 150,
+          "2603": 150,
+          "2881": 150,
+          "2882": 150
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-10-15T05:30:00.000Z",
+          "2002": "2026-10-15T05:30:00.000Z",
+          "2303": "2026-10-15T05:30:00.000Z",
+          "2308": "2026-10-15T05:30:00.000Z",
+          "2317": "2026-10-15T05:30:00.000Z",
+          "2330": "2026-10-15T05:30:00.000Z",
+          "2454": "2026-10-15T05:30:00.000Z",
+          "2603": "2026-10-15T05:30:00.000Z",
+          "2881": "2026-10-15T05:30:00.000Z",
+          "2882": "2026-10-15T05:30:00.000Z"
+        },
+        "strategy_slots": 268,
+        "successful_strategies": 268,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 134
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期",
+        "僅 7 筆有賣出成交的委託（7 筆賣出成交明細），小樣本不能證明策略有效；成交比例不是完整交易勝率"
+      ]
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "exits",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "out_of_sample-exits.json.gz",
+        "sha256": "52c2700cd2cbfeb9ed14c0dc4b52f4a1ca6a2c055c05b492d0949bbdbe5c88f2"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "27075.75",
+        "settlement_credits": "14743",
+        "stock_value": "72355.25",
+        "final_equity": "114174.00",
+        "net_pnl": "14174.00",
+        "return_pct": "14.1740",
+        "realized_pnl": "13351.35",
+        "unrealized_pnl": "822.65",
+        "fees": "2930.00",
+        "taxes": "1421.00",
+        "gross_pnl": "18525.00",
+        "total_costs": "4351.00",
+        "cost_drag_pct": "4.3510",
+        "sell_orders": 36,
+        "max_drawdown_pct": "5.8567",
+        "filled_orders": 138,
+        "fill_count": 138,
+        "winning_sell_fill_pct": "38.89",
+        "trades": {
+          "closed_trades": 35,
+          "winning_trades": 14,
+          "losing_trades": 21,
+          "win_rate_pct": "40.0000",
+          "average_win": "1962.9286",
+          "average_loss": "672.8405",
+          "average_win_loss_ratio": "2.9174",
+          "profit_factor": "1.9449",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "3039",
+            "2527.4",
+            "-1124.05",
+            "-1464",
+            "302.3",
+            "397.4",
+            "-422",
+            "-553",
+            "-813.7",
+            "-269",
+            "2884.9",
+            "40",
+            "-2385.5",
+            "236",
+            "10897.1",
+            "-533",
+            "-95",
+            "-393",
+            "-522.4",
+            "-357",
+            "-1732",
+            "332.4",
+            "-560",
+            "-421.7",
+            "620",
+            "-262.1",
+            "968",
+            "-257",
+            "4259",
+            "639.5",
+            "338",
+            "-623.2",
+            "-534",
+            "-239",
+            "-569"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 19,
+            "filled": 19,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 18,
+            "filled": 17,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2026-06-08"
+        ],
+        "average_close_exposure_pct": "58.4010",
+        "daily_sharpe": "1.9586111979364413",
+        "skipped_idle_checks": 6432,
+        "codex_calls": 0,
+        "decision_successes": 402,
+        "decision_failures": 0,
+        "risk_refusals": 104,
+        "watch_scans": 804,
+        "watch_adds": 105,
+        "watch_removes": 96,
+        "monitor_checks": 6968,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 402,
+        "average_exposure_pct": "58.2536",
+        "max_exposure_pct": "80.4938",
+        "exposure_samples": 402
+      },
+      "diagnostics": {
+        "strategy_rounds": 268,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 268,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 7236,
+        "reason_categories": {
+          "TRIGGER": 3515,
+          "DATA": 37509,
+          "OTHER": 925,
+          "POSITION_OR_RISK_LIMIT": 9646,
+          "COST": 272,
+          "REWARD_RISK": 56,
+          "BUYING_POWER": 20
+        },
+        "state_transitions": 1703,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 36606
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 14114
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 903
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 320
+          }
+        ],
+        "buy_orders": 107,
+        "filled_buy_orders": 102,
+        "unfilled_buy_orders": 5
+      },
+      "quality": {
+        "sessions": 134,
+        "covered_sessions": 134,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 150,
+          "2002": 150,
+          "2303": 150,
+          "2308": 150,
+          "2317": 150,
+          "2330": 150,
+          "2454": 150,
+          "2603": 150,
+          "2881": 150,
+          "2882": 150
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-10-15T05:30:00.000Z",
+          "2002": "2026-10-15T05:30:00.000Z",
+          "2303": "2026-10-15T05:30:00.000Z",
+          "2308": "2026-10-15T05:30:00.000Z",
+          "2317": "2026-10-15T05:30:00.000Z",
+          "2330": "2026-10-15T05:30:00.000Z",
+          "2454": "2026-10-15T05:30:00.000Z",
+          "2603": "2026-10-15T05:30:00.000Z",
+          "2881": "2026-10-15T05:30:00.000Z",
+          "2882": "2026-10-15T05:30:00.000Z"
+        },
+        "strategy_slots": 268,
+        "successful_strategies": 268,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 134
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "allocation",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "out_of_sample-allocation.json.gz",
+        "sha256": "45803bebe322565769602527e12643d30b18dc4d8ea4e86ef441d4d501a6b0e9"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "32561",
+        "settlement_credits": "26447",
+        "stock_value": "51119.50",
+        "final_equity": "110127.50",
+        "net_pnl": "10127.50",
+        "return_pct": "10.1275",
+        "realized_pnl": "9424.90",
+        "unrealized_pnl": "702.60",
+        "fees": "1842.00",
+        "taxes": "1524.00",
+        "gross_pnl": "13493.50",
+        "total_costs": "3366.00",
+        "cost_drag_pct": "3.3660",
+        "sell_orders": 28,
+        "max_drawdown_pct": "11.0329",
+        "filled_orders": 73,
+        "fill_count": 73,
+        "winning_sell_fill_pct": "50.00",
+        "trades": {
+          "closed_trades": 28,
+          "winning_trades": 14,
+          "losing_trades": 14,
+          "win_rate_pct": "50.0000",
+          "average_win": "1706.3929",
+          "average_loss": "1033.1857",
+          "average_win_loss_ratio": "1.6516",
+          "profit_factor": "1.6516",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "8245",
+            "-1209.9",
+            "262.2",
+            "158.5",
+            "-1188.5",
+            "328.4",
+            "-326",
+            "4144.9",
+            "293",
+            "-3088",
+            "1322",
+            "2241.8",
+            "-28",
+            "-393",
+            "-1970",
+            "-1152",
+            "-1735",
+            "556.4",
+            "-1578",
+            "-670.2",
+            "913.5",
+            "-657",
+            "1976",
+            "-116",
+            "2071",
+            "1074.8",
+            "302",
+            "-353"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 18,
+            "filled": 18,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 10,
+            "filled": 10,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2026-06-08",
+          "2026-06-17"
+        ],
+        "average_close_exposure_pct": "59.5847",
+        "daily_sharpe": "1.4220957985266642",
+        "skipped_idle_checks": 6432,
+        "codex_calls": 0,
+        "decision_successes": 402,
+        "decision_failures": 0,
+        "risk_refusals": 29,
+        "watch_scans": 804,
+        "watch_adds": 122,
+        "watch_removes": 113,
+        "monitor_checks": 6968,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 402,
+        "average_exposure_pct": "59.4834",
+        "max_exposure_pct": "72.0827",
+        "exposure_samples": 402
+      },
+      "diagnostics": {
+        "strategy_rounds": 268,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 268,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 7236,
+        "reason_categories": {
+          "TRIGGER": 4218,
+          "DATA": 37237,
+          "COST": 211,
+          "OTHER": 851,
+          "POSITION_OR_RISK_LIMIT": 7473,
+          "REWARD_RISK": 94,
+          "BUYING_POWER": 163,
+          "DAILY_LOSS": 2
+        },
+        "state_transitions": 1768,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 36375
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 12731
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 862
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 281
+          }
+        ],
+        "buy_orders": 57,
+        "filled_buy_orders": 45,
+        "unfilled_buy_orders": 12
+      },
+      "quality": {
+        "sessions": 134,
+        "covered_sessions": 134,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 150,
+          "2002": 150,
+          "2303": 150,
+          "2308": 150,
+          "2317": 150,
+          "2330": 150,
+          "2454": 150,
+          "2603": 150,
+          "2881": 150,
+          "2882": 150
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-10-15T05:30:00.000Z",
+          "2002": "2026-10-15T05:30:00.000Z",
+          "2303": "2026-10-15T05:30:00.000Z",
+          "2308": "2026-10-15T05:30:00.000Z",
+          "2317": "2026-10-15T05:30:00.000Z",
+          "2330": "2026-10-15T05:30:00.000Z",
+          "2454": "2026-10-15T05:30:00.000Z",
+          "2603": "2026-10-15T05:30:00.000Z",
+          "2881": "2026-10-15T05:30:00.000Z",
+          "2882": "2026-10-15T05:30:00.000Z"
+        },
+        "strategy_slots": 268,
+        "successful_strategies": 268,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 134
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "combined",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "out_of_sample-combined.json.gz",
+        "sha256": "65b6c2c6dcbf76c4327d8774006376750d9d3a61610296308b489d0506eb6478"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "66516.8",
+        "settlement_credits": "14216",
+        "stock_value": "17545.00",
+        "final_equity": "98277.80",
+        "net_pnl": "-1722.20",
+        "return_pct": "-1.7222",
+        "realized_pnl": "-1752.20",
+        "unrealized_pnl": "30.00",
+        "fees": "815.00",
+        "taxes": "759.00",
+        "gross_pnl": "-148.20",
+        "total_costs": "1574.00",
+        "cost_drag_pct": "1.5740",
+        "sell_orders": 12,
+        "max_drawdown_pct": "9.3165",
+        "filled_orders": 31,
+        "fill_count": 31,
+        "winning_sell_fill_pct": "25.00",
+        "trades": {
+          "closed_trades": 12,
+          "winning_trades": 3,
+          "losing_trades": 9,
+          "win_rate_pct": "25.0000",
+          "average_win": "1615.4333",
+          "average_loss": "733.1667",
+          "average_win_loss_ratio": "2.2034",
+          "profit_factor": "0.7345",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "2176",
+            "-30",
+            "-745.1",
+            "2169.8",
+            "-1187",
+            "-445",
+            "-398",
+            "-1601.4",
+            "500.5",
+            "-216",
+            "-729",
+            "-1247"
+          ]
+        },
+        "exits": {
+          "TAKE_PROFIT": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 5,
+            "filled": 5,
+            "rejected": 0
+          },
+          "TRAILING": {
+            "submitted": 3,
+            "filled": 3,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2026-06-08"
+        ],
+        "average_close_exposure_pct": "14.6278",
+        "daily_sharpe": "-0.31423765125587",
+        "skipped_idle_checks": 6432,
+        "codex_calls": 0,
+        "decision_successes": 402,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 804,
+        "watch_adds": 169,
+        "watch_removes": 161,
+        "monitor_checks": 6968,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 402,
+        "average_exposure_pct": "14.5847",
+        "max_exposure_pct": "67.3947",
+        "exposure_samples": 402
+      },
+      "diagnostics": {
+        "strategy_rounds": 268,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 268,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 7236,
+        "reason_categories": {
+          "TRIGGER": 6305,
+          "NO_CANDIDATE": 748,
+          "DATA": 37515,
+          "REWARD_RISK": 116,
+          "POSITION_OR_RISK_LIMIT": 1225,
+          "OTHER": 148,
+          "COST": 36,
+          "BUYING_POWER": 10
+        },
+        "state_transitions": 1595,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 36771
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 8274
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 744
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 162
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 152
+          }
+        ],
+        "buy_orders": 19,
+        "filled_buy_orders": 19,
+        "unfilled_buy_orders": 0
+      },
+      "quality": {
+        "sessions": 134,
+        "covered_sessions": 134,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 150,
+          "2002": 150,
+          "2303": 150,
+          "2308": 150,
+          "2317": 150,
+          "2330": 150,
+          "2454": 150,
+          "2603": 150,
+          "2881": 150,
+          "2882": 150
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-10-15T05:30:00.000Z",
+          "2002": "2026-10-15T05:30:00.000Z",
+          "2303": "2026-10-15T05:30:00.000Z",
+          "2308": "2026-10-15T05:30:00.000Z",
+          "2317": "2026-10-15T05:30:00.000Z",
+          "2330": "2026-10-15T05:30:00.000Z",
+          "2454": "2026-10-15T05:30:00.000Z",
+          "2603": "2026-10-15T05:30:00.000Z",
+          "2881": "2026-10-15T05:30:00.000Z",
+          "2882": "2026-10-15T05:30:00.000Z"
+        },
+        "strategy_slots": 268,
+        "successful_strategies": 268,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 134
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期",
+        "僅 12 筆有賣出成交的委託（12 筆賣出成交明細），小樣本不能證明策略有效；成交比例不是完整交易勝率"
+      ]
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "order15",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "sensitivity_development_only-order15.json.gz",
+        "sha256": "d002a780b70581f93f0d13cfe8606cb1dbbff9bfd0461bff3f15e649d771da9e"
+      },
+      "overrides": {
+        "max_order_fraction": "0.15"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "103549.15",
+        "settlement_credits": "0",
+        "stock_value": "0.00",
+        "final_equity": "103549.15",
+        "net_pnl": "3549.15",
+        "return_pct": "3.5492",
+        "realized_pnl": "3549.15",
+        "unrealized_pnl": "0.00",
+        "fees": "1200.00",
+        "taxes": "1192.00",
+        "gross_pnl": "5941.15",
+        "total_costs": "2392.00",
+        "cost_drag_pct": "2.3920",
+        "sell_orders": 20,
+        "max_drawdown_pct": "4.2544",
+        "filled_orders": 51,
+        "fill_count": 51,
+        "winning_sell_fill_pct": "45.00",
+        "trades": {
+          "closed_trades": 20,
+          "winning_trades": 9,
+          "losing_trades": 11,
+          "win_rate_pct": "45.0000",
+          "average_win": "1275.7389",
+          "average_loss": "721.1364",
+          "average_win_loss_ratio": "1.7691",
+          "profit_factor": "1.4474",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "343.35",
+            "-1807.5",
+            "2003",
+            "1321.5",
+            "981",
+            "2264",
+            "-569.2",
+            "-39",
+            "468",
+            "-1134",
+            "-60.5",
+            "-1119",
+            "-56",
+            "-831.4",
+            "2063.8",
+            "-447.6",
+            "-1273",
+            "1892",
+            "145",
+            "-595.3"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 3,
+            "filled": 3,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2025-06-30"
+        ],
+        "average_close_exposure_pct": "21.0272",
+        "daily_sharpe": "0.6005492094679753",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 1338,
+        "watch_adds": 272,
+        "watch_removes": 269,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "21.0275",
+        "max_exposure_pct": "69.6499",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "NO_CANDIDATE": 1360,
+          "TRIGGER": 10410,
+          "DATA": 61662,
+          "COST": 43,
+          "BUYING_POWER": 27,
+          "POSITION_OR_RISK_LIMIT": 3893,
+          "REWARD_RISK": 220,
+          "OTHER": 185
+        },
+        "state_transitions": 2701,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60404
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 15660
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1258
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 300
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 178
+          }
+        ],
+        "buy_orders": 32,
+        "filled_buy_orders": 31,
+        "unfilled_buy_orders": 1
+      }
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "order18",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "sensitivity_development_only-order18.json.gz",
+        "sha256": "84367f6bab3de2b0a2c79bb6e14551c7d64e2f315a3c466a946abc6f00a847e9"
+      },
+      "overrides": {
+        "max_order_fraction": "0.18"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "103904.3",
+        "settlement_credits": "0",
+        "stock_value": "0.00",
+        "final_equity": "103904.30",
+        "net_pnl": "3904.30",
+        "return_pct": "3.9043",
+        "realized_pnl": "3904.30",
+        "unrealized_pnl": "0.00",
+        "fees": "1306.00",
+        "taxes": "1271.00",
+        "gross_pnl": "6481.30",
+        "total_costs": "2577.00",
+        "cost_drag_pct": "2.5770",
+        "sell_orders": 20,
+        "max_drawdown_pct": "4.3761",
+        "filled_orders": 51,
+        "fill_count": 51,
+        "winning_sell_fill_pct": "45.00",
+        "trades": {
+          "closed_trades": 20,
+          "winning_trades": 9,
+          "losing_trades": 11,
+          "win_rate_pct": "45.0000",
+          "average_win": "1415.0889",
+          "average_loss": "802.8636",
+          "average_win_loss_ratio": "1.7626",
+          "profit_factor": "1.4421",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "355.4",
+            "-1770.5",
+            "2015",
+            "1596.5",
+            "1173",
+            "2245",
+            "-686.3",
+            "-281",
+            "563",
+            "-1352",
+            "-75",
+            "-1290",
+            "-19",
+            "-829.6",
+            "2038.9",
+            "-535.4",
+            "-1277",
+            "2207",
+            "542",
+            "-715.7"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 3,
+            "filled": 3,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2025-06-30"
+        ],
+        "average_close_exposure_pct": "22.3888",
+        "daily_sharpe": "0.6322574498418033",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 1338,
+        "watch_adds": 272,
+        "watch_removes": 269,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "22.3892",
+        "max_exposure_pct": "69.6211",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "NO_CANDIDATE": 1360,
+          "TRIGGER": 10410,
+          "DATA": 61662,
+          "COST": 54,
+          "BUYING_POWER": 23,
+          "POSITION_OR_RISK_LIMIT": 3893,
+          "REWARD_RISK": 213,
+          "OTHER": 185
+        },
+        "state_transitions": 2702,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60404
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 15671
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1258
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 289
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 178
+          }
+        ],
+        "buy_orders": 32,
+        "filled_buy_orders": 31,
+        "unfilled_buy_orders": 1
+      }
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "cash25",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "sensitivity_development_only-cash25.json.gz",
+        "sha256": "436626ceb84273969d15d4013abc9b1a31b4c0a2e01abe56d78d5564df06873a"
+      },
+      "overrides": {
+        "min_cash_fraction": "0.25",
+        "max_exposure_fraction": "0.75"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "104533.15",
+        "settlement_credits": "0",
+        "stock_value": "0.00",
+        "final_equity": "104533.15",
+        "net_pnl": "4533.15",
+        "return_pct": "4.5332",
+        "realized_pnl": "4533.15",
+        "unrealized_pnl": "0.00",
+        "fees": "1328.00",
+        "taxes": "1293.00",
+        "gross_pnl": "7154.15",
+        "total_costs": "2621.00",
+        "cost_drag_pct": "2.6210",
+        "sell_orders": 20,
+        "max_drawdown_pct": "4.8493",
+        "filled_orders": 49,
+        "fill_count": 49,
+        "winning_sell_fill_pct": "45.00",
+        "trades": {
+          "closed_trades": 20,
+          "winning_trades": 9,
+          "losing_trades": 11,
+          "win_rate_pct": "45.0000",
+          "average_win": "1517.3944",
+          "average_loss": "829.4000",
+          "average_win_loss_ratio": "1.8295",
+          "profit_factor": "1.4969",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "362.15",
+            "-1757.6",
+            "2024.5",
+            "1778.5",
+            "1304",
+            "2239",
+            "-707.2",
+            "-26",
+            "656",
+            "-1516",
+            "-82.1",
+            "-1463",
+            "-1",
+            "-889",
+            "2031.4",
+            "-598.4",
+            "-1280",
+            "2522",
+            "739",
+            "-803.1"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 3,
+            "filled": 3,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2025-06-30",
+          "2025-10-13"
+        ],
+        "average_close_exposure_pct": "23.4856",
+        "daily_sharpe": "0.6976909930299775",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 1338,
+        "watch_adds": 272,
+        "watch_removes": 269,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "23.4864",
+        "max_exposure_pct": "69.6691",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "NO_CANDIDATE": 1360,
+          "TRIGGER": 10410,
+          "DATA": 61629,
+          "COST": 59,
+          "BUYING_POWER": 23,
+          "POSITION_OR_RISK_LIMIT": 3892,
+          "REWARD_RISK": 217,
+          "OTHER": 185
+        },
+        "state_transitions": 2715,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60371
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 15676
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1258
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 292
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 178
+          }
+        ],
+        "buy_orders": 30,
+        "filled_buy_orders": 29,
+        "unfilled_buy_orders": 1
+      }
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "target60",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "sensitivity_development_only-target60.json.gz",
+        "sha256": "3b8fe8afe3d82db14e9170efc307ea3a26b07d936ab8e19eb38cba8033a3e527"
+      },
+      "overrides": {
+        "target_exposure_fraction": "0.60"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "104552.45",
+        "settlement_credits": "0",
+        "stock_value": "0.00",
+        "final_equity": "104552.45",
+        "net_pnl": "4552.45",
+        "return_pct": "4.5525",
+        "realized_pnl": "4552.45",
+        "unrealized_pnl": "0.00",
+        "fees": "1305.00",
+        "taxes": "1293.00",
+        "gross_pnl": "7150.45",
+        "total_costs": "2598.00",
+        "cost_drag_pct": "2.5980",
+        "sell_orders": 20,
+        "max_drawdown_pct": "4.8488",
+        "filled_orders": 48,
+        "fill_count": 48,
+        "winning_sell_fill_pct": "45.00",
+        "trades": {
+          "closed_trades": 20,
+          "winning_trades": 9,
+          "losing_trades": 11,
+          "win_rate_pct": "45.0000",
+          "average_win": "1519.5389",
+          "average_loss": "829.4000",
+          "average_win_loss_ratio": "1.8321",
+          "profit_factor": "1.4990",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "362.15",
+            "-1757.6",
+            "2024.5",
+            "1778.5",
+            "1304",
+            "2252",
+            "-707.2",
+            "-26",
+            "656",
+            "-1516",
+            "-82.1",
+            "-1463",
+            "-1",
+            "-889",
+            "2037.7",
+            "-598.4",
+            "-1280",
+            "2522",
+            "739",
+            "-803.1"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 3,
+            "filled": 3,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2025-06-30",
+          "2025-10-13"
+        ],
+        "average_close_exposure_pct": "23.3214",
+        "daily_sharpe": "0.710147342640646",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 1338,
+        "watch_adds": 272,
+        "watch_removes": 269,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "23.3217",
+        "max_exposure_pct": "61.0596",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "NO_CANDIDATE": 1360,
+          "TRIGGER": 10410,
+          "DATA": 61629,
+          "COST": 55,
+          "BUYING_POWER": 30,
+          "POSITION_OR_RISK_LIMIT": 3892,
+          "REWARD_RISK": 214,
+          "OTHER": 185
+        },
+        "state_transitions": 2712,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60371
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 15674
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1258
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 294
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 178
+          }
+        ],
+        "buy_orders": 29,
+        "filled_buy_orders": 28,
+        "unfilled_buy_orders": 1
+      }
+    },
+    {
+      "period": "sensitivity_development_only",
+      "variant": "risk1pct",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "sensitivity_development_only-risk1pct.json.gz",
+        "sha256": "139907bd5e0e4be666c7285f629a1bd3124ac3bc3e12d59de3b095de6e65e07b"
+      },
+      "overrides": {
+        "max_trade_risk_fraction": "0.01"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "104190.95",
+        "settlement_credits": "0",
+        "stock_value": "0.00",
+        "final_equity": "104190.95",
+        "net_pnl": "4190.95",
+        "return_pct": "4.1910",
+        "realized_pnl": "4190.95",
+        "unrealized_pnl": "0.00",
+        "fees": "1304.00",
+        "taxes": "1275.00",
+        "gross_pnl": "6769.95",
+        "total_costs": "2579.00",
+        "cost_drag_pct": "2.5790",
+        "sell_orders": 20,
+        "max_drawdown_pct": "4.6941",
+        "filled_orders": 49,
+        "fill_count": 49,
+        "winning_sell_fill_pct": "45.00",
+        "trades": {
+          "closed_trades": 20,
+          "winning_trades": 9,
+          "losing_trades": 11,
+          "win_rate_pct": "45.0000",
+          "average_win": "1465.6500",
+          "average_loss": "818.1727",
+          "average_win_loss_ratio": "1.7914",
+          "profit_factor": "1.4657",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "362.15",
+            "-1798.5",
+            "2024.5",
+            "1778.5",
+            "1304",
+            "2239",
+            "-707.2",
+            "-26",
+            "656",
+            "-1516",
+            "-82.1",
+            "-1290",
+            "-1",
+            "-894",
+            "2037.7",
+            "-598.4",
+            "-1288.5",
+            "2050",
+            "739",
+            "-798.2"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 3,
+            "filled": 3,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          },
+          "TAKE_PROFIT": {
+            "submitted": 6,
+            "filled": 6,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 2,
+            "filled": 2,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2025-06-30",
+          "2025-10-13"
+        ],
+        "average_close_exposure_pct": "23.3817",
+        "daily_sharpe": "0.6575348712698847",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 0,
+        "watch_scans": 1338,
+        "watch_adds": 272,
+        "watch_removes": 269,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "23.3826",
+        "max_exposure_pct": "69.6333",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "NO_CANDIDATE": 1360,
+          "TRIGGER": 10410,
+          "DATA": 61629,
+          "COST": 54,
+          "BUYING_POWER": 20,
+          "POSITION_OR_RISK_LIMIT": 3896,
+          "REWARD_RISK": 220,
+          "OTHER": 185
+        },
+        "state_transitions": 2713,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 60371
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 15673
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1258
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 294
+          },
+          {
+            "reason": "價格／反彈門檻未觸發",
+            "samples": 178
+          }
+        ],
+        "buy_orders": 30,
+        "filled_buy_orders": 29,
+        "unfilled_buy_orders": 1
+      }
+    },
+    {
+      "period": "development",
+      "variant": "adaptive_allocation",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "development-adaptive_allocation.json.gz",
+        "sha256": "acc1fa0224aa81fc3db5a3dd04c209541c73032782818acb7967d512f45723f9"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "72218.75",
+        "settlement_credits": "0",
+        "stock_value": "54469.00",
+        "final_equity": "126687.75",
+        "net_pnl": "26687.75",
+        "return_pct": "26.6878",
+        "realized_pnl": "28801.15",
+        "unrealized_pnl": "-2113.40",
+        "fees": "3023.00",
+        "taxes": "2702.00",
+        "gross_pnl": "32412.75",
+        "total_costs": "5725.00",
+        "cost_drag_pct": "5.7250",
+        "sell_orders": 42,
+        "max_drawdown_pct": "7.1362",
+        "filled_orders": 111,
+        "fill_count": 111,
+        "winning_sell_fill_pct": "73.81",
+        "trades": {
+          "closed_trades": 40,
+          "winning_trades": 29,
+          "losing_trades": 11,
+          "win_rate_pct": "72.5000",
+          "average_win": "1500.5259",
+          "average_loss": "1337.6455",
+          "average_win_loss_ratio": "1.1218",
+          "profit_factor": "2.9574",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "992",
+            "-1305.4",
+            "3050.9",
+            "-774.4",
+            "572",
+            "1366",
+            "592.5",
+            "-481.2",
+            "255",
+            "5596.5",
+            "1144",
+            "2960",
+            "186.2",
+            "157.5",
+            "80",
+            "2734",
+            "358.95",
+            "1400",
+            "-625",
+            "1319",
+            "5.5",
+            "-493",
+            "-2010",
+            "-439.6",
+            "1770.25",
+            "52.95",
+            "308.2",
+            "4333.5",
+            "-2120.5",
+            "4022",
+            "1316.5",
+            "224.8",
+            "2341",
+            "3525",
+            "892",
+            "-1698",
+            "-2926",
+            "-1841",
+            "1925",
+            "34"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 33,
+            "filled": 32,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 9,
+            "filled": 9,
+            "rejected": 0
+          },
+          "BREAKEVEN": {
+            "submitted": 1,
+            "filled": 1,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2026-03-23"
+        ],
+        "average_close_exposure_pct": "58.5467",
+        "daily_sharpe": "2.0365529166913467",
+        "skipped_idle_checks": 10704,
+        "codex_calls": 0,
+        "decision_successes": 669,
+        "decision_failures": 0,
+        "risk_refusals": 36,
+        "watch_scans": 1338,
+        "watch_adds": 211,
+        "watch_removes": 208,
+        "monitor_checks": 11596,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 669,
+        "average_exposure_pct": "58.4854",
+        "max_exposure_pct": "72.3854",
+        "exposure_samples": 669
+      },
+      "diagnostics": {
+        "strategy_rounds": 446,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 446,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 12042,
+        "reason_categories": {
+          "OTHER": 996,
+          "TRIGGER": 8184,
+          "DATA": 61346,
+          "COST": 348,
+          "POSITION_OR_RISK_LIMIT": 13303,
+          "BUYING_POWER": 443,
+          "REWARD_RISK": 21,
+          "DAILY_LOSS": 2
+        },
+        "state_transitions": 2945,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 59909
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 22941
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 1437
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 356
+          }
+        ],
+        "buy_orders": 84,
+        "filled_buy_orders": 69,
+        "unfilled_buy_orders": 15
+      },
+      "quality": {
+        "sessions": 223,
+        "covered_sessions": 223,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 75,
+          "2002": 75,
+          "2303": 75,
+          "2308": 75,
+          "2317": 75,
+          "2330": 75,
+          "2454": 75,
+          "2603": 75,
+          "2881": 75,
+          "2882": 75
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-03-31T05:30:00.000Z",
+          "2002": "2026-03-31T05:30:00.000Z",
+          "2303": "2026-03-31T05:30:00.000Z",
+          "2308": "2026-03-31T05:30:00.000Z",
+          "2317": "2026-03-31T05:30:00.000Z",
+          "2330": "2026-03-31T05:30:00.000Z",
+          "2454": "2026-03-31T05:30:00.000Z",
+          "2603": "2026-03-31T05:30:00.000Z",
+          "2881": "2026-03-31T05:30:00.000Z",
+          "2882": "2026-03-31T05:30:00.000Z"
+        },
+        "strategy_slots": 446,
+        "successful_strategies": 446,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 223
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    },
+    {
+      "period": "out_of_sample",
+      "variant": "adaptive_allocation",
+      "status": "COMPLETED",
+      "execution_audit": {
+        "file": "out_of_sample-adaptive_allocation.json.gz",
+        "sha256": "22162439194bb89dfe72cd52a8b93dbd36879df1f268fce1696e7db20021f5a3"
+      },
+      "metrics": {
+        "initial_cash": "100000",
+        "final_cash": "32561",
+        "settlement_credits": "26447",
+        "stock_value": "51119.50",
+        "final_equity": "110127.50",
+        "net_pnl": "10127.50",
+        "return_pct": "10.1275",
+        "realized_pnl": "9424.90",
+        "unrealized_pnl": "702.60",
+        "fees": "1842.00",
+        "taxes": "1524.00",
+        "gross_pnl": "13493.50",
+        "total_costs": "3366.00",
+        "cost_drag_pct": "3.3660",
+        "sell_orders": 28,
+        "max_drawdown_pct": "11.0329",
+        "filled_orders": 73,
+        "fill_count": 73,
+        "winning_sell_fill_pct": "50.00",
+        "trades": {
+          "closed_trades": 28,
+          "winning_trades": 14,
+          "losing_trades": 14,
+          "win_rate_pct": "50.0000",
+          "average_win": "1706.3929",
+          "average_loss": "1033.1857",
+          "average_win_loss_ratio": "1.6516",
+          "profit_factor": "1.6516",
+          "profit_factor_unbounded": false,
+          "closed_trade_pnls": [
+            "8245",
+            "-1209.9",
+            "262.2",
+            "158.5",
+            "-1188.5",
+            "328.4",
+            "-326",
+            "4144.9",
+            "293",
+            "-3088",
+            "1322",
+            "2241.8",
+            "-28",
+            "-393",
+            "-1970",
+            "-1152",
+            "-1735",
+            "556.4",
+            "-1578",
+            "-670.2",
+            "913.5",
+            "-657",
+            "1976",
+            "-116",
+            "2071",
+            "1074.8",
+            "302",
+            "-353"
+          ]
+        },
+        "exits": {
+          "TRAILING": {
+            "submitted": 18,
+            "filled": 18,
+            "rejected": 0
+          },
+          "STOP": {
+            "submitted": 10,
+            "filled": 10,
+            "rejected": 0
+          }
+        },
+        "daily_loss_breach_days": [
+          "2026-06-08",
+          "2026-06-17"
+        ],
+        "average_close_exposure_pct": "59.5847",
+        "daily_sharpe": "1.4220957985266642",
+        "skipped_idle_checks": 6432,
+        "codex_calls": 0,
+        "decision_successes": 402,
+        "decision_failures": 0,
+        "risk_refusals": 29,
+        "watch_scans": 804,
+        "watch_adds": 122,
+        "watch_removes": 113,
+        "monitor_checks": 6968,
+        "execution_requests": 0,
+        "execution_confirmations": 0,
+        "execution_failures": 0,
+        "smart_monitor_checks": 402,
+        "average_exposure_pct": "59.4834",
+        "max_exposure_pct": "72.0827",
+        "exposure_samples": 402
+      },
+      "diagnostics": {
+        "strategy_rounds": 268,
+        "buy_signals": 0,
+        "rebound_signals": 0,
+        "trailing_signals": 0,
+        "rule_rounds": 268,
+        "invalid_windows": 0,
+        "narrow_windows": 0,
+        "monitor_samples": 7236,
+        "reason_categories": {
+          "TRIGGER": 4218,
+          "DATA": 37237,
+          "COST": 211,
+          "OTHER": 851,
+          "POSITION_OR_RISK_LIMIT": 7473,
+          "REWARD_RISK": 94,
+          "BUYING_POWER": 163,
+          "DAILY_LOSS": 2
+        },
+        "state_transitions": 1768,
+        "waits": [
+          {
+            "reason": "等待新鮮行情／交易時段",
+            "samples": 36375
+          },
+          {
+            "reason": "其他等待或數量確認未完成",
+            "samples": 12731
+          },
+          {
+            "reason": "觀測資格／資料未確認",
+            "samples": 862
+          },
+          {
+            "reason": "預算／風控／成本限制",
+            "samples": 281
+          }
+        ],
+        "buy_orders": 57,
+        "filled_buy_orders": 45,
+        "unfilled_buy_orders": 12
+      },
+      "quality": {
+        "sessions": 134,
+        "covered_sessions": 134,
+        "calendar_verified": true,
+        "missing_sessions": [],
+        "warmup": {
+          "1216": 150,
+          "2002": 150,
+          "2303": 150,
+          "2308": 150,
+          "2317": 150,
+          "2330": 150,
+          "2454": 150,
+          "2603": 150,
+          "2881": 150,
+          "2882": 150
+        },
+        "insufficient_symbols": [],
+        "last_marks": {
+          "1216": "2026-10-15T05:30:00.000Z",
+          "2002": "2026-10-15T05:30:00.000Z",
+          "2303": "2026-10-15T05:30:00.000Z",
+          "2308": "2026-10-15T05:30:00.000Z",
+          "2317": "2026-10-15T05:30:00.000Z",
+          "2330": "2026-10-15T05:30:00.000Z",
+          "2454": "2026-10-15T05:30:00.000Z",
+          "2603": "2026-10-15T05:30:00.000Z",
+          "2881": "2026-10-15T05:30:00.000Z",
+          "2882": "2026-10-15T05:30:00.000Z"
+        },
+        "strategy_slots": 268,
+        "successful_strategies": 268,
+        "skipped_strategies": 0,
+        "universe_mode": "FIXED",
+        "universe_sessions": 0,
+        "execution_model": "APPROXIMATE",
+        "processed_sessions": 134
+      },
+      "limitations": [
+        "Unadjusted daily prices; dividend/split, delisting and survivorship biases remain.",
+        "Daily open/close execution approximation cannot validate intraday rebound, trailing paths, auction queue or odd-lot fills.",
+        "Observed session dates are not a verified future settlement calendar; unavailable T+2 credits remain reserved.",
+        "使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行",
+        "決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗",
+        "觀測股每五分鐘更新；一般進場也逐筆檢查可用價格事件；反彈買進與持倉保護逐筆檢查可用分鐘收盤價，不插值或猜測同根高低價順序",
+        "歷史智慧退場由程式按當前可賣股數提案，不額外呼叫 Codex 確認股數；仍核對新鮮行情、風控、零股不可當沖與未完成委託，不保證立即成交；即時工作台原股數確認流程不變",
+        "缺少零股歷史五檔時，以股票 K 線收盤價前後一個 tick 估價；深度為 volume_shares × participation，並非實際零股撮合",
+        "委託最早在提交後下一筆價格事件成交；不使用下一根 K 線高低點判斷當前成交；ROD 收盤撤銷",
+        "K 線不能還原其內先觸停損或停利的順序，也無法驗證撮合排隊與真實滑價；日 K 無法測試盤中策略效果",
+        "歷史漲跌停以前收盤 ±10% 估算；未還原處置、注意、停牌、除權息、分割及退市狀態",
+        "買進金額及費用立即預留；賣出淨額於已知行事曆 T+2 轉為可用，不能提早買進",
+        "期末庫存按最後可取得價格估值，未強制賣光或扣除未來賣出費用；請核對最後估值日期"
+      ]
+    }
+  ]
+}

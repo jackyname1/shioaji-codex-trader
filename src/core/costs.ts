@@ -24,10 +24,11 @@ export function roundTripEstimate(shares:number,buyPrice:string,targetPrice:stri
     estimated_reward_risk:reward!==null&&loss?.gt(0)?reward.div(loss).toFixed():null};
 }
 export function entryRiskIssues(shares:number,price:string,smart:SmartSpec|undefined,a:Account,s:Settings):string[]{
-  if(!d(s.max_trade_risk_fraction).gt(0))return [];
-  if(!smart||!d(smart.stop_price).lt(price))return ['進場停損資料不足或不合法'];
-  const estimate=roundTripEstimate(shares,price,rewardTarget(smart),s,smart.stop_price);
-  const issues=d(estimate.estimated_stop_loss!).gt(equity(a).times(s.max_trade_risk_fraction))?['超過單筆停損風險預算（含費稅與滑價）']:[];
+  const checkStop=d(s.max_trade_risk_fraction).gt(0);
+  if(!checkStop&&!d(s.max_gap_risk_fraction).gt(0))return [];
+  if(checkStop&&(!smart||!d(smart.stop_price).lt(price)))return ['進場停損資料不足或不合法'];
+  const estimate=roundTripEstimate(shares,price,rewardTarget(smart),s,smart?.stop_price??null);
+  const issues=checkStop&&d(estimate.estimated_stop_loss!).gt(equity(a).times(s.max_trade_risk_fraction))?['超過單筆停損風險預算（含費稅與滑價）']:[];
   if(d(s.max_gap_risk_fraction).gt(0)&&d(estimate.estimated_gap_loss).gt(equity(a).times(s.max_gap_risk_fraction)))issues.push('超過隔夜跳空壓力風險預算');
   return issues;
 }
