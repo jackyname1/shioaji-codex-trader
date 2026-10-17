@@ -1,0 +1,83 @@
+{
+  "app_version": "0.2.6",
+  "platform": "Windows x64",
+  "fixture": "isolated synthetic GUI smoke test; no user credentials or brokerage orders",
+  "source_commit": "3c487921d61ef82420e1f11cbe708d70593e94f1",
+  "source_tree": "a37c7d11d8863f0adfd1c1a462428440269615ea",
+  "workflow_run_id": 39047403839,
+  "images": [
+    {
+      "source_file": "SYNTHETIC-ui-paper-1600.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-paper-1600.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 256356,
+      "sha256": "20a930bee9c767667d23f0d58ac0547d7f3e35c60ed98f9837627a72a43134c7",
+      "git_blob_sha": "fbfb4434654189332e4a0a4b9c0c2bc622e74f0a"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-capital-profile.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-capital-profile.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 305190,
+      "sha256": "d9218e540c540ece80c6661419fe9f896a7ad8202a556b76badb9e04a36f70f9",
+      "git_blob_sha": "f9ca9d2e263ee6144c1b882c0ca737a48cebb086"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-smart-conditions-1600.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-smart-conditions-1600.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 206942,
+      "sha256": "c12ee266759f8dbce8c9b4f32a21157cf5320215f7a7a425e64418afab4c21ff",
+      "git_blob_sha": "f1dc9b5a24239eabe91acc679a42a3e98c7b1182"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-realtime-1600.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-realtime-1600.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 259160,
+      "sha256": "5f31736402930b096fa0ac662aedb76074392ea4c31ca6ec913c7f32f4fdec78",
+      "git_blob_sha": "69ed6533665017fa33c29cd44475e77514837e75"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-live.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-live.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 252638,
+      "sha256": "17157027f4b92a766692a1c8dc17050660afaad09ab53980fa01ba07c90b054c",
+      "git_blob_sha": "db9c82d5afb250dd5ae8271249e9f389512940dc"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-connection.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-connection.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 237538,
+      "sha256": "c97e608fd0995eb99f97e155fe4aaae8f4b92b13a716031b1e81931b81e326a0",
+      "git_blob_sha": "b901f3f77dbd306cad01ae2169b8d8917d2664b2"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-codex-history.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-codex-history.png",
+      "width": 1920,
+      "height": 1080,
+      "size_bytes": 303610,
+      "sha256": "15f2682cecd5f3688e96aadd1564b5a5f6995d91e8831ff739562500f751aaa6",
+      "git_blob_sha": "35efb43b516ade880ab40d01d784caca18418bbe"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-native-login-failure.png",
+      "path": "docs/capture-bundles/v0.2.6/SYNTHETIC-ui-native-login-failure.png",
+      "width": 1600,
+      "height": 960,
+      "size_bytes": 190097,
+      "sha256": "670bab894a5fba0cdb490044fe173a41e83cb38e044e3a46904a0ea8ef166819",
+      "git_blob_sha": "c9611a298db6a4eabe4ab684f4f07d3a241b451e"
+    }
+  ],
+  "bundle_sha256": "fdb4db3fd3f3a7eaae3e770baa49bb650113abb57a1659850d2dafeb3d56ce49"
+}
