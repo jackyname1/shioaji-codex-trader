@@ -28,6 +28,7 @@ export const QuoteSchema = z.strictObject({
   symbol, last: positive, bid: nonnegative, ask: nonnegative,
   trade_at: timestamp, book_at: timestamp, odd: z.boolean(), simulated: z.boolean(),
   bid_shares: quantity, ask_shares: quantity,
+  book_source:z.enum(['OBSERVED','APPROXIMATE']).optional(),
   bid_levels:z.array(z.strictObject({price:nonnegative,shares:quantity})).max(5).optional(),
   ask_levels:z.array(z.strictObject({price:nonnegative,shares:quantity})).max(5).optional(),
 });
@@ -46,6 +47,7 @@ export const OrderSchema = z.strictObject({
   filled: quantity, created_at: timestamp, plan_id: z.string(),
   purpose: z.enum(['ENTRY', 'EXIT', 'PROTECTION', 'EXTERNAL']),
   exit_trigger:z.enum(['STOP','TAKE_PROFIT','TRAILING','BREAKEVEN']).optional(),
+  trigger_context:z.strictObject({last:positive,bid:nonnegative,ask:nonnegative,trade_at:timestamp,book_at:timestamp,stop_price:positive,effective_stop:positive}).optional(),
   trigger_reason:z.string().max(3000).optional(),
 }).refine(o => o.filled <= o.shares, '成交量超過委託量');
 export type Order = z.infer<typeof OrderSchema>;
@@ -142,7 +144,7 @@ export const SettingsSchema = z.strictObject({
   manage_quote_subscriptions: z.boolean().default(true),
   stock_account_index: quantity.max(50).default(0),
   min_cash_fraction: fraction.default('0.25'), max_order_fraction: positiveFraction.default('0.10'),
-  order_budget_basis:z.enum(['EQUITY','AFTER_RESERVE']).default('EQUITY'),
+  order_budget_basis:z.enum(['EQUITY','AFTER_RESERVE']).default('AFTER_RESERVE'),
   target_exposure_fraction:fraction.default('0.50'),
   min_entry_reward_risk:nonnegative.refine(v=>d(v).lte(10)).default('0'),
   max_trade_risk_fraction:fraction.default('0'),
@@ -159,6 +161,16 @@ export const SettingsSchema = z.strictObject({
   overnight_gap_fraction:fraction.default('0.05'), max_gap_risk_fraction:fraction.default('0.02'),
   min_net_profit_twd:nonnegative.default('60'),
   entry_tracking_minutes:quantity.min(5).max(360).default(90),
+  // Research gates are opt-in and paper/replay only until independent validation.
+  portfolio_risk_enabled:z.boolean().default(false),
+  portfolio_components:z.enum(['all','drawdown','regime','loss_streak']).default('all'),
+  portfolio_drawdown_fraction:positiveFraction.default('0.04'),
+  portfolio_cooldown_sessions:quantity.min(1).max(20).default(2),
+  portfolio_loss_streak:quantity.min(2).max(10).default(3),
+  entry_quality_enabled:z.boolean().default(false),
+  max_portfolio_stop_fraction:fraction.default('0'),
+  prompt_compaction:z.boolean().default(false),
+  research_exit_mode:z.enum(['baseline','fixed','atr_trail']).default('baseline'),
   allow_attention: z.boolean().default(false), codex_enabled: z.boolean().default(false),
   experience_enabled: z.boolean().default(true), experience_limit: quantity.min(5).max(100).default(40),
   official_facts_enabled: z.boolean().default(true), codex_path: z.string().default(''),
@@ -180,6 +192,7 @@ export const SettingsSchema = z.strictObject({
   candidate_pool_size: quantity.min(20).max(100).default(40), demo_cash: positive.default('100000'),
   start_minimized: z.boolean().default(false), keep_awake: z.boolean().default(true),
 }).refine(s => d(s.max_exposure_fraction).plus(s.min_cash_fraction).lte(1), '現金保留加持倉上限不得超過 100%')
+  .refine(s => !['live','readonly'].includes(s.mode)||!s.portfolio_risk_enabled&&!s.entry_quality_enabled&&!s.prompt_compaction&&s.research_exit_mode==='baseline', '研究風險與選股功能僅供回放或模擬')
   .refine(s => s.postmarket_time >= '13:40' && s.postmarket_time <= '17:00', '盤後檢討時間須為 13:40–17:00');
 export type Settings = z.infer<typeof SettingsSchema>;
 /** Upgrade persisted 0.1 settings without carrying manual confirmation gates forward. */
@@ -193,7 +206,7 @@ export function storedSettings(raw: unknown): Settings {
 }
 export const SessionSchema = z.strictObject({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), open: z.boolean(), source: z.string().min(1), verified_at: timestamp,
-  settlement_open:z.boolean().optional(),
+  settlement_open:z.boolean().optional(),known_at:timestamp.optional(),scheduled_open:z.boolean().optional(),scheduled_settlement_open:z.boolean().optional(),
 });
 export type SessionDay = z.infer<typeof SessionSchema>;
 export interface Bar { date: string; close: number; high: number; low: number; volume: number; amount?:string }
@@ -218,6 +231,7 @@ export interface Snapshot {
   existing_protection: Record<string, SmartSpec>; fundamentals: Record<string, unknown>;
   smart_tracking?:{entries:EntryTrack[];protections:Protection[]};
   quotes?:Quote[];
+  portfolio_risk?:import('./portfolio-risk.js').PortfolioDecision;
   entry_feedback?:{plan_id:string;asof:string;signals:{symbol:string;window:import('./entry-window.js').EntryWindow;state:string;reason:string}[]};
   capital?:import('./capital.js').CapitalSnapshot;
   news: unknown[]; data_limitations: string[];

@@ -66,10 +66,10 @@ test('a price window becoming empty during model sizing invalidates the advice b
 test('active replay budgets leave saved live preferences intact and retain cost/risk requirements',()=>{
   const base=SettingsSchema.parse({mode:'live',auto_execute:false,max_order_fraction:'0.04',min_cash_fraction:'0.4',max_exposure_fraction:'0.6'});
   const before=JSON.stringify(base),active=replayCapitalSettings(base,'active');
-  assert.equal(JSON.stringify(base),before);assert.equal(active.max_order_fraction,'0.20');assert.equal(active.min_cash_fraction,'0.20');
-  assert.equal(active.max_exposure_fraction,'0.80');assert.equal(active.max_daily_buy_fraction,'0.60');assert.equal(active.target_exposure_fraction,'0.70');
-  assert.equal(active.min_entry_reward_risk,'1.2');assert.equal(active.max_trade_risk_fraction,'0.0125');assert.equal(active.auto_execute,false);
-  assert.equal(replayCapitalSettings(base,'custom'),base);assert.equal(BacktestRequestSchema.parse({start:'2026-01-05',end:'2026-01-05'}).entry_cadence,'scheduled');
+  assert.equal(JSON.stringify(base),before);assert.equal(active.max_order_fraction,'0.04');assert.equal(active.min_cash_fraction,'0.4');
+  assert.equal(active.max_exposure_fraction,'0.6');assert.equal(active.max_daily_buy_fraction,'0.20');assert.equal(active.target_exposure_fraction,'0.50');
+  assert.equal(active.min_entry_reward_risk,'1.2');assert.equal(active.max_trade_risk_fraction,'0.01');assert.equal(active.auto_execute,false);
+  assert.deepEqual(replayCapitalSettings(base,'custom'),base);assert.equal(BacktestRequestSchema.parse({start:'2026-01-05',end:'2026-01-05'}).entry_cadence,'scheduled');
 });
 test('entry diagnostics count strategy signals and orders once and label repeated monitor states as samples',()=>{
   const t=new EntryDiagnosticTracker();t.strategy({decisions:[buy,{...buy,symbol:'9002',conditions:guard('31')}],screening:null} as Analysis,{9001:features,9002:features},{},now);
@@ -94,9 +94,9 @@ test('minute entry catches a brief non-rebound opportunity missed by the five-mi
   const active=await runBacktest({...request,entry_cadence:'market'},data,settings,analyze,new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,async r=>{calls++;return testSize(r);});
   assert.equal(active.status,'COMPLETED');assert.equal(active.orders.length,1);assert.equal(calls,1);assert.match(active.orders[0]!.created_at,/01:16:00/);
   assert.ok(active.fills.every(f=>Date.parse(f.at)>Date.parse(active.orders[0]!.created_at)));assert.equal(active.entry_diagnostics!.buy_signals,1);
-  assert.ok(frames.some(f=>f.at.includes('01:16:00')&&f.next_event_at?.includes('01:17:00')));assert.equal(active.settings.min_cash_fraction,'0.20');
+  assert.ok(frames.some(f=>f.at.includes('01:16:00')&&f.next_event_at?.includes('01:17:00')));assert.equal(active.settings.min_cash_fraction,'0.25');
 });
-test('controlled rising-price replay deploys more active capital and increases fixture net gains while respecting daily and single-order ceilings',async(t)=>{
+test('legacy replay profile names share safe capital ceilings while respecting daily and single-order ceilings',async(t)=>{
   const start='2026-01-05',end='2026-01-06',data=syntheticDataset(start,end);
   data.points=data.points.filter(p=>['9001','9002','9003'].includes(p.symbol));
   for(const p of data.points){p.open=p.high=p.low=p.close=p.at.slice(0,10)===end?'31.5':'30';p.volume_shares=1000000;}
@@ -111,11 +111,11 @@ test('controlled rising-price replay deploys more active capital and increases f
     return {request_id:r.request_id,symbol:r.symbol,action:r.action,shares,lot:lot.lot,limit_price:lot.limit_price,reason:'isolated full feasible allocation'};};
   const balanced=await runBacktest({...request,capital_profile:'balanced'},data,base,analyze,new AbortController().signal,undefined,undefined,undefined,undefined,size);
   const active=await runBacktest({...request,capital_profile:'active'},data,base,analyze,new AbortController().signal,p=>progress.push(p),undefined,undefined,undefined,size);
-  assert.equal(active.status,'COMPLETED');assert.equal(balanced.status,'COMPLETED');assert.ok(d(active.metrics.net_pnl).gt(balanced.metrics.net_pnl));
-  assert.ok(d(active.metrics.max_exposure_pct!).gt('55'));assert.ok(d(active.metrics.max_exposure_pct!).lt('80'));
-  assert.ok(active.fills.filter(f=>f.action==='BUY').every(f=>d(f.amount).lte('20000')));
-  assert.ok(d(active.fills.filter(f=>f.action==='BUY').reduce((s,f)=>s.plus(f.amount),d(0))).lte('60000'));
-  assert.ok(progress.every(p=>p.effective_settings?.max_order_fraction==='0.20'));
+  assert.equal(active.status,'COMPLETED');assert.equal(balanced.status,'COMPLETED');assert.ok(d(active.metrics.net_pnl).eq(balanced.metrics.net_pnl));
+  assert.ok(d(active.metrics.max_exposure_pct!).gt('0'));assert.ok(d(active.metrics.max_exposure_pct!).lte('75'));
+  assert.ok(active.fills.filter(f=>f.action==='BUY').every(f=>d(f.amount).lte('7500')));
+  assert.ok(d(active.fills.filter(f=>f.action==='BUY').reduce((s,f)=>s.plus(f.amount),d(0))).lte('20000'));
+  assert.ok(progress.every(p=>p.effective_settings?.max_order_fraction==='0.10'));
   assert.ok(snapshots.some(s=>s.hard_limits.capital_profile==='active'));assert.equal(base.max_order_fraction,'0.10');
   t.diagnostic(JSON.stringify({fixture:'SYNTHETIC identical signals and rising prices; not historical profitability',
     balanced_peak_pct:balanced.metrics.max_exposure_pct,active_peak_pct:active.metrics.max_exposure_pct,balanced_net:balanced.metrics.net_pnl,active_net:active.metrics.net_pnl}));

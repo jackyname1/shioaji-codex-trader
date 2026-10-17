@@ -3,7 +3,7 @@ import {active,d,equity,marketValue,remaining,type Account,type Decision,type En
 import {roundPrice} from './risk.js';
 import {orderBudget} from './capital.js';
 import {entryQualityIssues,entryRiskIssues,fee,roundTripEstimate} from './costs.js';
-import {entryReady,trackEntry} from './smart.js';
+import {researchExit,entryReady,trackEntry} from './smart.js';
 
 export interface Opportunity {decision?:Decision;track?:EntryTrack;reason:string;score?:number;signal?:string}
 /** Three independent, bounded signals share a single symbol/order identity. No target is derived from a desired RR. */
@@ -42,9 +42,9 @@ export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Ac
     track.armed?`追蹤低點 ${track.low_water}；等待回升 ${reboundFraction}`:'買入觸發未達：等待回檔反彈、趨勢延續或突破確認'};
   stop=d(roundPrice(stop));target=d(roundPrice(target));
   if(stop.lte(0)||stop.gte(entry)||entry.minus(stop).div(entry).gt('.15')||target.lte(entry))return {track,reason:'風險報酬不足：支撐、實際賣價與既有壓力不相容'};
-  const smart={stop_price:stop.toFixed(),take_profit:target.toFixed(),reward_target:target.toFixed(),
+  const smart=researchExit({stop_price:stop.toFixed(),take_profit:target.toFixed(),reward_target:target.toFixed(),
     trailing_activate:s.adaptive_protection?entry.plus(entry.minus(stop).times('1.25')).toFixed():null,
-    trailing_fraction:s.adaptive_protection?Decimal.max('.02',Decimal.min('.08',atr.times('1.8').div(entry))).toFixed():null};
+    trailing_fraction:s.adaptive_protection?Decimal.max('.02',Decimal.min('.08',atr.times('1.8').div(entry))).toFixed():null},entry.toFixed(),f.atr14,s);
   const buys=a.orders.filter(o=>active(o)&&o.action==='BUY'),e=equity(a);
   const reserved=buys.reduce((v,o)=>v.plus(d(o.limit_price).times(remaining(o))).plus(fee(d(o.limit_price).times(remaining(o)),s)),d(0));
   const principal=buys.reduce((v,o)=>v.plus(d(o.limit_price).times(remaining(o))),d(0));
@@ -63,7 +63,7 @@ export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Ac
   // Loss is monotone in quantity; binary search finds the largest risk-valid size, then check minimum economics.
   let lo=0,hi=Math.floor(max/step);
   while(lo<hi){const mid=Math.ceil((lo+hi)/2),n=mid*step;
-    if(entryRiskIssues(n,entry.toFixed(),smart,a,s).length||entry.times(n).plus(fee(entry.times(n),s)).gt(cash))hi=mid-1;else lo=mid;}
+    if(entryRiskIssues(n,entry.toFixed(),smart,a,s,symbol).length||entry.times(n).plus(fee(entry.times(n),s)).gt(cash))hi=mid-1;else lo=mid;}
   max=lo*step;
   if(!max)return {track,reason:'購買力或單筆風險上限不足一個交易單位'};
   const quality=entryQualityIssues(max,entry.toFixed(),smart,s);

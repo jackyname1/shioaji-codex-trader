@@ -225,7 +225,7 @@ function renderBacktest(state:DesktopState):void {
   text('bt-pnl',fmt(m.net_pnl));el('bt-pnl').className=Number(m.net_pnl)>=0?'positive':'negative';text('bt-return',`報酬 ${fmt(m.return_pct)}% · 已實現 ${fmt(m.realized_pnl)}`);
   text('bt-drawdown',fmt(m.max_drawdown_pct)+'%');text('bt-cost',`手續費 ${fmt(m.fees)} · 稅 ${fmt(m.taxes)}`+(m.gross_pnl!==undefined?` · 費用前損益 ${fmt(m.gross_pnl)}`:''));text('bt-filled',m.filled_orders);
   text('bt-activity',`觀測加入 ${m.watch_adds} / 移除 ${m.watch_removes} · Codex ${m.codex_calls}`);text('bt-equity',fmt(m.final_equity));
-  text('bt-capital',m.average_exposure_pct===undefined?'舊報表未統計持倉比例':`持倉：行情時點平均 ${fmt(m.average_exposure_pct)}% · 最高 ${fmt(m.max_exposure_pct??'0')}% · ${r.request.capital_profile==='active'?'積極配置':r.request.capital_profile==='balanced'?'平衡配置':'自訂風控'}`);
+  text('bt-capital',m.average_exposure_pct===undefined?'舊報表未統計持倉比例':`持倉：行情時點平均 ${fmt(m.average_exposure_pct)}% · 最高 ${fmt(m.max_exposure_pct??'0')}% · ${r.request.capital_profile==='active'?'標準風控':r.request.capital_profile==='balanced'?'標準風控':'自訂風控'}`);
   text('bt-entry-diagnostics',entryDiagnosticText(r.entry_diagnostics));
   text('bt-quality',`近似成交 · ${r.quality.universe_mode==='DAILY_HISTORICAL'?'每日歷史股票池':'固定股票池'} · 行情 ${r.quality.covered_sessions}/${r.quality.sessions} 日 · 有效策略 ${r.quality.successful_strategies}/${r.quality.strategy_slots}`);
   table('bt-fills',['台北時間','股票','方向','股數','價格','手續費 / 稅','已實現損益'],r.fills.slice().reverse().map(f=>[stamp(f.at),f.symbol,action[f.action]??f.action,f.shares,fmt(f.price),`${fmt(f.fee)} / ${fmt(f.tax)}`,f.realized_pnl===null?'—':fmt(f.realized_pnl)]),'本次無成交；請核對策略、資料與風控紀錄');
@@ -264,7 +264,7 @@ function request(compare=false):BacktestRequest {
     whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
     capital_profile:value('bt-capital-profile') as BacktestRequest['capital_profile'],entry_cadence:value('bt-entry-cadence') as BacktestRequest['entry_cadence'],start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:value('replay-mode')==='direct'?0:Number(value('replay-speed-number')),
     decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
-    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),participation:value('bt-participation')};
+    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),execution_slippage_bps:Number(value('bt-execution-slip')),research:{portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
 }
 el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>beginReplay());});
 el('bt-compare').addEventListener('click',()=>void run(()=>beginReplay(true)));

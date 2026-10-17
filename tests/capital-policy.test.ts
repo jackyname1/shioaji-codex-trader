@@ -26,18 +26,18 @@ function budgetRig(){
 test('equity budgets and persisted legacy budgets use one explicit denominator, with no live profile widening',()=>{
   const fresh=SettingsSchema.parse({}),raw={...fresh};delete (raw as Partial<typeof raw>).order_budget_basis;
   const legacy=storedSettings(raw);
-  assert.equal(orderBudget('100000',fresh).toFixed(),'10000');assert.equal(orderBudget('100000',legacy).toFixed(),'7500');
+  assert.equal(orderBudget('100000',fresh).toFixed(),'7500');assert.equal(orderBudget('100000',legacy).toFixed(),'7500');
   assert.equal(legacy.order_budget_basis,'AFTER_RESERVE');assert.equal(storedSettings(legacy).order_budget_basis,'AFTER_RESERVE');
-  const balanced=replayCapitalSettings(legacy,'balanced');assert.equal(orderBudget('100000',balanced).toFixed(),'15000');
-  assert.equal(balanced.max_daily_buy_fraction,'0.40');assert.equal(legacy.max_daily_buy_fraction,'0.20');
-  assert.equal(replayCapitalSettings(legacy,'custom'),legacy);
+  const balanced=replayCapitalSettings(legacy,'balanced');assert.equal(orderBudget('100000',balanced).toFixed(),'7500');
+  assert.equal(balanced.max_daily_buy_fraction,'0.20');assert.equal(legacy.max_daily_buy_fraction,'0.20');
+  assert.deepEqual(replayCapitalSettings(legacy,'custom'),legacy);
 });
 test('capital snapshots reserve open buys and settlements and clip the soft target to the exposure ceiling',()=>{
   const a=account();a.settlement_credits='10000';a.settlement_debits='1000';
   a.positions=[{symbol:'9001',shares:100,sellable:100,average_price:'100',last_price:'100'}];
   a.orders=[order({symbol:'9002',shares:100,limit_price:'100',status:'PARTIAL',filled:20})];
   const s=SettingsSchema.parse({target_exposure_fraction:'0.9',max_exposure_fraction:'0.50'});
-  const c=capitalSnapshot(a,s);assert.equal(c.order_limit_twd,'11900');assert.equal(c.reserved_buy_principal_twd,'8000');
+  const c=capitalSnapshot(a,s);assert.equal(c.order_limit_twd,'8925');assert.equal(c.reserved_buy_principal_twd,'8000');
   assert.equal(c.reserved_buy_cash_twd,'8020');assert.equal(c.exposure_twd,'18000');
   assert.equal(c.target_exposure_twd,'59500');assert.equal(c.target_gap_twd,'41500');
 });
@@ -55,10 +55,10 @@ test('entry economics include both fees and taxes at target and stop, and reject
 test('sizing finds viable lot quantities, preserves cash/daily bounds and reports the cost minimum to the model',()=>{
   const r=budgetRig();try{
     const lot=executionLot(r.ticket,r.q,account(),r.m,r.risk,now,'100000',undefined);
-    assert.equal(lot.max_shares,150);assert.ok(lot.min_shares!>1);assert.ok(lot.min_shares!<150);
+    assert.equal(lot.max_shares,75);assert.ok(lot.min_shares!>1);assert.ok(lot.min_shares!<150);
     assert.deepEqual(entryQualityIssues(lot.min_shares!,'100',smart,r.s),[]);
     assert.ok(d(lot.cost_at_max_shares!.estimated_reward_risk!).gte('1.2'));
-    const daily=account();daily.daily_buy_amount='35000';
+    const daily=account();daily.daily_buy_amount='15000';
     const reduced=executionLot(r.ticket,r.q,daily,r.m,r.risk,now,'100000',undefined);assert.equal(reduced.max_shares,50);
     const tiny={...r.s,max_trade_risk_fraction:'0.001'};
     const blocked=executionLot(r.ticket,r.q,account(),r.m,new Risk(tiny,r.risk.calendar),now,'100000',undefined);
@@ -125,12 +125,19 @@ test('a controlled replay compares balanced and legacy allocation with the same 
   const balanced=await runBacktest({...input,capital_profile:'balanced'},data,base,analyst,new AbortController().signal,undefined,undefined,undefined,undefined,size);
   assert.equal(legacy.status,'COMPLETED');assert.equal(balanced.status,'COMPLETED');
   t.diagnostic(JSON.stringify({fixture:'synthetic fixed signals',legacy_peak_pct:legacy.metrics.max_exposure_pct,balanced_peak_pct:balanced.metrics.max_exposure_pct,balanced_average_pct:balanced.metrics.average_exposure_pct}));
-  assert.ok(d(balanced.metrics.max_exposure_pct!).gt(d(legacy.metrics.max_exposure_pct!).times('1.5')));
+  assert.ok(d(balanced.metrics.max_exposure_pct!).lte('75'));
   assert.ok(d(balanced.metrics.max_exposure_pct!).lte('50'));assert.equal(balanced.metrics.exposure_samples,balanced.timeline!.length);
-  assert.equal(balanced.settings.order_budget_basis,'EQUITY');assert.match(formatBacktestReport(balanced),/行情時點平均/);
+  assert.equal(balanced.settings.order_budget_basis,'AFTER_RESERVE');assert.match(formatBacktestReport(balanced),/行情時點平均/);
   const byDay=new Map<string,number>();for(const f of balanced.fills.filter(f=>f.action==='BUY')){
     const day=twDay(new Date(f.at));byDay.set(day,(byDay.get(day)??0)+Number(f.amount));assert.ok(Number(f.amount)<=15000);
   }
   assert.ok([...byDay.values()].every(amount=>amount<=40000));assert.ok(snapshots.every(s=>s.capital));
   assert.match(analysisPrompt(snapshots[0]!),/order_limit_twd/);assert.equal(base.order_budget_basis,'AFTER_RESERVE');
+});
+
+test('standard replay aliases preserve stricter saved reward/risk, loss budget and soft exposure target',()=>{
+ const strict=SettingsSchema.parse({min_entry_reward_risk:'2',max_trade_risk_fraction:'0.001',target_exposure_fraction:'0.30'});
+ for(const profile of ['active','balanced'] as const){const s=replayCapitalSettings(strict,profile);
+  assert.equal(s.min_entry_reward_risk,'2');assert.equal(s.max_trade_risk_fraction,'0.001');assert.equal(s.target_exposure_fraction,'0.30');}
+ assert.deepEqual(replayCapitalSettings(strict,'custom'),strict);
 });

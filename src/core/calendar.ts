@@ -11,8 +11,13 @@ const exceptionalClosures:Record<string,{source:string;verified_at:string}>={
   '2026-07-10':{source:'https://www.twse.com.tw/staticFiles/news/news/tsecnews/8a8216d69ef76943019f46cb86ae0110.pdf',verified_at:'2026-07-09T20:11:00+08:00'},
 };
 export const applyCalendarExceptions=(days:SessionDay[]):SessionDay[]=>days.map(day=>exceptionalClosures[day.day]
-  ?{...day,...exceptionalClosures[day.day]!,open:false,settlement_open:false}:day);
+  ?{...day,...exceptionalClosures[day.day]!,known_at:exceptionalClosures[day.day]!.verified_at,scheduled_open:weekday(day.day)&&!closed2026.has(day.day),scheduled_settlement_open:weekday(day.day)&&!closed2026.has(day.day),open:false,settlement_open:false}:day);
 export class TradingCalendar {
+  private asof?:string;
+  setAsOf(now:Date):void {this.asof=now.toISOString();}
+  private visible(session:SessionDay|undefined):SessionDay|undefined {
+    return session?.known_at&&Date.parse(session.known_at)>Date.parse(this.asof??new Date().toISOString())?{...session,open:session.scheduled_open??false,settlement_open:session.scheduled_settlement_open??false}:session;
+  }
   constructor(readonly store: Store, readonly demo = false) {
     if (!store.session('2026-01-01')) {
       const days: SessionDay[] = [];
@@ -23,10 +28,10 @@ export class TradingCalendar {
       store.saveSessions(applyCalendarExceptions(days));
     }
     // Upgrade persisted annual calendars while retaining the announcement's provenance.
-    for(const [day,evidence] of Object.entries(exceptionalClosures))store.saveSessions([{day,open:false,settlement_open:false,...evidence}]);
+    for(const [day,evidence] of Object.entries(exceptionalClosures))store.saveSessions([{day,open:false,settlement_open:false,...evidence,known_at:evidence.verified_at,scheduled_open:weekday(day)&&!closed2026.has(day),scheduled_settlement_open:weekday(day)&&!closed2026.has(day)}]);
     for(const day of ['2026-02-12','2026-02-13']){const existing=store.session(day);if(existing&&!existing.settlement_open)store.saveSessions([{...existing,settlement_open:true}]);}
   }
-  isOpen(day: string): boolean { return this.store.session(day)?.open ?? (this.demo && weekday(day)); }
+  isOpen(day: string): boolean { return this.visible(this.store.session(day))?.open ?? (this.demo && weekday(day)); }
   inSession(now: Date, lot: 'ODD' | 'COMMON' = 'ODD'): boolean {
     const day = twDay(now), clock = twClock(now);
     const start = lot === 'ODD' && day < '2026-12-07' ? '09:10' : '09:00';
@@ -36,9 +41,11 @@ export class TradingCalendar {
     for (let n = 1; n < 370; n++) { const candidate = addDays(day, n * direction); if (this.isOpen(candidate)) return candidate; }
     throw new Error('尚未載入相鄰交易日的行事曆');
   }
+  isSettlementOpen(day:string):boolean {const session=this.visible(this.store.session(day));return session?.settlement_open??this.isOpen(day);}
   nextSettlement(day:string,direction=1):string {
     for(let n=1;n<370;n++){const candidate=addDays(day,n*direction),session=this.store.session(candidate);
-      if(session?.settlement_open??this.isOpen(candidate))return candidate;}
+      if(!session&&!this.demo&&weekday(candidate))throw new Error('尚未載入相鄰營業日的交割行事曆');
+      if(this.isSettlementOpen(candidate))return candidate;}
     throw new Error('尚未載入相鄰營業日的交割行事曆');
   }
   async refresh(year: number, signal?: AbortSignal,fetcher:typeof fetch=fetch): Promise<number> {

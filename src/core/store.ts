@@ -1,3 +1,4 @@
+import {authorizedRisk} from './risk-policy.js';
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, mkdirSync, openSync, readFileSync, closeSync, unlinkSync, writeFileSync, fstatSync, statSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -141,8 +142,8 @@ export class Store {
     this.db.prepare('INSERT INTO kv VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value));
   }
   delete(key: string): void { this.db.prepare('DELETE FROM kv WHERE key=?').run(key); }
-  settings(): Settings { return storedSettings(this.get('settings') ?? {}); }
-  saveSettings(s: Settings): void { this.set('settings', SettingsSchema.parse(s)); }
+  settings(): Settings { return authorizedRisk(storedSettings(this.get('settings') ?? {})); }
+  saveSettings(s: Settings): void { this.set('settings', authorizedRisk(SettingsSchema.parse(s))); }
   orders(activeOnly = false): Order[] {
     const sql=activeOnly?"SELECT value FROM orders WHERE json_extract(value,'$.status') IN ('PREPARED','SUBMITTING','PENDING','PARTIAL','CANCEL_PENDING','UNKNOWN') ORDER BY rowid":'SELECT value FROM orders ORDER BY rowid';
     const values = (this.db.prepare(sql).all() as { value: string }[])

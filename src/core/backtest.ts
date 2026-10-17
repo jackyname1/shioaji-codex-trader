@@ -1,3 +1,4 @@
+import {buildIdentity} from './build-identity.js';
 import { randomUUID } from 'node:crypto';
 import { setImmediate as yieldToEvents } from 'node:timers/promises';
 import { z } from 'zod';
@@ -38,6 +39,8 @@ export const BacktestRequestSchema = z.strictObject({
   monitor_interval_seconds:SettingsSchema.shape.monitor_interval_seconds,watch_refresh_minutes:SettingsSchema.shape.watch_refresh_minutes,
   comparison_intervals:z.array(z.number().int().min(10).max(360)).max(5).refine(v=>new Set(v).size===v.length,'比較間隔不可重複').default([]),
   max_codex_calls:z.number().int().min(1).max(2000).default(100),
+  execution_slippage_bps:z.number().int().min(0).max(100).default(0),
+  research:z.strictObject({portfolio:z.boolean().default(false),entry_quality:z.boolean().default(false),exit_mode:z.enum(['baseline','fixed','atr_trail']).default('baseline'),drawdown:z.enum(['0.03','0.04','0.05']).default('0.04'),cooldown:z.number().int().min(1).max(20).default(2),prompt_compaction:z.boolean().default(false)}).optional(),
   participation:z.string().regex(/^0\.\d+$/).refine(v=>d(v).gt(0)&&d(v).lte('.1')).default('0.01'),
 }).refine(x=>x.start<=x.end&&Date.parse(x.end)-Date.parse(x.start)<=366*86400000,'日期區間須為 1–367 天')
   .refine(x=>x.start!==x.end||x.start_time<=x.end_time,'開始時間不能晚於結束時間')
@@ -55,14 +58,14 @@ export interface ReplayFrame {at:string;account:import('./models.js').Account;wa
   execution_queue?:{symbol:string;action:string;state:string;trigger:string}[]}
 export interface BacktestProgress {running:boolean;phase:string;day:string;points:number;total_points:number;codex_calls:number;message:string;run?:number;total_runs?:number;
   at?:string;next_event_at?:string;last_error?:string;effective_settings?:Record<string,unknown>}
-export interface ReplayActivity {at:string;stage:string;message:string;symbols?:string[];screening?:Analysis['screening'];order_id?:string;trigger?:string;state?:string}
+export interface ReplayActivity {at:string;stage:string;message:string;symbols?:string[];screening?:Analysis['screening'];order_id?:string;trigger?:string;state?:string;details?:Record<string,unknown>}
 export interface BacktestQuality {sessions:number;covered_sessions:number;calendar_verified:boolean;missing_sessions:string[];warmup:Record<string,number>;
   insufficient_symbols:string[];last_marks:Record<string,string>;strategy_slots:number;successful_strategies:number;skipped_strategies:number;
   universe_mode?:'DAILY_HISTORICAL'|'FIXED';universe_sessions?:number;execution_model?:'APPROXIMATE';
   halted_at?:string;halt_reason?:'CODEX_QUOTA'|'CODEX_RATE_LIMIT'|'CODEX_NETWORK'|'CODEX_AUTH'|'CODEX_ACCESS'|'CODEX_MODEL'|'CODEX_RUNTIME'|'CODEX_TIMEOUT';processed_sessions?:number}
 export interface BacktestReport {
-  version:'0.2.3'|'0.2.2'|'0.2.1'|'0.2.0'|'0.1.0'|'0.4.0'|'0.5.0';entry_diagnostics?:EntryDiagnostics;final_frame?:ReplayFrame;dataset_id?:string;timeline?:{at:string;equity:string;cash:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
-  source:string;synthetic:boolean;frequency:string;model:string;prompt_version:string;settings:Record<string,unknown>;
+  version:'0.2.5'|'0.2.3'|'0.2.2'|'0.2.1'|'0.2.0'|'0.1.0'|'0.4.0'|'0.5.0';entry_diagnostics?:EntryDiagnostics;final_frame?:ReplayFrame;dataset_id?:string;timeline?:{at:string;equity:string;cash:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
+  build?:ReturnType<typeof buildIdentity>;source:string;synthetic:boolean;frequency:string;model:string;prompt_version:string;settings:Record<string,unknown>;
   metrics:{initial_cash:string;final_cash:string;settlement_credits:string;stock_value:string;final_equity:string;
     net_pnl:string;return_pct:string;realized_pnl:string;unrealized_pnl:string;fees:string;taxes:string;max_drawdown_pct:string;
     filled_orders:number;fill_count:number;winning_sell_fill_pct:string|null;codex_calls:number;decision_successes:number;decision_failures:number;
@@ -116,14 +119,14 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   if(!dataset.synthetic&&request.end>twDay(new Date()))throw new Error('回測結束日不能晚於現在');
   const bounds=replayBounds(request);
   if(bounds.start>bounds.end)throw new Error('回測開始時間不能晚於現在');
-  const settings=SettingsSchema.parse({...replayCapitalSettings(base,request.capital_profile),mode:'demo',auto_execute:true,whole_lots:request.whole_lots,demo_cash:request.initial_cash,
+  const settings=SettingsSchema.parse({...replayCapitalSettings(base,request.capital_profile),...(request.research?{portfolio_risk_enabled:request.research.portfolio,entry_quality_enabled:request.research.entry_quality,research_exit_mode:request.research.exit_mode,portfolio_drawdown_fraction:request.research.drawdown,portfolio_cooldown_sessions:request.research.cooldown,prompt_compaction:request.research.prompt_compaction}:{}),mode:'demo',auto_execute:true,whole_lots:request.whole_lots,demo_cash:request.initial_cash,
     decision_interval_minutes:request.decision_interval_minutes,strategy_schedule:request.strategy_schedule,strategy_times:request.strategy_times,
     monitor_interval_seconds:request.monitor_interval_seconds,watch_refresh_minutes:request.watch_refresh_minutes,official_facts_enabled:false,
     codex_enabled:request.strategy==='codex'&&base.codex_enabled});
   const reportSettings=Object.fromEntries(['min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
     'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','plan_max_minutes','experience_enabled',
     'watch_max_symbols','watch_min_amount','watch_remove_after_scans','entry_strategy_mode','adaptive_protection','dynamic_allocation',
-    'risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes'].map(k=>[k,settings[k as keyof Settings]]));
+    'risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes','portfolio_risk_enabled','portfolio_components','portfolio_drawdown_fraction','portfolio_cooldown_sessions','portfolio_loss_streak','entry_quality_enabled','research_exit_mode','max_portfolio_stop_fraction','prompt_compaction'].map(k=>[k,settings[k as keyof Settings]]));
   if(dataset.frequency==='DAILY'&&request.strategy_schedule==='fixed')throw new Error('回測日 K 無法還原固定時刻的盤中行情；請使用分鐘 K，或選間隔排程作開盤時點的近似測試');
   const store=new Store(':memory:'),calendar=new TradingCalendar(store,dataset.synthetic),id=randomUUID();
   if(dataset.calendar)store.saveSessions(dataset.calendar);store.set('experience_scope','backtest:'+id);store.saveSettings(settings);
@@ -135,7 +138,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   for(let day=twDay(new Date(firstAt));day<=addDays(request.end,1);day=addDays(day,1))
     if(!store.session(day))sessions.push({day,open:observedDays.has(day),source:dataset.source,verified_at:new Date().toISOString()});
   if(sessions.length)store.saveSessions(sessions);
-  const market=new HistoricalMarket(dataset,request.participation),broker=new PaperBroker(store,market,settings,calendar,true),engine=new Engine(store,broker,settings,calendar);
+  const market=new HistoricalMarket(dataset,request.participation,d(request.execution_slippage_bps).div(10000).toFixed()),broker=new PaperBroker(store,market,settings,calendar,true),engine=new Engine(store,broker,settings,calendar);
   const displayQuotes=new Map<string,ReplayFrame['quotes'][number]>();
   const rememberQuotes=(now:Date):void=>{
     for(const q of engine.quotes.values())if(Date.parse(q.trade_at)<=now.getTime()){
@@ -268,7 +271,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     if(events[lo]?.at===at)events[lo]!.check=true;
     else events.splice(lo,0,{at,market:false,check:true,watch:false,close:false});
   };
-  try{await engine.start(new Date(events[0]!.at));
+  try{calendar.setAsOf(new Date(events[0]!.at));await engine.start(new Date(events[0]!.at));
     for(let index=0;index<events.length;index++){const event=events[index]!;if(signal.aborted){status='CANCELLED';break;}
       const smartActive=request.entry_cadence==='market'||engine.plan?.analysis.screening?.entry?.signal==='MULTI'||engine.plan?.analysis.decisions.some(d=>d.entry_when==='REBOUND')
         ||store.protections().some(p=>engine.account?.positions.some(x=>x.symbol===p.symbol&&x.shares>0));
@@ -281,7 +284,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
           if(e.check||e.watch||e.decision!==undefined||e.close||e.market&&includeMarket)return e.at;}
         return '';
       };
-      const now=new Date(event.at),day=twDay(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=nextVisible();
+      const now=new Date(event.at),day=twDay(now);calendar.setAsOf(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=nextVisible();
       const freshQuote=[...engine.quotes.values()].some(q=>ageSeconds(now,q.trade_at)>=0&&ageSeconds(now,q.trade_at)<=settings.quote_max_age);
       // Offline runs may elide repeated stale-data checks. Never skip a price, decision, expiry, settlement clock, close or GUI frame.
       const expiryPending=engine.plan&&Date.parse(engine.plan.analysis.expires_at)<=now.getTime()&&store.orders(true).some(o=>o.purpose==='ENTRY');
@@ -309,10 +312,10 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       progress('RECONCILE',`${twClock(now)} 核對送單結果、成交股數與模擬帳務`);await engine.reconcile(now,true);
       const changes=store.changedOrders(revision),changed=changes.map(c=>c.order);
       for(const change of changes.filter(c=>c.created))activity(event.at,'TRIGGER',`${change.order.symbol} ${change.order.action}：${change.order.trigger_reason??'既有策略條件觸發'}`,
-        {symbols:[change.order.symbol],order_id:change.order.local_id,trigger:change.order.exit_trigger??change.order.trigger_reason});
+        {symbols:[change.order.symbol],order_id:change.order.local_id,trigger:change.order.exit_trigger??change.order.trigger_reason,details:{order:change.order,trigger_context:change.order.trigger_context}});
       if(changed.length){activity(event.at,'MONITOR','已完成進出場條件與風控檢查');
-        for(const order of changed)activity(event.at,changes.find(c=>c.order.local_id===order.local_id)!.created?'SUBMISSION':'RECONCILE',`${order.symbol} ${order.action} ${order.filled}/${order.shares} 股 · ${order.status} · 限價 ${order.limit_price}`,{symbols:[order.symbol],order_id:order.local_id,trigger:order.exit_trigger,state:order.status});}
-      for(const fill of broker.fills(fillCount))activity(event.at,'FILL',`${fill.symbol} ${fill.action} ${fill.shares} 股 @ ${fill.price} · 手續費 ${fill.fee} · 稅 ${fill.tax}`,{symbols:[fill.symbol],order_id:fill.order_id,trigger:fill.exit_trigger});
+        for(const order of changed)activity(event.at,changes.find(c=>c.order.local_id===order.local_id)!.created?'SUBMISSION':'RECONCILE',`${order.symbol} ${order.action} ${order.filled}/${order.shares} 股 · ${order.status} · 限價 ${order.limit_price}`,{symbols:[order.symbol],order_id:order.local_id,trigger:order.exit_trigger,state:order.status,details:{order}});}
+      for(const fill of broker.fills(fillCount))activity(event.at,'FILL',`${fill.symbol} ${fill.action} ${fill.shares} 股 @ ${fill.price} · 手續費 ${fill.fee} · 稅 ${fill.tax}`,{symbols:[fill.symbol],order_id:fill.order_id,trigger:fill.exit_trigger,details:{fill}});
       for(const [symbol,state] of engine.decisionStates)if(decisionsBefore.get(symbol)!==state.state+':'+state.reason)
         activity(event.at,'SIGNAL_STATE',`${symbol} ${state.state}：${state.reason}`,{symbols:[symbol],state:state.state});
       for(const [symbol,state] of engine.decisionStates)if(state.state==='BLOCKED'&&decisionsBefore.get(symbol)!==state.state+':'+state.reason)
@@ -338,8 +341,8 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     const returns=daily.map((row,i)=>Number(row.equity)/Number(i?daily[i-1]!.equity:request.initial_cash)-1),mean=returns.reduce((a,b)=>a+b,0)/Math.max(1,returns.length);
     const sd=returns.length>1?Math.sqrt(returns.reduce((a,b)=>a+(b-mean)**2,0)/(returns.length-1)):0;
     const breachDays=daily.filter(row=>store.get('daily_loss_breached_'+row.day)).map(row=>row.day);
-    return {version:'0.2.3',entry_diagnostics:entryDiagnostics.report(store.orders()),final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
-      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:'active-entry-feedback-v7',
+    return {version:'0.2.5',build:buildIdentity(),entry_diagnostics:entryDiagnostics.report(store.orders()),final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
+      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'compact-observations-v1':'active-entry-feedback-v7',
       settings:reportSettings,
       metrics:{initial_cash:request.initial_cash,final_cash:account.cash,settlement_credits:account.settlement_credits,stock_value:marketValue(account).toFixed(2),
         final_equity:final.toFixed(2),net_pnl:final.minus(request.initial_cash).toFixed(2),return_pct:final.div(request.initial_cash).minus(1).times(100).toFixed(4),

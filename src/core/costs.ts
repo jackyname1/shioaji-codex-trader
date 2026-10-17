@@ -23,13 +23,25 @@ export function roundTripEstimate(shares:number,buyPrice:string,targetPrice:stri
     estimated_gap_loss:gapLoss.toFixed(),slippage_fraction:s.risk_slippage_fraction,
     estimated_reward_risk:reward!==null&&loss?.gt(0)?reward.div(loss).toFixed():null};
 }
-export function entryRiskIssues(shares:number,price:string,smart:SmartSpec|undefined,a:Account,s:Settings):string[]{
+export function entryRiskIssues(shares:number,price:string,smart:SmartSpec|undefined,a:Account,s:Settings,symbol?:string):string[]{
   const checkStop=d(s.max_trade_risk_fraction).gt(0);
   if(!checkStop&&!d(s.max_gap_risk_fraction).gt(0))return [];
   if(checkStop&&(!smart||!d(smart.stop_price).lt(price)))return ['進場停損資料不足或不合法'];
   const estimate=roundTripEstimate(shares,price,rewardTarget(smart),s,smart?.stop_price??null);
   const issues=checkStop&&d(estimate.estimated_stop_loss!).gt(equity(a).times(s.max_trade_risk_fraction))?['超過單筆停損風險預算（含費稅與滑價）']:[];
   if(d(s.max_gap_risk_fraction).gt(0)&&d(estimate.estimated_gap_loss).gt(equity(a).times(s.max_gap_risk_fraction)))issues.push('超過隔夜跳空壓力風險預算');
+  const held=symbol?a.positions.find(p=>p.symbol===symbol&&p.shares>0):undefined;
+  if(held&&smart){
+    const quantity=shares+held.shares,entry=d(price).times(shares);
+    const basis=d(held.cost_basis??d(held.average_price).times(held.shares).plus(fee(d(held.average_price).times(held.shares),s)).toFixed()).plus(entry).plus(fee(entry,s));
+    const exit=d(smart.stop_price).times(d(1).minus(s.risk_slippage_fraction)).times(quantity);
+    const totalLoss=Decimal.max(0,basis.minus(exit).plus(fee(exit,s)).plus(exit.times(s.sell_tax_rate).ceil()));
+    if(checkStop&&totalLoss.gt(equity(a).times(s.max_trade_risk_fraction)))issues.push('加碼後合併持倉超過停損風險預算（含既有成本）');
+    const marked=d(held.last_price).times(held.shares).plus(entry);
+    const gapProceeds=marked.times(d(1).minus(s.overnight_gap_fraction)).times(d(1).minus(s.risk_slippage_fraction));
+    const combinedGap=marked.minus(gapProceeds).plus(fee(entry,s)).plus(fee(gapProceeds,s)).plus(gapProceeds.times(s.sell_tax_rate).ceil());
+    if(d(s.max_gap_risk_fraction).gt(0)&&combinedGap.gt(equity(a).times(s.max_gap_risk_fraction)))issues.push('加碼後合併持倉超過隔夜跳空壓力預算');
+  }
   return issues;
 }
 export function entryQualityIssues(shares:number,price:string,smart:SmartSpec|undefined,s:Settings):string[]{
