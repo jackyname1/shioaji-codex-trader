@@ -16,6 +16,7 @@ const bridge: TraderBridge = {
   selectFile: kind => ipcRenderer.invoke('trader:file',kind),
   connectApi: input => ipcRenderer.invoke('trader:connect-api',input),
   connectSaved: () => ipcRenderer.invoke('trader:connect-saved'),
+  repairLoginTime: input => ipcRenderer.invoke('trader:repair-login-time',input),
   forgetCredentials: () => ipcRenderer.invoke('trader:forget-credentials'),
   savedConnection:()=>ipcRenderer.invoke('trader:saved-connection'),
   simulationScope:scope=>ipcRenderer.invoke('trader:simulation-scope',scope),

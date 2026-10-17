@@ -23,6 +23,7 @@ import { experienceStatus } from '../core/experience.js';
 import { z } from 'zod';
 import { CredentialVault,CredentialError,NativeConnection,connectionInput,type CredentialState } from './credentials.js';
 import {actualOrdersBlock,reconnectBlocked,connectionView} from './connection-state.js';
+import {activateWindow} from './window-activation.js';
 import {mergeDiagnostics} from '../broker/diagnostics.js';
 import {ConnectionSmoke} from './connection-smoke.js';
 import {openWorkspace,workspaceFailure,WorkspaceProfileError,type WorkspaceDiagnostic} from './workspace-profile.js';
@@ -39,6 +40,7 @@ let window: BrowserWindow | undefined, tray: Tray | undefined, service: TradingS
 let trayTimer:NodeJS.Timeout|undefined,nativeStatusKey='';
 let nativeOverlayClears=0;
 let quitting = false, initialError = '', blocker: number | undefined;
+let foregroundRequested=false;
 const smoke = process.argv.includes('--smoke-test');
 let smokeDeadline:NodeJS.Timeout|undefined;
 let smokeChecksCompleted=false;
@@ -73,7 +75,8 @@ let preferences:{last_mode:Settings['mode'];paper_scope?:'realtime'|'replay';con
 if(process.platform==='win32')app.setAppUserModelId('tw.shioaji.codex.trader');
 if (!smoke&&!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance',() => { window?.show(); window?.focus(); });
+  const foreground=()=>{foregroundRequested=true;activateWindow(window);};
+  app.on('second-instance',foreground);app.on('activate',foreground);
   app.on('window-all-closed',() => { /* tray continues */ });
   app.on('before-quit',event => { if (!quitting) { event.preventDefault(); void exit(); } });
   void app.whenReady().then(async () => {
@@ -105,7 +108,7 @@ else {
     if(saved&&!smoke)try{await operations.run(()=>login(saved));}catch(error){initialError=desktopIssue(error);}
     if(quitting)return;
     if (service?.engine.settings.keep_awake) blocker = powerSaveBlocker.start('prevent-app-suspension');
-    if (service?.engine.settings.start_minimized && tray && !smoke) window!.hide();
+    if (service?.engine.settings.start_minimized && tray && !smoke && nativeConnection.connected && !initialError && !foregroundRequested) window!.hide();
     if (smoke) await smokeTest();
   }).catch(error => {if(smoke){if(smokeDeadline)clearTimeout(smokeDeadline);smokeMark('FAILED',error instanceof Error?error.message:'GUI smoke failed');}
     console.error(smoke ? error : '桌面啟動失敗'); app.exit(1); });
@@ -140,7 +143,7 @@ function desktopIssue(error:unknown):string {
   if(error instanceof Error&&error.message==='這個資料庫已有執行中的程式')return '交易工作台資料庫仍由另一個程式使用，請從系統匣完全結束舊版後重試';
   return brokerIssue(error);
 }
-async function login(input:unknown):Promise<string>{
+async function login(input:unknown,repairClock=false):Promise<string>{
   if(connectionBusy)throw new Error('連線仍在進行');
   if(backtest.progress.running)throw new Error('回測仍在執行，請先停止再重新連線');
   const saved=await vault.read(),validated=connectionInput(input,saved);
@@ -154,7 +157,7 @@ async function login(input:unknown):Promise<string>{
     try{await vault.save(validated);}finally{credentialState=await vault.status();}
     loginStage='正在準備交易工作台';await connect(mode,settings,false);
     if(!service)throw new BrokerError(initialError||'交易工作台尚未建立');
-    loginStage='';await nativeConnection.start(validated);
+    loginStage='';await nativeConnection.start(validated,repairClock);
     loginStage='正在載入帳務與行情';await connect(mode,settings);
     if(!service?.engine.connected)throw new BrokerError(initialError||service?.engine.dataIssue||'交易工作台尚未完成連線');
     return validated.remember?'Shioaji 已連線，登入設定已保存':'Shioaji 已連線，本次設定未保存';
@@ -199,7 +202,7 @@ function updateNativeStatus():void {
   if(process.platform==='win32')window?.setOverlayIcon(null,'');
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:`${workspace} · ${activity}`,enabled:false},{type:'separator'},
-    {label:'開啟交易工作台',click:()=>{window?.show();window?.focus();}},
+    {label:'開啟交易工作台',click:()=>{foregroundRequested=true;activateWindow(window);}},
     {label:paused?'恢復新增買進':'暫停新增買進',enabled:!replay&&!stopped,click:()=>void service?.command(paused?'resume':'pause').catch(()=>undefined)},
     {label:'停止全部新委託',enabled:!replay,click:()=>{liveActionEpoch++;void service?.command('stop').catch(()=>undefined);}},
     {type:'separator'},{label:'結束程式',click:()=>void exit()},
@@ -208,8 +211,8 @@ function updateNativeStatus():void {
 function createTray(): void {
   try {
     tray = new Tray(trayIcon());updateNativeStatus();trayTimer=setInterval(updateNativeStatus,1000);
-    tray.on('click',() => { window?.show(); window?.focus(); });
-    tray.on('double-click',() => { window?.show(); window?.focus(); });
+    tray.on('click',() => { foregroundRequested=true;activateWindow(window); });
+    tray.on('double-click',() => { foregroundRequested=true;activateWindow(window); });
   } catch { tray = undefined; /* When no system tray is available, closing the window is a real exit. */
     window?.on('closed',() => void exit()); }
 }
@@ -364,6 +367,10 @@ function registerIpc(): void {
   });
   const apiConnect=(input:unknown):Promise<string>=>operations.run(()=>login(input));
   handle('trader:connect-api',apiConnect);
+  handle('trader:repair-login-time',input=>operations.run(()=>{
+    if(nativeConnection.connected||nativeConnection.diagnostics().startup?.code!=='SIGN_TIME')throw new BrokerError('目前沒有需要修復的登入簽章時間錯誤');
+    return login(input,true);
+  }));
   handle('trader:connect-saved',async()=>{const input=await vault.read();if(!input)throw new Error('尚未記住 API 金鑰');return apiConnect(input);});
   handle('trader:forget-credentials',()=>operations.run(async()=>{await vault.clear();credentialState=await vault.status();return '已移除記住的金鑰與憑證設定';}));
   handle('trader:chart',async value=>{
@@ -741,6 +748,9 @@ async function smokeTest(): Promise<void> {
   }
   const before = window.isVisible(); window.hide(); if (window.isVisible()) throw new Error('隱藏測試失敗');
   window.show(); if (before && !window.isVisible()) throw new Error('重開測試失敗');
+  window.minimize();await new Promise(resolve=>setTimeout(resolve,200));activateWindow(window);
+  await new Promise(resolve=>setTimeout(resolve,200));
+  if(window.isMinimized()||!window.isVisible())throw new Error('縮到系統匣後未能還原視窗');
   for(const status of ['ready','active','paused','offline'])if(trayIcon(status).isEmpty())throw new Error('原生狀態圖示未打包');
   if(process.platform==='win32'&&(nativeOverlayClears<2||nativeImage.createFromPath(join(directory,'assets/app.ico')).isEmpty()))throw new Error('Windows 固定主圖示與不重疊狀態驗證未通過');
   console.log('Electron single workspace at 1366/1600/1920, realtime paper/replay/live, complete model journal, masked saved credentials, built-in Shioaji, chart gestures and native status icons: PASS');
@@ -780,6 +790,16 @@ async function verifyConnectionLifecycle():Promise<void>{
     ||current.broker_diagnostics.startup.process_exit_code!==17||JSON.stringify(current.broker_diagnostics).includes('SYNTHETIC_'))
     throw new Error('Native process failure lost its safe classification, exit code or saved login');
   await captureConnection('SYNTHETIC-ui-native-login-failure.png');
+  if(!await js('!document.querySelector("#repair-login-time").hidden && !document.querySelector("#connection-status").textContent.includes("CA")'))throw new Error('Signing repair is missing or failed login still claims a CA problem');
+  await js('document.querySelector("#repair-login-time").click()');
+  await wait('window.trader.state().then(s=>s.connected)');
+  await wait('!document.querySelector("#settings-dialog").open');
+  current=await state();if(fixture.clockRepairs!==2||fixture.mutations||current.broker_diagnostics?.startup?.code
+    ||current.broker_diagnostics?.startup?.clock_repair!=='synced')throw new Error('One-click signing repair did not recover safely');
+  // Force a cold connection for the following production-environment validation.
+  await nativeConnection.close();
+  await js('document.querySelector("#open-settings").click()');
+  await wait('document.querySelector("#settings-dialog").open');
   fixture.nativeFailure=false;fixture.simulation=true;
   await js('document.querySelector("#connect-saved").click()');
   await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("未取得正式行情")');

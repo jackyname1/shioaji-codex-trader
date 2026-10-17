@@ -9,6 +9,7 @@ import { brokerOrigin } from './broker-runtime.js';
 import { BrokerHealthSchema, marketReady,BrokerError } from '../broker/health.js';
 import {RequestDiagnostics,type BrokerDiagnostics} from '../broker/diagnostics.js';
 import {NativeStartup} from './native-startup.js';
+import {repairWindowsClock,type ClockRepair,type ClockRepairResult} from './clock-repair.js';
 
 export const ConnectionInputSchema = z.strictObject({
   api_key: z.string().trim().min(1).max(4096), secret_key: z.string().trim().min(1).max(4096),
@@ -79,25 +80,28 @@ export class NativeConnection {
   private signature='';private identity='';private version:string|null=null;private health?:z.infer<typeof BrokerHealthSchema>;
   private caIssue='';
   private startup=new NativeStartup();private caFallback=false;private healthMalformed=false;
+  private clockRepair:ClockRepair;private clockResult?:ClockRepairResult;private clockRetried=false;
   private records=new RequestDiagnostics(Date.now);
   private readonly timeoutMs:number;private readonly pollMs:number;
   private run: Execute; private fetcher: typeof fetch; private launch: typeof spawn; private origin: () => Promise<string>;
   constructor(readonly root: string, private binary: () => Promise<string>, dependencies: {
-    run?: Execute; fetcher?: typeof fetch; launch?: typeof spawn; origin?: () => Promise<string>;timeoutMs?:number;pollMs?:number;
+    run?: Execute; fetcher?: typeof fetch; launch?: typeof spawn; origin?: () => Promise<string>;timeoutMs?:number;pollMs?:number;repairClock?:ClockRepair;
   } = {}) { this.run = dependencies.run ?? execute; this.fetcher = dependencies.fetcher ?? fetch;
     this.launch = dependencies.launch ?? spawn; this.origin = dependencies.origin ?? brokerOrigin;
-    this.timeoutMs=dependencies.timeoutMs??90000;this.pollMs=dependencies.pollMs??300; }
+    this.timeoutMs=dependencies.timeoutMs??90000;this.pollMs=dependencies.pollMs??300;this.clockRepair=dependencies.repairClock??repairWindowsClock; }
   get connected(): boolean { return this.healthy && !!this.owned && this.owned.exitCode === null; }
   get hasLoginIdentity():boolean{return !!this.identity;}
   sameLogin(input:ConnectionInput):boolean{return this.identity===createHash('sha256').update(JSON.stringify([input.api_key,input.secret_key])).digest('hex');}
   diagnostics():BrokerDiagnostics{return {version:this.version,stream_connected:false,generation:0,trade_cache:null,
     ...(this.health?{health:this.health}:{}),startup:{phase:this.phase,issue:this.phase==='failed'?this.status:this.caIssue,
-      code:this.startup.code,elapsed_ms:this.startup.elapsedMs,process_exit_code:this.startup.exitCode,process_signal:this.startup.signal,ca_fallback:this.caFallback},endpoints:this.records.snapshot()};}
-  async start(raw: unknown): Promise<ConnectionInput> {
+      code:this.startup.code,elapsed_ms:this.startup.elapsedMs,process_exit_code:this.startup.exitCode,process_signal:this.startup.signal,ca_fallback:this.caFallback,
+      clock_repair:this.clockResult,clock_retry:this.clockRetried},endpoints:this.records.snapshot()};}
+  async start(raw: unknown,repairClock=false): Promise<ConnectionInput> {
     const input = ConnectionInputSchema.parse(raw);
+    if(repairClock&&(this.connected||this.startup.code!=='SIGN_TIME'))throw new BrokerError('目前沒有需要修復的登入簽章時間錯誤');
     const signature=createHash('sha256').update(JSON.stringify([input.api_key,input.secret_key,input.ca_path,input.ca_password])).digest('hex');
     if(this.connected&&!this.caFallback&&this.signature===signature&&await this.available(this.baseUrl)&&this.connected)return input;
-    let stage='CA',effective=input;this.caIssue='';this.caFallback=false;this.startup=new NativeStartup();
+    let stage='CA',effective=input,clockAttempted=repairClock;this.caIssue='';this.caFallback=false;this.startup=new NativeStartup();this.clockResult=undefined;this.clockRetried=false;
     try {
     if (input.ca_path) {
       const file = await stat(input.ca_path).catch(() => undefined);
@@ -106,6 +110,12 @@ export class NativeConnection {
       }
     }
     await this.close();this.resetHealth();
+    if(repairClock){
+      this.stop=new AbortController();const signal=this.stop.signal;this.phase='authenticating';this.status='正在修復登入時間，Windows 可能要求允許校時';stage='clock';
+      this.clockResult=await this.clockRepair(true);signal.throwIfAborted();
+      if(this.clockResult!=='synced'){this.startup.code='SIGN_TIME';this.status=this.clockResult==='cancelled'?'已取消 Windows 校時；登入設定仍保留':'Windows 校時未完成；登入設定仍保留，請稍後再試';throw new Error('Clock repair failed');}
+      this.clockRetried=true;
+    }
     this.phase='starting';this.status='正在啟動內建 Shioaji';stage='runtime';
     const binary = await this.binary(); this.baseUrl = await this.origin(); const url = new URL(this.baseUrl), port = url.port;
     if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !port) throw new Error('無法建立內建 Shioaji 連線');
@@ -114,7 +124,7 @@ export class NativeConnection {
     this.status = '正在登入 Shioaji，等待行情服務就緒';
       const help = await this.run(binary, ['server', 'start', '--help'], { ...options, env: brokerEnvironment(process.env, { ...input, api_key: '', secret_key: '', ca_path: '', ca_password: '' }) });
       if (!help.stdout.includes('--no-open')) throw new Error('版本不支援');
-      for(let attempt=0;;attempt++) {
+      for(;;) {
       this.stop=new AbortController();const startup=this.startup=new NativeStartup();
       const env={...brokerEnvironment(process.env,effective),SJ_HTTP_ADDR:'127.0.0.1:'+port,SJ_HOME_PATH:this.root,SJ_HTTP_LOG:'false',SJ_HTTP_CORS:'false',SJ_UDS_DISABLE:'true'};
       const child=this.launch(binary,['server','start','--no-open','--production'],{cwd:this.root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
@@ -126,8 +136,8 @@ export class NativeConnection {
         if(this.phase==='ready'){this.phase='failed';this.status=startup.failure('PROCESS_EXIT');}}});
       stage='login';this.phase='authenticating';this.status='正在登入 Shioaji，等待行情服務就緒';
       try {
-      const deadline=Date.now()+this.timeoutMs; let ready=false;
-      while(Date.now()<deadline) { this.stop.signal.throwIfAborted();if(failed)throw new Error('啟動失敗');if (await this.available(this.baseUrl)) {ready=true;break;} await delay(this.pollMs,undefined,{signal:this.stop.signal}); }
+      const deadline=performance.now()+this.timeoutMs; let ready=false;
+      while(performance.now()<deadline) { this.stop.signal.throwIfAborted();if(failed)throw new Error('啟動失敗');if (await this.available(this.baseUrl)) {ready=true;break;} await delay(this.pollMs,undefined,{signal:this.stop.signal}); }
       this.stop.signal.throwIfAborted(); if(failed)throw new Error('啟動失敗');
       if(!ready)throw new Error('登入逾時');
       stage='info';const info = z.object({ simulation: z.literal(false),version:z.string().optional() }).parse(await this.read('/info',8000));
@@ -136,11 +146,20 @@ export class NativeConnection {
       this.healthy=true;this.hasCa=!!effective.ca_path&&this.health?.ca_expired===false;
       this.signature=signature;this.version=info.version&&/^[\d.]+(?:[-\w.]*)$/.test(info.version)?info.version:null;
       this.identity=createHash('sha256').update(JSON.stringify([input.api_key,input.secret_key])).digest('hex');
-      this.startup.discard();this.phase='ready';this.status = 'Shioaji 已連線 · 真實行情'; return input;
+      this.startup.ready();this.phase='ready';this.status = 'Shioaji 已連線 · 真實行情'; return input;
       } catch(error) {
+        // Repair only a confirmed native signing error, once. Never retry orders,
+        // rejected credentials, unknown exits or a second signing failure.
+        if(this.startup.code==='SIGN_TIME'&&!clockAttempted&&!this.stop.signal.aborted){
+          const signal=this.stop.signal;clockAttempted=true;this.status='正在恢復 Shioaji 登入時間';
+          this.clockResult=await this.clockRepair(false);signal.throwIfAborted();
+          if(this.clockResult==='synced'){
+            await this.close();this.resetHealth();this.clockRetried=true;continue;
+          }
+        }
         // Only an explicit native CA error permits one retry without the optional CA.
         // Keep saved credentials intact and never claim trading readiness after this fallback.
-        if(attempt===0&&effective.ca_path&&this.startup.caFailure&&!this.stop.signal.aborted) {
+        if(!this.caFallback&&effective.ca_path&&this.startup.caFailure&&!this.stop.signal.aborted) {
           this.caIssue=this.startup.failure('CA_INVALID')+'；已停用本次 CA，行情與帳務仍可登入，實盤需重新核對有效 CA';
           await this.close();effective={...effective,ca_path:'',ca_password:''};this.caFallback=true;this.resetHealth();continue;
         }

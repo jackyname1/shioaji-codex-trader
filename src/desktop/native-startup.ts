@@ -4,7 +4,7 @@ const issues = {
   CA_PASSWORD: 'CA 憑證密碼不符，請重新輸入憑證密碼',
   CA_EXPIRED: 'CA 憑證已到期，請更新憑證',
   CA_INVALID: 'CA 憑證無法載入，請重新選取有效憑證',
-  SIGN_TIME: 'Shioaji 登入簽章逾時，請同步 Windows 日期與時間後重試',
+  SIGN_TIME: 'Shioaji 登入簽章未通過時間驗證，可按「校時並重新登入」修復',
   AUTH_REJECTED: 'Shioaji 拒絕登入，請核對 API 金鑰、正式環境權限及允許的 IP',
   PUBLIC_IP: 'Shioaji 無法取得對外 IP，請檢查網路及代理設定後重試',
   SESSION_BUSY: 'Shioaji 登入工作階段仍被使用，請從系統匣完全結束舊版及其他 Shioaji 程式後重試',
@@ -40,7 +40,7 @@ export class NativeStartup {
   code?: NativeFailureCode;
   exitCode: number|null = null;
   signal: string|null = null;
-  readonly startedAt = Date.now();
+  readonly startedAt = performance.now();
   elapsedMs = 0;
   consume(channel: string, chunk: Uint8Array|string): void {
     // Bounded independently per pipe, including when an error is split between chunks.
@@ -52,7 +52,8 @@ export class NativeStartup {
     this.exitCode = Number.isSafeInteger(code) ? code : null;
     this.signal = signal && ['SIGTERM','SIGKILL','SIGABRT','SIGSEGV','SIGILL','SIGINT'].includes(signal) ? signal : null;
   }
-  discard(): void { this.buffers.clear(); this.elapsedMs = Date.now() - this.startedAt; }
+  discard(): void { this.buffers.clear(); this.elapsedMs = Math.round(performance.now() - this.startedAt); }
+  ready(): void {this.discard();this.code=undefined;this.exitCode=null;this.signal=null;}
   get caFailure(): boolean { return !!this.code?.startsWith('CA_'); }
   failure(fallback: NativeFailureCode, health?: BrokerHealth): string {
     this.code ??= fallback==='PROCESS_START'||fallback==='PROCESS_EXIT' ? fallback : health?.session_recovering ? 'SESSION_RECOVERING'

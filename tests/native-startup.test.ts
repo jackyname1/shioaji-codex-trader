@@ -3,18 +3,22 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {spawn,type SpawnOptions} from 'node:child_process';
+import {spawn,spawnSync,type SpawnOptions} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {NativeConnection,ConnectionInputSchema} from '../src/desktop/credentials.js';
 import {NativeStartup} from '../src/desktop/native-startup.js';
+import {clockRepairCommand,type ClockRepair} from '../src/desktop/clock-repair.js';
+import {activateWindow} from '../src/desktop/window-activation.js';
+import {connectionLabel} from '../src/desktop/connection-state.js';
 
 const input=ConnectionInputSchema.parse({api_key:'SYNTHETIC_PRIVATE_KEY',secret_key:'SYNTHETIC_PRIVATE_SECRET'});
 const root=()=>mkdtempSync(join(tmpdir(),'native-startup-'));
-function fixture(folder:string,options:{output?:string;failures?:number;health?:object;http?:number;spawnError?:boolean}={}) {
+function fixture(folder:string,options:{output?:string;failures?:number;health?:object;http?:number;spawnError?:boolean;repairClock?:ClockRepair}={}) {
   let launches=0;const children:ReturnType<typeof spawn>[]=[];const environments:NodeJS.ProcessEnv[]=[];
   const native=new NativeConnection(folder,async()=>'/SYNTHETIC/native',{
     origin:async()=>'http://127.0.0.1:19998',run:async()=>({stdout:'--no-open'}),pollMs:1,timeoutMs:60,
+    repairClock:options.repairClock??(async()=> 'unsupported'),
     launch:((_binary:string,_args:readonly string[],opts:Parameters<typeof spawn>[2])=>{
       launches++;environments.push(opts?.env??{});
       const child=Object.assign(new EventEmitter(),{exitCode:null as number|null,signalCode:null as string|null,stdout:new PassThrough(),stderr:new PassThrough(),
@@ -109,4 +113,79 @@ test('a service exit after readiness clears connectivity and only exports a know
     assert.equal(f.native.diagnostics().startup?.code,'PROCESS_EXIT');assert.equal(f.native.diagnostics().startup?.process_signal,'SIGTERM');
     const startup=new NativeStartup();startup.exited(null,'SYNTHETIC_PRIVATE_SIGNAL');assert.ok(!startup.failure('PROCESS_EXIT').includes('SYNTHETIC_'));
   }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
+});
+
+test('a confirmed signing failure resynchronizes once and starts a fresh native session with the original CA',async()=>{
+  const folder=root(),path=join(folder,'SYNTHETIC.pfx');writeFileSync(path,'synthetic certificate');let repairs=0;
+  const f=fixture(folder,{output:'Sign data is timeout',failures:1,repairClock:async elevated=>{assert.equal(elevated,false);repairs++;return 'synced';}});
+  try{
+    await f.native.start({...input,ca_path:path,ca_password:'SYNTHETIC_CA'});
+    assert.equal(f.launches,2);assert.equal(repairs,1);assert.equal(f.native.connected,true);assert.equal(f.native.hasCa,true);
+    assert.equal(f.environments[1]?.SJ_CA_PATH,path);assert.equal(f.native.diagnostics().startup?.clock_retry,true);
+    assert.equal(f.native.diagnostics().startup?.clock_repair,'synced');assert.equal(f.native.diagnostics().startup?.code,undefined);
+  }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
+});
+test('failed time repair and repeated signing errors stop without a login loop or discarded CA',async()=>{
+  for(const result of ['synced','denied','cancelled','timeout','failed'] as const){
+    const folder=root();let repairs=0;
+    const f=fixture(folder,{output:'Sign data is timeout',failures:10,repairClock:async()=>{repairs++;return result;}});
+    try{
+      await assert.rejects(f.native.start(input),/SIGN_TIME/);assert.equal(repairs,1);
+      assert.equal(f.launches,result==='synced'?2:1);assert.equal(f.native.connected,false);
+      assert.equal(f.native.diagnostics().startup?.clock_repair,result);
+      assert.equal(f.native.diagnostics().startup?.clock_retry,result==='synced');
+    }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
+  }
+});
+test('elevated repair requires an observed signing failure and never reuses a cancelled request',async()=>{
+  const folder=root();let repairs=0;
+  const f=fixture(folder,{output:'Sign data is timeout',failures:1,repairClock:async elevated=>{repairs++;return elevated?'synced':'denied';}});
+  try{
+    await assert.rejects(f.native.start(input,true),/目前沒有/);assert.equal(repairs,0);
+    await assert.rejects(f.native.start(input),/SIGN_TIME/);assert.equal(repairs,1);
+    await f.native.start(input,true);assert.equal(repairs,2);assert.equal(f.launches,2);assert.equal(f.native.connected,true);
+    await assert.rejects(f.native.start(input,true),/目前沒有/);assert.equal(repairs,2);
+  }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
+  const cancelled=root();let resolveRepair!:(value:'synced')=>void,started!:()=>void;
+  const startedRepair=new Promise<void>(resolve=>{started=resolve;});
+  const pending=fixture(cancelled,{output:'Sign data is timeout',failures:1,repairClock:()=>new Promise(resolve=>{resolveRepair=resolve;started();})});
+  try{
+    const login=pending.native.start(input);const rejected=assert.rejects(login);
+    await startedRepair;await pending.native.close();resolveRepair('synced');await rejected;
+    assert.equal(pending.launches,1);assert.equal(pending.native.connected,false);
+  }finally{await pending.native.close();rmSync(cancelled,{recursive:true,force:true});}
+});
+test('time repair is never attempted for other startup failures',async()=>{
+  for(const output of ['invalid api key','Ca Password Incorrect','Unknown native failure']){
+    const folder=root(),f=fixture(folder,{output,failures:1,repairClock:async()=>{throw new Error('Time repair must not run');}});
+    try{await assert.rejects(f.native.start(input));assert.equal(f.launches,1);assert.equal(f.native.diagnostics().startup?.clock_repair,undefined);}
+    finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
+  }
+});
+test('recovered startup messages cannot misclassify a later exit or a failed login as a CA fault',()=>{
+  const startup=new NativeStartup();startup.consume('stderr','Sign data is timeout');startup.ready();startup.exited(1,null);
+  assert.match(startup.failure('PROCESS_EXIT'),/PROCESS_EXIT/);assert.equal(startup.code,'PROCESS_EXIT');
+  assert.equal(connectionLabel({status:'SIGN_TIME',has_ca:false,server_ready:false}),'SIGN_TIME');
+  assert.match(connectionLabel({status:'已連線',has_ca:false,server_ready:true}),/實盤委託需有效 CA/);
+  const calls:string[]=[];activateWindow({isDestroyed:()=>false,isMinimized:()=>true,restore:()=>calls.push('restore'),show:()=>calls.push('show'),focus:()=>calls.push('focus')});
+  assert.deepEqual(calls,['restore','show','focus']);
+});
+test('Windows clock repair uses only fixed system commands, with elevation confined to explicit repair',()=>{
+  const basic=clockRepairCommand('C:\\Windows',false);assert.deepEqual(basic.args,['/resync','/rediscover']);assert.match(basic.binary,/System32\\w32tm.exe$/);
+  const elevated=clockRepairCommand('C:\\Windows',true),script=Buffer.from(elevated.args.at(-1)!,'base64').toString('utf16le');
+  assert.match(script,/-Verb RunAs/);assert.match(script,/-Wait -PassThru/);assert.doesNotMatch(script,/SJ_|API_KEY|SEC_KEY|ExecutionPolicy|cmd.exe/);
+  assert.throws(()=>clockRepairCommand('relative',true));
+});
+test('Windows PowerShell parses both repair scripts and preserves success, failure and UAC cancellation',{skip:process.platform!=='win32'},()=>{
+  const command=clockRepairCommand(process.env.SystemRoot??'C:\\Windows',true);
+  const outer=Buffer.from(command.args.at(-1)!,'base64').toString('utf16le');
+  const innerEncoded=outer.match(/'-EncodedCommand','([A-Za-z0-9+/=]+)'/)![1]!;
+  const inner=Buffer.from(innerEncoded,'base64').toString('utf16le');
+  const parse=(script:string)=>`$t=$null;$e=$null;[void][System.Management.Automation.Language.Parser]::ParseInput([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${Buffer.from(script,'utf16le').toString('base64')}')),[ref]$t,[ref]$e);if($e.Count){exit 99};`;
+  for(const code of [0,1,1223]){
+    const mock=`function Start-Process { param($FilePath,$ArgumentList,$Verb,[switch]$Wait,[switch]$PassThru) if($Verb -ne 'RunAs' -or !$Wait -or !$PassThru){throw 'Invalid repair launch'}; ${code===1223?'throw [ComponentModel.Win32Exception]::new(1223)':`[pscustomobject]@{ExitCode=${code}}`} };`;
+    const script=parse(outer)+parse(inner)+mock+outer;
+    const r=spawnSync(command.binary,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8',timeout:15000,windowsHide:true});
+    assert.equal(r.status,code,r.stderr);
+  }
 });
