@@ -46,6 +46,7 @@ export interface TraderBridge {
   selectFile(kind:'ca'):Promise<string>;
   connectApi(input:ConnectionInput):Promise<string>;
   connectSaved():Promise<string>;
+  repairLoginTime(input:ConnectionInput):Promise<string>;
   forgetCredentials():Promise<string>;
   savedConnection():Promise<ConnectionInput|null>;
   simulationScope(scope:'realtime'|'replay'):Promise<string>;

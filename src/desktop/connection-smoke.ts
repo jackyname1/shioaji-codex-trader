@@ -9,9 +9,10 @@ import type {TradingService} from '../core/service.js';
 
 /** Used only by --smoke-test. Every request and process is isolated; live mutations are rejected. */
 export class ConnectionSmoke {
-  simulation=false;failWorkspace=false;nativeFailure=false;launches=0;mutations=0;
+  simulation=false;failWorkspace=false;nativeFailure=false;launches=0;mutations=0;clockRepairs=0;
   native(root:string):NativeConnection{return new NativeConnection(root,async()=>'/SYNTHETIC/native',{
     origin:async()=>'http://127.0.0.1:19099',run:async()=>({stdout:'--no-open --production'}),
+    repairClock:async elevated=>{this.clockRepairs++;if(elevated){this.nativeFailure=false;return 'synced';}return 'denied';},
     launch:((_:string,args:readonly string[])=>{if(!args.includes('--production'))throw new Error('Production market flag is missing');this.launches++;
       const child=Object.assign(new EventEmitter(),{exitCode:null as number|null,stderr:new PassThrough(),stdout:new PassThrough(),kill:()=>true});
       child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit',0,null));return true;};

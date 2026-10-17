@@ -1,5 +1,9 @@
 import type {Settings} from '../core/models.js';
 
+export function connectionLabel(connection:{status:string;server_ready?:boolean;has_ca:boolean}):string {
+  return connection.status+(connection.server_ready?' · '+(connection.has_ca?'CA 已載入':'實盤委託需有效 CA'):'');
+}
+
 export function actualOrdersBlock(mode:Settings['mode'],pending:boolean):boolean {
   return !['paper','demo'].includes(mode)&&pending;
 }

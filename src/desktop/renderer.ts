@@ -1,3 +1,4 @@
+import {connectionLabel} from './connection-state.js';
 import {replayDisplayTime} from './replay-time.js';
 import type {ReplayClockState} from '../core/replay-clock.js';
 import type { DesktopState,TraderBridge } from './shared.js';
@@ -126,7 +127,7 @@ function renderRuntime(state:DesktopState):void {
   const accountOnly=state.connection.phase==='read_only';
   el('connection-dot').classList.toggle('connected',state.connected&&!accountOnly);el('connection-dot').classList.toggle('pending',accountOnly||!!state.connection.server_ready&&!state.connected||state.connection.busy);
   text('sidebar-connection',state.connection.busy?'連線中':accountOnly?'帳務可讀 · 委託暫停':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
-  text('connection-status',`${state.connection.status} · ${state.connection.has_ca?'CA 已載入':'實盤委託需有效 CA'}`);
+  text('connection-status',connectionLabel(state.connection));
   text('runtime-workspace-name',simulationView(state)?paper?'歷史回放 · 當時行情':'即時模擬 · 虛擬資金':'正式交易 · 真實帳戶');
   text('runtime-orders-title',simulationView(state)?'模擬委託與成交':'未完成委託');
   el('live-authorization').hidden=simulationView(state);text('live-account',state.live.account);text('live-settings-status',state.live.issues.join('；'));
@@ -376,7 +377,9 @@ function renderExtras(state:DesktopState):void {
     el<HTMLInputElement>(id).placeholder=state.connection.remembered?'已保存，留空沿用原設定':id==='api-key'?'輸入 API Key':'輸入 Secret Key';}
   // Keep the user's choice. A transient encryption failure must not silently turn "remember" off.
   el<HTMLInputElement>('remember-keys').disabled=state.connection.busy;
-  el<HTMLButtonElement>('connect-saved').disabled=!state.connection.remembered;
+  el<HTMLButtonElement>('connect-saved').disabled=!state.connection.remembered||state.connection.busy;
+  el<HTMLButtonElement>('repair-login-time').hidden=state.broker_diagnostics?.startup?.code!=='SIGN_TIME'||!!state.connection.server_ready;
+  el<HTMLButtonElement>('repair-login-time').disabled=state.connection.busy;
   const auth=state.codex_auth;
   text('codex-auth-state',auth.testing?'測試中':auth.test_state==='failed'?'連線待修復':auth.state==='ready'?(auth.test_state==='connected'?'連線成功':'已登入'):auth.state==='pending'?'登入中':auth.state==='checking'?'檢查中':'未登入');
   text('codex-login',auth.state==='ready'?'重新登入':'登入');
@@ -577,6 +580,10 @@ el<HTMLFormElement>('connection-form').addEventListener('submit',e=>{e.preventDe
     if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;
   }finally{el<HTMLButtonElement>('connect-api').disabled=false;}
 });});
+el('repair-login-time').addEventListener('click',()=>void run(async()=>{
+  const result=await window.trader.repairLoginTime({api_key:value('api-key'),secret_key:value('secret-key'),ca_path:value('ca-path'),ca_password:value('ca-password'),remember:checked('remember-keys')});
+  connectionDirty=false;await loadSavedConnection(true);if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;
+}));
 el('connect-saved').addEventListener('click',()=>void run(async()=>{const result=await window.trader.connectSaved();await loadSavedConnection(true);if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;}));el('forget-keys').addEventListener('click',()=>void run(async()=>{
   const result=await window.trader.forgetCredentials();connectionDirty=false;await loadSavedConnection(true);return result;
 }));
