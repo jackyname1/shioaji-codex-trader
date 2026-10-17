@@ -1,5 +1,6 @@
 import {Decimal} from 'decimal.js';
 import {active,d,equity,marketValue,remaining,SettingsSchema,type Account,type Settings} from './models.js';
+import {authorizedRisk} from './risk-policy.js';
 import {fee} from './costs.js';
 
 export function orderBudget(e:Decimal.Value,s:Settings):Decimal{
@@ -22,9 +23,7 @@ export function capitalSnapshot(a:Account,s:Settings){
 }
 export type CapitalSnapshot=ReturnType<typeof capitalSnapshot>;
 export function replayCapitalSettings(base:Settings,profile:'active'|'balanced'|'custom'):Settings{
-  if(profile==='active')return SettingsSchema.parse({...base,order_budget_basis:'EQUITY',max_order_fraction:'0.20',
-    min_cash_fraction:'0.20',max_symbol_fraction:'0.25',max_exposure_fraction:'0.80',max_daily_buy_fraction:'0.60',
-    max_daily_buy_orders:8,target_exposure_fraction:'0.70',min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.0125',watch_max_symbols:16});
-  return profile==='custom'?base:SettingsSchema.parse({...base,order_budget_basis:'EQUITY',max_order_fraction:'0.15',
-    max_daily_buy_fraction:'0.40',target_exposure_fraction:'0.50',min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.01'});
+  // Legacy names remain readable in old exports; neither can expand the authorized envelope.
+  return authorizedRisk(profile==='custom'?base:SettingsSchema.parse({...base,
+    target_exposure_fraction:'0.50',min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.01',watch_max_symbols:profile==='active'?16:base.watch_max_symbols}));
 }

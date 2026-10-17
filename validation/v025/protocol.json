@@ -1,0 +1,66 @@
+{
+  "purpose": "Predeclared research protocol; no parameter winner is automatically promoted",
+  "diagnostic_excluded": [
+    "2026-09-16",
+    "2026-10-16"
+  ],
+  "data": "Dated TWSE daily ALLBUT0999 market cross sections, 2024; prior-session turnover top 40, no fixed symbols",
+  "warmup": [
+    "2024-01-01",
+    "2024-04-30"
+  ],
+  "development": [
+    "2024-05-01",
+    "2024-06-30"
+  ],
+  "walk_forward": [
+    {
+      "prior_development_end": "2024-06-30",
+      "test_start": "2024-07-01",
+      "test_end": "2024-09-30"
+    },
+    {
+      "prior_development_end": "2024-09-30",
+      "test_start": "2024-10-01",
+      "test_end": "2024-12-30"
+    }
+  ],
+  "fitting": "No model or parameter fit, no maximizing diagnostic returns. Expanding pre-test information only; each test fold starts with 100000 TWD.",
+  "baseline": "Pinned v0.2.4 programAnalysis source, unchanged, on common safety-corrected execution and authorized limits. This rules baseline is separate from the uploaded AI-policy trades.",
+  "variants": [
+    "A_original_rules",
+    "B_dd03_cool1",
+    "B_dd03_cool2",
+    "B_dd03_cool3",
+    "B_dd04_cool1",
+    "B_dd04_cool2",
+    "B_dd04_cool3",
+    "B_dd05_cool1",
+    "B_dd05_cool2",
+    "B_dd05_cool3",
+    "C_entry_quality",
+    "C_atr_entries",
+    "D_fixed",
+    "D_atr_trail",
+    "E_research_combined"
+  ],
+  "integration": "E is an explicitly unvalidated combination at predeclared 4%/2-session settings. Production E includes mandatory safety fixes only unless independent evidence supports a feature. All strategy research switches remain OFF.",
+  "entry_score": "Fixed explanatory components (trend25/momentum15/volume10/volatility10/location10/cost20/regime10); score>=50 and explicit vetoes. Not calibrated win probabilities.",
+  "recovery": "Cooldown measured in observed open sessions; drawdown must recover below half trigger; loss streak requires cooldown and TREND proxy.",
+  "matching": "Common daily open/close approximation, next quote only, legal ticks/limits, minimum fee20, fee0.001425, sell tax0.003, T+2 at11:00, no same-day sales; common actual adverse book stress10bps each side, increased to30/50bps in stress cases.",
+  "stress": [
+    "participation0.001",
+    "exit_slippage0.003",
+    "exit_slippage0.005",
+    "5% simultaneous portfolio gap",
+    "10% simultaneous portfolio gap",
+    "missing/locked/corporate-action quotes fail closed"
+  ],
+  "selection_rule": "Report every variant/fold including failures. No return guarantee, no statistically validated winner from two folds. Index benchmark is price-only and not an executable security. No paid AI reasoning trials in this offline run.",
+  "limitations": [
+    "Unadjusted daily data cannot validate intraday or real odd-lot alpha",
+    "TWSE-only identifier filter is not a verified full historical stock master",
+    "No full fundamental/news/attention/disposition history",
+    "An unchanged rules baseline is not an exact rerun of model-selected uploaded trades"
+  ]
+}

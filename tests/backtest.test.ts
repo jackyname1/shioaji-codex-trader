@@ -64,13 +64,13 @@ test('historical features, dynamic rankings and quotes exclude future data at th
   assert.equal(a.quotes(new Date(at.getTime()+1000)).length,0);
 });
 test('daily CSV reveals open at the simulated start and close only at 13:30, using prior volume',async()=>{
-  const data=csvDataset('symbol,date,open,high,low,close,volume_shares,amount_twd\n9001,2026-01-02,29,30,28,29,270000,7800000\n9001,2026-01-05,30,35,25,33,99999999,3200000000');
+  const data=csvDataset('symbol,date,open,high,low,close,volume_shares,amount_twd\n9001,2026-01-02,29,30,28,29,270000,7800000\n9001,2026-01-05,30,31.5,28,31,99999999,3200000000');
   const market=new HistoricalMarket(data,'0.01');await market.subscribe(['9001'],false);
   const q=market.quotes(new Date(start+'T09:10:00+08:00'))[0]!;
   assert.equal(q.last,'30');assert.equal(q.ask_shares,10);
   assert.equal(market.points.find(p=>p.at===q.trade_at)!.amount_twd,undefined);
   assert.equal(market.points.find(p=>p.at==='2026-01-05T05:30:00.000Z')!.amount_twd,'3200000000');
-  assert.equal(market.quotes(new Date(start+'T13:30:00+08:00'))[0]!.last,'33');
+  assert.equal(market.quotes(new Date(start+'T13:30:00+08:00'))[0]!.last,'31');
   assert.equal((await market.history('9001',new Date(start+'T12:00:00+08:00'))).at(-1)!.close,29);
 });
 test('backtest reuses the trading engine, accounts for costs and reconciles realized plus unrealized PnL',async()=>{

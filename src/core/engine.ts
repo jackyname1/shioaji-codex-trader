@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {portfolioDecision,type PortfolioState,type PortfolioDecision} from './portfolio-risk.js';
+import {candidateScore} from './entry-quality.js';
+import {Decimal} from 'decimal.js';
+import {authorizedRisk} from './risk-policy.js';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Risk, alignedPrice, fee } from './risk.js';
@@ -50,7 +54,7 @@ export class Engine {
   private inspectedSymbol='';
   private recent: string[] = [];
   constructor(readonly store: Store, readonly broker: Broker, public settings: Settings, readonly calendar: TradingCalendar) {
-    this.risk = new Risk(settings,calendar); this.plan = store.plan();
+    this.settings=authorizedRisk(settings);this.risk = new Risk(this.settings,calendar); this.plan = store.plan();
     this._entryBlocked=store.get<boolean>('entry_blocked')??false;
     this.watch=store.get<WatchState>('watch_state')??emptyWatch();
     this.pausedEntries = store.get<boolean>('paused_entries') ?? false; this.killed = store.get<boolean>('kill_switch') ?? false;
@@ -73,6 +77,7 @@ export class Engine {
   }
   async close(): Promise<void> { this.connected = false; await this.broker.close(); }
   setSettings(s: Settings): void {
+    s=authorizedRisk(s);
     if (['mode','base_url','stock_account_index'].some(k => s[k as keyof Settings] !== this.settings[k as keyof Settings]))
       throw new Error('交易模式、服務網址及帳戶變更需停止並重啟；不同模式使用不同資料庫');
     if(['watch_min_amount','watch_max_symbols','watch_remove_after_scans','allow_attention','auto_watchlist'].some(k=>s[k as keyof Settings]!==this.settings[k as keyof Settings])) {
@@ -139,6 +144,7 @@ export class Engine {
     const key = 'baseline_' + twDay(now);
     if (account.complete && !this.store.get(key)) { this.store.set(key,{equity:equity(account).toFixed(),at:now.toISOString()});
       this.log('BASELINE','建立今日首次有效快照基準；不是歷史開盤資產'); }
+    this.portfolioRisk(now,account);
     if (account.issue) this.logOnce('ACCOUNT',account.issue);
     return account;
   }
@@ -147,6 +153,14 @@ export class Engine {
     this.store.recordExperience({id:`${o.local_id}:${o.filled}`,at:now.toISOString(),mode:this.settings.mode,
       kind:'RECONCILED_FILL',symbol:o.symbol,action:o.action,shares:o.filled-previous,
       price:null,fee:null,tax:null,realized_pnl:null,note:`已核對 ${o.purpose} 成交股數；委託限價=${o.limit_price}，非實際成交價。實際成交價格與費用未提供，不推算損益`});
+  }
+  portfolioRisk(now:Date,a=this.account,features=this.watchFeatures):PortfolioDecision|undefined {
+    if(!a)return;
+    const scope=this.store.get<string>('experience_scope')??this.settings.mode;
+    const p=portfolioDecision(this.store.get<PortfolioState>('portfolio_risk_v1'),a,features,
+      this.settings.portfolio_risk_enabled?this.store.experiences(scope,now.toISOString(),10000):[],this.settings,now,this.calendar.isOpen(twDay(now)));
+    if(a.complete&&p.state.asof===now.toISOString())this.store.set('portfolio_risk_v1',p.state);
+    return p;
   }
   baseline(now: Date): string | undefined { return this.store.get<{equity:string}>('baseline_' + twDay(now))?.equity; }
   private dailyLossBlocked(now:Date,a:Account):boolean {
@@ -232,7 +246,7 @@ export class Engine {
         daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
-      universe:bundle.pool,features:bundle.features,hard_limits:{...limits,capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
+      portfolio_risk:this.portfolioRisk(now,a,bundle.features),universe:bundle.pool,features:bundle.features,hard_limits:{...limits,capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
       quotes:structuredClone(quotes),entry_feedback:this.plan?{plan_id:this.plan.id,asof:now.toISOString(),
         signals:this.plan.analysis.decisions.filter(d=>d.action==='BUY').map(decision=>({symbol:decision.symbol,
           window:entryWindow(decision,bundle.features[decision.symbol],now,bundle.metadata[decision.symbol]),
@@ -342,7 +356,7 @@ export class Engine {
       if (attempts >= 10) { this.logOnce('BLOCK',`${p.symbol} 保護出場嘗試已達上限，請核對委託`); continue; }
       const protectionShares = protectionLot === 'COMMON' ? Math.floor(p.sellable / 1000) * 1000 : Math.min(999,p.sellable);
       if(!d(q.bid).gt(0)||q.bid_shares<=0){this.decisionStates.set(p.symbol,{state:'WAIT',reason:`${trigger} 已觸發；無有效買盤／跌停排隊，未假設成交`,source:'PROTECTION'});continue;}
-      await this.requestExecution({...this.newOrder(p.symbol,'SELL',protectionShares,q.bid,protectionLot,now,protection.plan_id,'PROTECTION'),exit_trigger:trigger as Order['exit_trigger']},
+      await this.requestExecution({...this.newOrder(p.symbol,'SELL',protectionShares,q.bid,protectionLot,now,protection.plan_id,'PROTECTION'),exit_trigger:trigger as Order['exit_trigger'],trigger_context:{last:q.last,bid:q.bid,ask:q.ask,trade_at:q.trade_at,book_at:q.book_at,stop_price:protection.spec.stop_price,effective_stop:protection.protected_floor??protection.spec.stop_price}},
         now,'PROTECTION',undefined,undefined,trigger,protection.spec);
     }
     if (!this.canExecute() || !this.plan || Date.parse(this.plan.analysis.expires_at) <= now.getTime()) return;
@@ -450,6 +464,7 @@ export class Engine {
     }
     if(!this.plan||this.plan.id!==ticket.order.plan_id||Date.parse(this.plan.analysis.expires_at)<=now.getTime())return '策略已更新或到期';
     if(ticket.order.action==='BUY'){
+      const portfolio=this.portfolioRisk(now);if(portfolio?.blocked)return portfolio.reasons.join('；');
       if(this.entryBlocked||this.pausedEntries)return '新增買進已暫停';
       if(this.settings.auto_watchlist&&(!this.watch.healthy||ageSeconds(now,this.watch.asof)>this.settings.watch_refresh_minutes*120
         ||!this.watch.entries.some(w=>w.symbol===ticket.order.symbol&&w.eligible)))return '監測股票目前已不符合買進資格';
@@ -486,7 +501,7 @@ export class Engine {
     const valid=quotes.filter(q=>!this.executionInvalid(ticket,q,now));
     if(!m||!valid.length){this.finishExecution(id,'WAIT',m?this.executionInvalid(ticket,quotes[0],now):'商品資料未確認',now);return;}
     const last=this.store.lastOrder(ticket.order.symbol)?.created_at;
-    const lots=valid.map(q=>executionLot(ticket,q,this.account!,m,this.risk,now,this.baseline(now),last));
+    const lots=valid.map(q=>executionLot(ticket,q,this.account!,m,this.risk,now,this.baseline(now),last,this.portfolioRisk(now)?.scale));
     if(!lots.some(l=>l.max_shares>0)){
       const issue=[...new Set(lots.flatMap(l=>l.reasons))].join('；')||'目前可用預算或庫存不足';
       this.finishExecution(id,'BLOCKED',issue,now);this.logOnce('RISK',`${ticket.order.symbol} ${ticket.order.action}：${issue}`);return;
@@ -525,9 +540,9 @@ export class Engine {
     if(issue){this.finishExecution(id,'WAIT',issue+'；未送單',now);return false;}
     const m=this.metadata[advice.symbol];if(!m){this.finishExecution(id,'BLOCKED','商品資料未確認',now);return false;}
     const last=this.store.lastOrder(advice.symbol)?.created_at;
-    const bounds=executionLot(ticket,q!,this.account!,m,this.risk,now,this.baseline(now),last);
+    const bounds=executionLot(ticket,q!,this.account!,m,this.risk,now,this.baseline(now),last,this.portfolioRisk(now)?.scale);
     if(advice.action==='BUY'){
-      const issues=[...entryRiskIssues(advice.shares,advice.limit_price,ticket.smart,this.account!,this.settings),
+      const issues=[...entryRiskIssues(advice.shares,advice.limit_price,ticket.smart,this.account!,this.settings,advice.symbol),
         ...entryQualityIssues(advice.shares,advice.limit_price,ticket.smart,this.settings)];
       if(issues.length){this.finishExecution(id,'BLOCKED',issues.join('；')+'；未送單',now);return false;}
     }
@@ -572,6 +587,11 @@ export class Engine {
       if(shares!==order.shares)this.log('RESIZE',`${order.symbol} 最終股數 ${order.shares} → ${shares}，依最新帳務重新驗證`);
       order.shares=shares;
     }
+    if(order.action==='BUY'&&smart&&this.settings.portfolio_risk_enabled){
+      const scale=this.portfolioRisk(now,account)?.scale??'0',step=order.lot==='ODD'?1:1000;
+      order.shares=Math.min(order.shares,Math.floor(d(capitalSnapshot(account,this.settings).order_limit_twd).times(scale).div(order.limit_price).div(step).toNumber())*step);
+      if(order.shares<=0)return false;
+    }
     if(condition){const t=this.store.entryTracks().find(t=>t.plan_id===order.plan_id&&t.symbol===order.symbol&&t.lot===order.lot);
       if(order.action==='BUY'&&entryWindow(condition,this.watchFeatures[order.symbol],now,this.metadata[order.symbol]).issue)return false;
       if(!quote||!entryReady(condition,quote.last,t)||conditionIssue(condition,quote,this.watchFeatures[order.symbol],now))return false;}
@@ -591,11 +611,31 @@ export class Engine {
     const reasons = this.risk.check(order,account,this.quotes.get(`${order.symbol}:${order.lot === 'ODD'}`),this.metadata[order.symbol],
       now,this.baseline(now),this.killed || (this.pausedEntries && order.action === 'BUY'),last);
     if(order.action==='BUY'){
+      const portfolio=this.portfolioRisk(now,account);
+      if(portfolio?.blocked)reasons.push(...portfolio.reasons);
+      if(portfolio&&d(order.limit_price).times(order.shares).gt(d(capitalSnapshot(account,this.settings).order_limit_twd).times(portfolio.scale)))
+        reasons.push('超過市場與組合回撤縮減後的新增風險額度');
       if(this.dailyLossBlocked(now,account))reasons.push('達到日損失限制，當日停止新增買進');
       const spec=smart??(executionId?this.pendingExecutions.get(executionId)?.smart:undefined)
         ??this.plan?.analysis.decisions.find(d=>d.symbol===order.symbol)?.smart??undefined;
-      reasons.push(...entryRiskIssues(order.shares,order.limit_price,spec,account,this.settings),
+      reasons.push(...entryRiskIssues(order.shares,order.limit_price,spec,account,this.settings,order.symbol),
         ...entryQualityIssues(order.shares,order.limit_price,spec,this.settings));
+      if(this.settings.entry_quality_enabled){
+        const score=candidateScore(this.watchFeatures[order.symbol],quote,this.settings,now,portfolio?.regime,order.shares,spec);
+        reasons.push(...score.reasons);if(score.score<50)reasons.push('可解釋進場評分不足 50');
+      }
+      if(d(this.settings.max_portfolio_stop_fraction).gt(0)){
+        let risk=d(0);const protections=this.store.protections();
+        for(const p of account.positions){
+          const stop=p.symbol===order.symbol?spec?.stop_price:protections.find(x=>x.symbol===p.symbol)?.protected_floor??protections.find(x=>x.symbol===p.symbol)?.spec.stop_price;
+          if(!stop){reasons.push('既有持倉缺少保護，不能確認組合風險');continue;}
+          const proceeds=d(stop).times(d(1).minus(this.settings.risk_slippage_fraction)).times(p.shares);
+          risk=risk.plus(Decimal.max(0,d(p.last_price).times(p.shares).minus(proceeds).plus(fee(proceeds,this.settings)).plus(proceeds.times(this.settings.sell_tax_rate).ceil())));
+        }
+        if(spec){const proceeds=d(spec.stop_price).times(d(1).minus(this.settings.risk_slippage_fraction)).times(order.shares);
+          risk=risk.plus(d(order.limit_price).times(order.shares).minus(proceeds).plus(fee(proceeds,this.settings)).plus(fee(d(order.limit_price).times(order.shares),this.settings)).plus(proceeds.times(this.settings.sell_tax_rate).ceil()));}
+        if(risk.gt(equity(account).times(this.settings.max_portfolio_stop_fraction)))reasons.push('同時觸停損的組合損失超過上限');
+      }
     }
     if (reasons.length) { this.decisionStates.set(order.symbol,{state:'BLOCKED',reason:reasons.join('；'),source:order.purpose});
       this.logOnce('RISK',`${order.symbol} ${order.action}：${reasons.join('；')}`);

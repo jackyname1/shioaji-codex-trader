@@ -1,17 +1,17 @@
 import { Store } from '../core/store.js';
 import { TradingCalendar } from '../core/calendar.js';
-import { fee, roundPrice, tickSize } from '../core/risk.js';
+import { alignedPrice,fee, roundPrice, tickSize } from '../core/risk.js';
 import { AccountSchema, OrderSchema, active, addDays, d, remaining, twDay, twClock,
-  type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
+  ageSeconds,type Account, type Bar, type Candidate, type Instrument, type Order, type Quote, type Settings } from '../core/models.js';
 import type { Broker } from './types.js';
 
 interface Lot { symbol: string; shares: number; price: string; acquired: string; cost?: string }
 export interface SimulatedFill { id: string; order_id: string; at: string; symbol: string; action: 'BUY'|'SELL';
   lot: 'ODD'|'COMMON'; purpose: Order['purpose']; shares: number; price: string; amount: string;
-  fee: string; tax: string; realized_pnl: string | null;exit_trigger?:Order['exit_trigger'] }
+  fee: string; tax: string; realized_pnl: string | null;book_source?:Quote['book_source'];exit_trigger?:Order['exit_trigger'] }
 interface Ledger { cash: string; lots: Lot[]; orders: Order[]; lastEvents: Record<string,string>;
   charges: Record<string,{ amount: string; fee: string; tax: string }>; fills?: SimulatedFill[];
-  credits?: {due:string;amount:string}[] }
+  credits?: {due:string;amount:string;sold_day?:string}[] }
 export class SyntheticMarket implements Broker {
   readonly production = false; dirty = false; generation = 0;
   private symbols = Array.from({ length:30 },(_,i) => String(9001 + i));
@@ -84,8 +84,10 @@ export class PaperBroker implements Broker {
     const quotes = this.market.quotes(now);
     this.expire(now);
     for (const q of quotes) {
-      this.prices.set(q.symbol,q.last);
-      if (!this.calendar.inSession(now,q.odd ? 'ODD' : 'COMMON') || q.simulated) continue;
+      if([q.trade_at,q.book_at].every(at=>ageSeconds(now,at)>=0&&ageSeconds(now,at)<=this.settings.quote_max_age))this.prices.set(q.symbol,q.last);
+      if (!this.calendar.inSession(now,q.odd ? 'ODD' : 'COMMON') || q.simulated
+        ||[q.trade_at,q.book_at].some(at=>ageSeconds(now,at)<0||ageSeconds(now,at)>this.settings.quote_max_age)
+        ||!alignedPrice(q.bid)||!alignedPrice(q.ask)||d(q.bid).gt(q.ask)) continue;
       const key = `${q.symbol}:${q.odd}`, event = q.trade_at + '/' + q.book_at;
       if (this.ledger.lastEvents[key] === event) continue;
       this.ledger.lastEvents[key] = event;
@@ -118,7 +120,7 @@ export class PaperBroker implements Broker {
           const proceeds = amount.minus(extraFee).minus(extraTax); realized = proceeds.minus(cost).toFixed();
           if (this.settleSales && proceeds.gte(0)) {
             let due = '9999-12-31'; try { due = this.calendar.nextSettlement(this.calendar.nextSettlement(twDay(now))); } catch { /* Do not recycle unverified settlement credits. */ }
-            this.ledger.credits!.push({due,amount:proceeds.toFixed()});
+            this.ledger.credits!.push({due,amount:proceeds.toFixed(),sold_day:twDay(now)});
           } else this.ledger.cash = d(this.ledger.cash).plus(proceeds).toFixed();
           bidDepth -= shares;
         }
@@ -126,7 +128,7 @@ export class PaperBroker implements Broker {
         this.ledger.charges[order.local_id] = { amount:total.toFixed(),fee:totalFee.toFixed(),tax:totalTax.toFixed() };
         const fill: SimulatedFill = {id:`${order.local_id}:${order.filled}`,order_id:order.local_id,
           at:now.toISOString(),symbol:order.symbol,action:order.action,lot:order.lot,purpose:order.purpose,
-          shares,price,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized,
+          shares,price,book_source:q.book_source,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized,
           ...(order.exit_trigger?{exit_trigger:order.exit_trigger}:{})};
         this.ledger.fills!.push(fill);
         const plan=this.store.plan(),reason=plan?.id===order.plan_id?plan.analysis.decisions.find(x=>x.symbol===order.symbol)?.reason:undefined;
@@ -143,7 +145,13 @@ export class PaperBroker implements Broker {
     for (const o of this.ledger.orders) if (active(o) && twDay(new Date(o.created_at)) < twDay(now)) { o.status = 'CANCELLED'; this.dirty = true; }
   }
   private settle(now: Date): void {
-    const today = twDay(now),mature=(x:{due:string})=>x.due<today||x.due===today&&twClock(now)>='11:00';
+    this.calendar.setAsOf(now);const today=twDay(now);
+    for(const credit of this.ledger.credits!){
+      if(credit.due==='9999-12-31'&&credit.sold_day)try{credit.due=this.calendar.nextSettlement(this.calendar.nextSettlement(credit.sold_day));}catch{/* Still unverified: retain the reserved credit. */}
+      // A closure announced after the sale can move T+2. Never credit a closed due day.
+      while(credit.due<=today&&!this.calendar.isSettlementOpen(credit.due)){try{credit.due=this.calendar.nextSettlement(credit.due);}catch{credit.due='9999-12-31';break;}}
+    }
+    const mature=(x:{due:string})=>x.due<today||x.due===today&&twClock(now)>='11:00';
     const due = this.ledger.credits!.filter(mature);
     this.ledger.cash = due.reduce((sum,x) => sum.plus(x.amount),d(this.ledger.cash)).toFixed();
     this.ledger.credits = this.ledger.credits!.filter(x => !mature(x));

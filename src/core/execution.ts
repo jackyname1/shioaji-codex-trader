@@ -43,7 +43,7 @@ export function spendableCash(account:Account,s:Settings):{reserved:string;avail
 }
 /** Bounds are determined by the same final risk checker, including fees and all standing reservations. */
 export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,instrument:Instrument,risk:Risk,
-  now:Date,baseline:string|undefined,lastTrade:string|undefined):ExecutionLot {
+  now:Date,baseline:string|undefined,lastTrade:string|undefined,scale='1'):ExecutionLot {
   const s=risk.settings,lot=q.odd?'ODD':'COMMON',step=q.odd?1:1000;
   let min=Decimal.max(instrument.limit_down,d(q.last).times(d(1).minus(s.price_deviation_fraction)));
   let max=Decimal.min(instrument.limit_up,d(q.last).times(d(1).plus(s.price_deviation_fraction)));
@@ -60,9 +60,10 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
   const price=roundPrice(ticket.order.action==='BUY'?Decimal.min(q.ask,maxPrice):Decimal.max(q.bid,minPrice),ticket.order.action!=='BUY');
   const test=(shares:number):string[]=>{
     const reasons=risk.check({...ticket.order,lot,shares,limit_price:price},account,q,instrument,now,baseline,false,lastTrade);
+    if(ticket.order.action==='BUY'&&d(price).times(shares).gt(d(equity(account)).times(s.max_order_fraction).times(d(1).minus(s.min_cash_fraction)).times(scale)))reasons.push('超過組合縮減後單筆上限');
     if(ticket.allocation_fraction&&d(price).times(shares).plus(fee(d(price).times(shares),s)).gt(equity(account).times(ticket.allocation_fraction)))
       reasons.push('超過 Codex 本輪配置上限');
-    if(ticket.order.action==='BUY')reasons.push(...entryRiskIssues(shares,price,ticket.smart,account,s));
+    if(ticket.order.action==='BUY')reasons.push(...entryRiskIssues(shares,price,ticket.smart,account,s,ticket.order.symbol));
     return reasons;
   };
   const reasons=test(step);

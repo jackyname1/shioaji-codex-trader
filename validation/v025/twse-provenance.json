@@ -1,0 +1,2802 @@
+{
+  "retrieved_at": "2026-10-17T01:23:26.873435+00:00",
+  "dataset_sha256": "b4463b80f9d0ae941759ddc1561dc5c14c38a1c5933ea00e3b69478d43b8d00f",
+  "sources": [
+    {
+      "day": "2024-01-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240101&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-01-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240102&type=ALLBUT0999",
+      "sha256": "5a2b3343ea7777408bf8c8a66b6537f17da1010f313396fff5eacd8427c29765",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240103&type=ALLBUT0999",
+      "sha256": "4ae5c58e48e89a6304a72dbdfaf8b49fa9ec52d8882f72fcf8bb08476549dae2",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240104&type=ALLBUT0999",
+      "sha256": "ad2f585e83b48fe431333095dc140c6f697ebb1ee9c44d97d527154a70e76248",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240105&type=ALLBUT0999",
+      "sha256": "994753f80128fb9fd70099c957c3230a1a1cd8de08823416b1f32bb0fdd92bbf",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240108&type=ALLBUT0999",
+      "sha256": "49b161206b4924c5cadf95513048b885d5a08c189061e541508fc93022b1196b",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240109&type=ALLBUT0999",
+      "sha256": "99ac570a35499c94c053ef90ac0c0c6f7767915644d99387ed8fef62912bea5f",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240110&type=ALLBUT0999",
+      "sha256": "213e9ee6deda289f21aeb90893736ccb88d24abe6c968e2fc869d964f07beeec",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240111&type=ALLBUT0999",
+      "sha256": "2ce24c37308a8a4fce1f88201db3c3c6080da3ba1103888d799dd7b58e8363d0",
+      "rows": 1221
+    },
+    {
+      "day": "2024-01-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240112&type=ALLBUT0999",
+      "sha256": "b39caebc2b645eeab6daae49344b8f1ec1bdca38e2fe5b884c0c3e7111973000",
+      "rows": 1221
+    },
+    {
+      "day": "2024-01-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240115&type=ALLBUT0999",
+      "sha256": "f5770743b8657a265a729c853da21a51df29d64b8ae1c7d1c8fd86e4c5c09dea",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240116&type=ALLBUT0999",
+      "sha256": "5dce87e89e435cdddb54df55da0ddcaad47c427f12b85b6990d4fda722cb2cdd",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240117&type=ALLBUT0999",
+      "sha256": "e7ff78fd15947c66d1466f2d15cc7cbd37ff7815f6a559a7b1d30b99cfcdc28a",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240118&type=ALLBUT0999",
+      "sha256": "0294d29669c618fcfb364044de1e0c1049049959400e48b5a4c6a7a90f93af06",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240119&type=ALLBUT0999",
+      "sha256": "3d7c01c8d2c20d4612e8f352d91e699c077352d236cf07f077f9fdf922cbf332",
+      "rows": 1222
+    },
+    {
+      "day": "2024-01-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240122&type=ALLBUT0999",
+      "sha256": "631de19797456fdef35b32e0acb92f39be028fa3dd1abdac0a53d15447e3a636",
+      "rows": 1223
+    },
+    {
+      "day": "2024-01-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240123&type=ALLBUT0999",
+      "sha256": "629a4efc59b3315f1517eb5d6c66f8d65c3733cd4f405f26164916d987149080",
+      "rows": 1223
+    },
+    {
+      "day": "2024-01-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240124&type=ALLBUT0999",
+      "sha256": "ae166cefbd8df007d31445eead24a0ce689b9fc7f6742fe7d642adcf8087988e",
+      "rows": 1224
+    },
+    {
+      "day": "2024-01-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240125&type=ALLBUT0999",
+      "sha256": "1e3cabd257df9d07e0d73a0d19eb1ff23eccfe57a5ced83bcd38d08406cddf9f",
+      "rows": 1225
+    },
+    {
+      "day": "2024-01-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240126&type=ALLBUT0999",
+      "sha256": "ee123e616261e007fd2bd94ace0f5a5a8c5d64e4401cfcc91329f3e2516eb1d9",
+      "rows": 1225
+    },
+    {
+      "day": "2024-01-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240129&type=ALLBUT0999",
+      "sha256": "a7e5361970f68bee0322566ea663768bb7ffb5196b61a45a934d3c1c86c423f8",
+      "rows": 1226
+    },
+    {
+      "day": "2024-01-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240130&type=ALLBUT0999",
+      "sha256": "8ba8e32465ef6300371418a1d9152a29fcfcba9b45830fa508fe2c28f9f258f3",
+      "rows": 1226
+    },
+    {
+      "day": "2024-01-31",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240131&type=ALLBUT0999",
+      "sha256": "a3379c17bf94ed8ac8ed4f5e26a897db30a6186f5507533c042e2887e13d4e3e",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240201&type=ALLBUT0999",
+      "sha256": "2fa91c6ffd5a3256d6ffb052dbd775f784d770a28e4e641713a955594e77614b",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240202&type=ALLBUT0999",
+      "sha256": "be8cbbfb1c585fbdcce5afd8989f67bebf5db669dd7c3acbf6783c9fce8318a3",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240205&type=ALLBUT0999",
+      "sha256": "493b08d33b0272886bb22c6248e33358fbe765a0b019a7e75081c6661110d454",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240206&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-07",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240207&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240208&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240209&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240212&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240213&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-14",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240214&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240215&type=ALLBUT0999",
+      "sha256": "bf78c26a03108300dc2826ba398bb51b3bc8149bdaa2e890c2a357e814858dcc",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240216&type=ALLBUT0999",
+      "sha256": "945ce53199d6a7dbda46fda6417e5c83faa02b290d8c1b1c261c10ffb975e5de",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240219&type=ALLBUT0999",
+      "sha256": "b8fb9b5399a8f3119aed8903e6487184a3e1262674674b125427a37e54a3aea0",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240220&type=ALLBUT0999",
+      "sha256": "e07f8cfd42c133d43d4cc08466219509a9ce8242ebd6dca51832dadb42d3625a",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-21",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240221&type=ALLBUT0999",
+      "sha256": "23056df98130f2016f48cbe4509021bbfe88c67cc2ba50edae572769d2bc719c",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240222&type=ALLBUT0999",
+      "sha256": "193354a63330246b9e0bdd26b558e70a646fb127429b6c2105e36dcf3a8384aa",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240223&type=ALLBUT0999",
+      "sha256": "e692c8ee58a5b5d8b7f61fad769662552298c4db426da843f96329a81bc59938",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240226&type=ALLBUT0999",
+      "sha256": "a2fbddd043fcac6fe18a6b1ff05830734745aa4d56f146647e3ee73277d1d51e",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240227&type=ALLBUT0999",
+      "sha256": "e999793588cd62973391943deafa9ebcc248e6685c5a9f06c5ddb357e7815954",
+      "rows": 1226
+    },
+    {
+      "day": "2024-02-28",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240228&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-02-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240229&type=ALLBUT0999",
+      "sha256": "1ba2835b1e8d4c03c53d84959f4ab21d43faf4df47f05915dad330068edab24f",
+      "rows": 1225
+    },
+    {
+      "day": "2024-03-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240301&type=ALLBUT0999",
+      "sha256": "fb5b907de159fd8458364f978792c6d150507811e8309e1c9c5ddb29a2e1f2f6",
+      "rows": 1225
+    },
+    {
+      "day": "2024-03-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240304&type=ALLBUT0999",
+      "sha256": "5629d19d9732311bdf3756320e3be724dfff7dcdd5180cb50a24dc860b5819be",
+      "rows": 1225
+    },
+    {
+      "day": "2024-03-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240305&type=ALLBUT0999",
+      "sha256": "1a7fb833833ae16435c18075c7e2a84893a7ec713446a167797d688dd6154355",
+      "rows": 1225
+    },
+    {
+      "day": "2024-03-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240306&type=ALLBUT0999",
+      "sha256": "87d3714daf61805ca6a8cf17012b2b33b80a7ba1b728b94d63d2198d163a1b7e",
+      "rows": 1225
+    },
+    {
+      "day": "2024-03-07",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240307&type=ALLBUT0999",
+      "sha256": "ac09a860e8528ccb57f22ebf628de5cb7bc5cd71c7251498d36dcef4a1d01836",
+      "rows": 1226
+    },
+    {
+      "day": "2024-03-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240308&type=ALLBUT0999",
+      "sha256": "60fb8ebb961aab89fc8aa94e5d48d63a27415ccbfef3366a7db8ecb6e5edf264",
+      "rows": 1227
+    },
+    {
+      "day": "2024-03-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240311&type=ALLBUT0999",
+      "sha256": "c029808c77951473180d5f0b3bb8d1bc99c706c3a6ec23f312e32cb00427273e",
+      "rows": 1228
+    },
+    {
+      "day": "2024-03-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240312&type=ALLBUT0999",
+      "sha256": "bfcdceed866e9a711ee5fa866effe6f9990469e657bbeb02a976d46478bf9073",
+      "rows": 1228
+    },
+    {
+      "day": "2024-03-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240313&type=ALLBUT0999",
+      "sha256": "c806c5ea3745df54d89ebf7c2cf2b7cec73e30a970ef9c374d4f1c085efa33d2",
+      "rows": 1228
+    },
+    {
+      "day": "2024-03-14",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240314&type=ALLBUT0999",
+      "sha256": "4db2afc5504bddfa285fa66b648b1be0d0100eda74fd2ba10f589df5d8d9264b",
+      "rows": 1228
+    },
+    {
+      "day": "2024-03-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240315&type=ALLBUT0999",
+      "sha256": "62044bec1ba8d903e423b405f7eda31799c8c0d4a9f0b82ae9810ddee23af0dd",
+      "rows": 1229
+    },
+    {
+      "day": "2024-03-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240318&type=ALLBUT0999",
+      "sha256": "30dbae660a1855c8ab7c6aecaee49ad38fd7adedd8589222a7c2de313cede951",
+      "rows": 1230
+    },
+    {
+      "day": "2024-03-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240319&type=ALLBUT0999",
+      "sha256": "99c16b215268daf7ddd20da4d87c4e9e8668e9774559362c97738140151c2123",
+      "rows": 1230
+    },
+    {
+      "day": "2024-03-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240320&type=ALLBUT0999",
+      "sha256": "6c7dd352a10ce76ce680bb423781e3771997718ca08c8bcad042e967871668a4",
+      "rows": 1231
+    },
+    {
+      "day": "2024-03-21",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240321&type=ALLBUT0999",
+      "sha256": "fb9c7a00605d8a876da0864ab54cbf4f6f91a40429f1850e16344148252cd252",
+      "rows": 1230
+    },
+    {
+      "day": "2024-03-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240322&type=ALLBUT0999",
+      "sha256": "82e020c381784d33c7a76456ebc2588f9bd69a05f885d97bdcac598a61317882",
+      "rows": 1230
+    },
+    {
+      "day": "2024-03-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240325&type=ALLBUT0999",
+      "sha256": "12459ba899bb7ce13a5092b1cf821c0aa521c198c950b3797553c456e68728cc",
+      "rows": 1230
+    },
+    {
+      "day": "2024-03-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240326&type=ALLBUT0999",
+      "sha256": "56edd1049e329f2fe161206981a615044516549fc74d805bde3b39416d4ddb03",
+      "rows": 1232
+    },
+    {
+      "day": "2024-03-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240327&type=ALLBUT0999",
+      "sha256": "22f5934d5aa4d6c8486848b48283206a51a2972d6e43698650b8d5e324ea6657",
+      "rows": 1232
+    },
+    {
+      "day": "2024-03-28",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240328&type=ALLBUT0999",
+      "sha256": "f1f63ae8ac6941f5d815860aba5d71e1c785c6ec98b6eb7e6b188acab5120244",
+      "rows": 1232
+    },
+    {
+      "day": "2024-03-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240329&type=ALLBUT0999",
+      "sha256": "b9bcd8d10bea34c4a4ad60b31ac5ee67b9f3aab4514f3e69dbdf9b6fe0efa60b",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240401&type=ALLBUT0999",
+      "sha256": "37cec535780147ac36cfded0cd9dc7a713cd81849abbc601b4646a325ee97e07",
+      "rows": 1234
+    },
+    {
+      "day": "2024-04-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240402&type=ALLBUT0999",
+      "sha256": "8f49d41208a5949aa8ec28a5dfe7eaa748fdafe9da26f2ed3ed116c405157d82",
+      "rows": 1234
+    },
+    {
+      "day": "2024-04-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240403&type=ALLBUT0999",
+      "sha256": "fadebd177942fc45e2800719153112af6b966273b0b68d895566fdc54eec6be7",
+      "rows": 1234
+    },
+    {
+      "day": "2024-04-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240404&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-04-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240405&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-04-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240408&type=ALLBUT0999",
+      "sha256": "e8419b60a2f74277e1f73efdbde0e9ff602bdf396bccb480aded2c0969d739e0",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240409&type=ALLBUT0999",
+      "sha256": "adde5d212f5762346885a3e139878def9a7c43366eac398a1df3c71cf0d07f9b",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240410&type=ALLBUT0999",
+      "sha256": "2b3ce84bfa35551b6d5194938dba4d1e42842cc0f3dfc10a5705261fd7cd8d2e",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240411&type=ALLBUT0999",
+      "sha256": "4499985fd68957d06fecebbacd04fc1399f86abd5fb0f1b772966b6c11e346f0",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240412&type=ALLBUT0999",
+      "sha256": "cd11df4f1d56eccdca34769d45d723d4ece74da17f5508486fe4c40c3decd3f5",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240415&type=ALLBUT0999",
+      "sha256": "2e1f9daa96eed6f05e37d1c9fc0307a84a1c13e1adb1d47f97d72a969720dac9",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240416&type=ALLBUT0999",
+      "sha256": "f71a840481745fb3be913df31fdfdf0f26368e6ea9ebc65496bc517b19687666",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240417&type=ALLBUT0999",
+      "sha256": "354ab6a8fe0fd856066377b3d5401ec29ccde0e2f200b8682947d7b8d9e1dc50",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240418&type=ALLBUT0999",
+      "sha256": "6ef4c49815bf5f4425fb108933601a5a44584207d83ab9737e77d9fcb8721176",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240419&type=ALLBUT0999",
+      "sha256": "6cc631b3d578a3565cf8db76f3db0c1235afd9838fa86446f2ea78fe919c5ff9",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240422&type=ALLBUT0999",
+      "sha256": "46f5e645d57aef111bf9b5f1334f699ddf6b79aaf7f76cee733b3d92b2637060",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240423&type=ALLBUT0999",
+      "sha256": "cf6f43ce3f7d92a48ca78d9f5f5060fe0baab5c74c3b0f8d19283e075deeb36a",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240424&type=ALLBUT0999",
+      "sha256": "f90f618efdbc936dedda10cbff74817706e91df100b98bb167f271711d9d56e5",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240425&type=ALLBUT0999",
+      "sha256": "b5dfe0376b6d1cae760268a63f8642a21b694b5ccf538953c7a09fa15a1a24e2",
+      "rows": 1232
+    },
+    {
+      "day": "2024-04-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240426&type=ALLBUT0999",
+      "sha256": "7cbde845f4da6f0b78dfcc46d79cee192834040543853be2cd418aa564e39203",
+      "rows": 1230
+    },
+    {
+      "day": "2024-04-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240429&type=ALLBUT0999",
+      "sha256": "b2a2364a20692d36d3282d876b4f09e1e20aea594bdd2854b25a80b9ce063ec1",
+      "rows": 1230
+    },
+    {
+      "day": "2024-04-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240430&type=ALLBUT0999",
+      "sha256": "ab7e8bcbfd0c59389788d2eada896a46c1d8acb49e26512d0adcbdfcc15adeee",
+      "rows": 1230
+    },
+    {
+      "day": "2024-05-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240501&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-05-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240502&type=ALLBUT0999",
+      "sha256": "0ca1ac8138cd7cea0b29c17255072090d38860dc6ff021ba7d1d82bc8ac5e7dc",
+      "rows": 1231
+    },
+    {
+      "day": "2024-05-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240503&type=ALLBUT0999",
+      "sha256": "5b577a8376ca89d7dd28a8840d6da42d0432b36319050f5fc0cdfd876a4e539e",
+      "rows": 1232
+    },
+    {
+      "day": "2024-05-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240506&type=ALLBUT0999",
+      "sha256": "91c4ba727ec6967f7d654980003c664274a3e3aa1b23306ead574bddfeb43e73",
+      "rows": 1232
+    },
+    {
+      "day": "2024-05-07",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240507&type=ALLBUT0999",
+      "sha256": "b14499d6d598c1badcbdcbdac641a66eba392ae74d497d36f0a420adac4b7bae",
+      "rows": 1232
+    },
+    {
+      "day": "2024-05-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240508&type=ALLBUT0999",
+      "sha256": "2f5aafacf3ed7091c39760fce2327db89aa152f6da14cbef9bb3b13ee4c1c5e4",
+      "rows": 1232
+    },
+    {
+      "day": "2024-05-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240509&type=ALLBUT0999",
+      "sha256": "e26ef86d567f82750ac397291638d86d25bef6cc9f32942611de2e8f6671b2f2",
+      "rows": 1235
+    },
+    {
+      "day": "2024-05-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240510&type=ALLBUT0999",
+      "sha256": "af2382cc75decd8a4f8aa7470ed22eb8a50da7e2653aa2c37a1c5242fc7819ee",
+      "rows": 1235
+    },
+    {
+      "day": "2024-05-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240513&type=ALLBUT0999",
+      "sha256": "b5468918c9a0439e4dbe4897d79fd055e0c013a349a8021e1bb1054a21b14489",
+      "rows": 1236
+    },
+    {
+      "day": "2024-05-14",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240514&type=ALLBUT0999",
+      "sha256": "d2a4a49fad7a2185f955a09259353a270f8059305e7f50bd01d76e8849738088",
+      "rows": 1236
+    },
+    {
+      "day": "2024-05-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240515&type=ALLBUT0999",
+      "sha256": "5c5904cfc7a09a0260b6792560199bcf0a3b37f14b27ea3e17b74c2bf42a3a03",
+      "rows": 1237
+    },
+    {
+      "day": "2024-05-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240516&type=ALLBUT0999",
+      "sha256": "b9e731d8ed680a49b3afc4e16345aca69037767ae94f1d1c76f28eb2d3485bdd",
+      "rows": 1238
+    },
+    {
+      "day": "2024-05-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240517&type=ALLBUT0999",
+      "sha256": "c75a42c6f9fff97c41e207b99bdf0e3166a7e211fba03b0e657b45d709e2d21d",
+      "rows": 1239
+    },
+    {
+      "day": "2024-05-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240520&type=ALLBUT0999",
+      "sha256": "685522fbbad8299d2286c796f421313acf2aa9d15dc9316b2fcb0f8b6d6928e4",
+      "rows": 1240
+    },
+    {
+      "day": "2024-05-21",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240521&type=ALLBUT0999",
+      "sha256": "d135c989457193dcb03614898ec6e1d024e56346ffd43c031136f75108efcbd6",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240522&type=ALLBUT0999",
+      "sha256": "bf758de89a890f43e6c6ea4e8c47b6432050237fab091ba3ccd3468db0698240",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240523&type=ALLBUT0999",
+      "sha256": "2936be6713e51bcc51b280df2dcdf84d90dc22d86c330b0f4af6656e69eea16b",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240524&type=ALLBUT0999",
+      "sha256": "cb1e7f01213614e0679434d15a6a385e774dcc41b4465761030f093f5a9b0df5",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240527&type=ALLBUT0999",
+      "sha256": "a23c03983c3c572d4a10f39416a5b88cc4bdafa611fdbfb555d6874436f1ca42",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-28",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240528&type=ALLBUT0999",
+      "sha256": "e553e54741a6b1d7066f19f73de62e99d3840a55dffc6f52e3633351c318f936",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240529&type=ALLBUT0999",
+      "sha256": "15bdb409123b452a68486a67b03e15097a4e1750b65745f713d6ac5d4a802d1d",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240530&type=ALLBUT0999",
+      "sha256": "00b9460148ebd4d0fd164ac4b085056e666407bd540f131fbe0b80bcacce9368",
+      "rows": 1241
+    },
+    {
+      "day": "2024-05-31",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240531&type=ALLBUT0999",
+      "sha256": "5bda7fc205e123ec86a30f23be7e47f983a6fd4ce84a6b7b9c94541ec674c067",
+      "rows": 1241
+    },
+    {
+      "day": "2024-06-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240603&type=ALLBUT0999",
+      "sha256": "affa1b04afe55976d4caecde1052a30f3374d5436d8ec858a2472bcfbb7b4007",
+      "rows": 1241
+    },
+    {
+      "day": "2024-06-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240604&type=ALLBUT0999",
+      "sha256": "0ce165fef9e3b699ce029ec2fd5e686d289e6e930faf40467811cff318889a32",
+      "rows": 1241
+    },
+    {
+      "day": "2024-06-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240605&type=ALLBUT0999",
+      "sha256": "511a33c9ec334ad0cf48fa020fd10e3310a4a65228600b1441a30a336f4ea4e2",
+      "rows": 1241
+    },
+    {
+      "day": "2024-06-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240606&type=ALLBUT0999",
+      "sha256": "d518323ca8c59e0571a63c6a647826d9e47d2b7c8a745fc3a910f3b10c6dcd00",
+      "rows": 1241
+    },
+    {
+      "day": "2024-06-07",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240607&type=ALLBUT0999",
+      "sha256": "7007a6cb1f0be1b9ba1d09fe68f3b65ca50fa1c13ed69e385f4cd676dd179d5a",
+      "rows": 1241
+    },
+    {
+      "day": "2024-06-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240610&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-06-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240611&type=ALLBUT0999",
+      "sha256": "8c9af4ad27fe54b17f99571433264b2a4584458a4e1c8203ddd84d563fba5570",
+      "rows": 1241
+    },
+    {
+      "day": "2024-06-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240612&type=ALLBUT0999",
+      "sha256": "f5a60839b1d5cff3798f8b97a3394a7c3769b1bd27ee3d34045c4a0bd304baf3",
+      "rows": 1243
+    },
+    {
+      "day": "2024-06-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240613&type=ALLBUT0999",
+      "sha256": "2d61bdc50fc4e52ccb0dad509f27d070d68aabd2512f0abb7e97894ed5a2c2b4",
+      "rows": 1244
+    },
+    {
+      "day": "2024-06-14",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240614&type=ALLBUT0999",
+      "sha256": "34da025871e02fe3b0c1b604fecd6ca12809f256e215be2cd7a78599b3d3bc43",
+      "rows": 1244
+    },
+    {
+      "day": "2024-06-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240617&type=ALLBUT0999",
+      "sha256": "8001801740f438b529ea31979c7be7ea6680dcb3190229ed363a57e45846b513",
+      "rows": 1244
+    },
+    {
+      "day": "2024-06-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240618&type=ALLBUT0999",
+      "sha256": "9baf23d3c63973df812356a1cd48ca87f4ca1d9ebd362fb2d7515696f901ea49",
+      "rows": 1245
+    },
+    {
+      "day": "2024-06-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240619&type=ALLBUT0999",
+      "sha256": "7afbc539a6bf7c6bf91502c11aa61946054861b7842f713a07326d6e1a555488",
+      "rows": 1245
+    },
+    {
+      "day": "2024-06-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240620&type=ALLBUT0999",
+      "sha256": "085bfbed5b12b18b45bc6780fcbabc58bdaebe22c532a96cdb7a5c410230ebfd",
+      "rows": 1245
+    },
+    {
+      "day": "2024-06-21",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240621&type=ALLBUT0999",
+      "sha256": "30c228e96cd80567b2fbdb65fb2067df1a8d476dd7fc76326a67ef80d3128012",
+      "rows": 1245
+    },
+    {
+      "day": "2024-06-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240624&type=ALLBUT0999",
+      "sha256": "828626339da9f3e3c4a84cab7ef7ec364c094f290285cc2ec1855cd64dc7bad0",
+      "rows": 1245
+    },
+    {
+      "day": "2024-06-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240625&type=ALLBUT0999",
+      "sha256": "ec5c00fe135e996cd3a7bd5f9033ed7b16be52790a35b1f3060e8139093e9cc4",
+      "rows": 1246
+    },
+    {
+      "day": "2024-06-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240626&type=ALLBUT0999",
+      "sha256": "fc8fb411864eeabfc731e2af1ef35710b7fef591fe1ba310eff552e3c5e9d01a",
+      "rows": 1246
+    },
+    {
+      "day": "2024-06-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240627&type=ALLBUT0999",
+      "sha256": "31fc7326152256de4adbb0e1a95ed17756102f45963ae50b30e3228fa07cec10",
+      "rows": 1247
+    },
+    {
+      "day": "2024-06-28",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240628&type=ALLBUT0999",
+      "sha256": "cd63f7f0e0177db5d13aa9df986fa709b0cfc4f906c09391f5e2040200871ddd",
+      "rows": 1247
+    },
+    {
+      "day": "2024-07-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240701&type=ALLBUT0999",
+      "sha256": "2412392b2553582b54c7e9fdeddd4efa38866a0b25cd44ffb547149731a13f9c",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240702&type=ALLBUT0999",
+      "sha256": "d816e45f8b80d98ec12e23cce67c8e81687835bf8b8c0b4e8cc46af86640ceff",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240703&type=ALLBUT0999",
+      "sha256": "c59055d6866def41b1f8c26821ca3dbfa8130b35a14b23f9681e03a13b3ae192",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240704&type=ALLBUT0999",
+      "sha256": "824a63cc7806210d710ef1677a1ada32699fcdae7abbdd3d2293a82017d6a150",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240705&type=ALLBUT0999",
+      "sha256": "01eb7353c1521c49ef6b97e3296dfd2de812e8622fdb03e3750af24b9f94b30d",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240708&type=ALLBUT0999",
+      "sha256": "a2f64fcd132e53b4856fbf452d112d92326aab241a0c1868d2a312c258cc0005",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240709&type=ALLBUT0999",
+      "sha256": "a31088bc9be3ce43dd81b1ef2b09fd411dae7a97ed987088c516ebf231bab71e",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240710&type=ALLBUT0999",
+      "sha256": "ccd96c2cab25712f665efad2f0df70eeae859d9ef8e5a441a139a50e8924c1de",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240711&type=ALLBUT0999",
+      "sha256": "cfc4557cd2a29818549b29e9205a6d4e702fb9d0a3c5b35489ef81c356ed7b20",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240712&type=ALLBUT0999",
+      "sha256": "4eacd53b17ffe5bf96816467ba77e2cb9d893f90a3fca2908f320862e656f7d2",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240715&type=ALLBUT0999",
+      "sha256": "858f5012809f58622b234973abb8aea7561dd31e0c0233b89e480fbd81cb0dd0",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240716&type=ALLBUT0999",
+      "sha256": "13ed12d969086073212a8c957fad79f042755c7da5175d5f830d8e333c07a93a",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240717&type=ALLBUT0999",
+      "sha256": "f4f9a9d21e1f25fb81a06afd8407cb1c8e16299d568433c19588f4114ae12365",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240718&type=ALLBUT0999",
+      "sha256": "b055562836dedfa957cbd7436dcb96bd6f659190029bee1846d24a59a28a7b64",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240719&type=ALLBUT0999",
+      "sha256": "8c48702bd18bdd20174f775be0a81955df8c81d206c6be818edbf6936cb610b1",
+      "rows": 1247
+    },
+    {
+      "day": "2024-07-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240722&type=ALLBUT0999",
+      "sha256": "c6808674f8e9ea6ed6bcebd7b263f7fc77f687b3aa679b586927ad1065a5f513",
+      "rows": 1247
+    },
+    {
+      "day": "2024-07-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240723&type=ALLBUT0999",
+      "sha256": "c1bc7b815ad945c1cd6a7690d59c0a95d90b17cc90383165c8728939a4772d6c",
+      "rows": 1247
+    },
+    {
+      "day": "2024-07-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240724&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-07-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240725&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-07-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240726&type=ALLBUT0999",
+      "sha256": "dca90f74d7fd8c6a0ed0802ab41cf2024c7c1d3ed51c8c97417672cbec30d057",
+      "rows": 1248
+    },
+    {
+      "day": "2024-07-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240729&type=ALLBUT0999",
+      "sha256": "4e56c0d2ac45c38170382c01d925e1a6e6c0f8e32baf92878abf19980bcb6b8d",
+      "rows": 1249
+    },
+    {
+      "day": "2024-07-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240730&type=ALLBUT0999",
+      "sha256": "aa49239b91acefa3bb3d41c8cc96c4df5d4c931579955a472ed2264dfcc9979b",
+      "rows": 1249
+    },
+    {
+      "day": "2024-07-31",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240731&type=ALLBUT0999",
+      "sha256": "479816501caf8d0c2ce15c385de49f9e14ce37f4928fd771c9e3404aa7fac3c5",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240801&type=ALLBUT0999",
+      "sha256": "5987a334c25055bcc30fa7e58e21f8c7ad87c1d2e1e4ee8dd23592f2d76915cd",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240802&type=ALLBUT0999",
+      "sha256": "6790a97a788fb966278331a136946cb1e9ff70a7884b0ff9ddc149061bc02644",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240805&type=ALLBUT0999",
+      "sha256": "6f87ba71070568b423b6d248a5231b95fad61d2852280154e5c8d11997432630",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240806&type=ALLBUT0999",
+      "sha256": "d04cfa8e013067c74892a0087c10eaf45841cd3c407f341073637e69c22f7100",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-07",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240807&type=ALLBUT0999",
+      "sha256": "2759607d7ea9cf2d836a70a4a4dde7602fcad480026c678e733660bc31876460",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240808&type=ALLBUT0999",
+      "sha256": "3663525da13a0cbe89010e52e6e511cfbb47db50280653abe0fcf10c098ecd95",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240809&type=ALLBUT0999",
+      "sha256": "38eef719f07d087cbb85df2abf41508d737b1013b1063be5b796ec6e5466dcc8",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240812&type=ALLBUT0999",
+      "sha256": "e896189ee55d90f2442586aad62db5f7919764691fe4ba33e7b3c9e9abddede4",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240813&type=ALLBUT0999",
+      "sha256": "723bebd29ff1fb221a5bf208f1436eb56fbf2b83230a7ece3dfec7b3fed95b78",
+      "rows": 1250
+    },
+    {
+      "day": "2024-08-14",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240814&type=ALLBUT0999",
+      "sha256": "6426e5af7dffd6bcb3122858fbc2c659cce8561137dc931dc2ffb53bf3cc50a0",
+      "rows": 1250
+    },
+    {
+      "day": "2024-08-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240815&type=ALLBUT0999",
+      "sha256": "85ab055d4805f275465c23148a9f26989cd6e5a2b6eda013ae5ba8f4263c393d",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240816&type=ALLBUT0999",
+      "sha256": "5cdc8d2fcfc7d2684f2f8e57d434079325df4b2faa9c316144742fd8976555ac",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240819&type=ALLBUT0999",
+      "sha256": "007a40add170ed965f56eca28247d4d3fb4a53fa28e1e98e3f66fd9a98bfe420",
+      "rows": 1249
+    },
+    {
+      "day": "2024-08-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240820&type=ALLBUT0999",
+      "sha256": "ba1e07ad5cb5447b1e8c59906abed6ed56691c8388911a170cf29111e4e0f1ea",
+      "rows": 1252
+    },
+    {
+      "day": "2024-08-21",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240821&type=ALLBUT0999",
+      "sha256": "d838a07fa1bba685b8b8a46152aca9f217f45efec1aa5448a43aa89bcb4408aa",
+      "rows": 1252
+    },
+    {
+      "day": "2024-08-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240822&type=ALLBUT0999",
+      "sha256": "c41371a6e0ca77b374ef9af558d5140b6f20462cea958aac68b0716126fad39a",
+      "rows": 1251
+    },
+    {
+      "day": "2024-08-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240823&type=ALLBUT0999",
+      "sha256": "2da20a598845a7c8e8647b70ce1cc5c375f18e399e4f527bfc9aae27f6289c52",
+      "rows": 1251
+    },
+    {
+      "day": "2024-08-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240826&type=ALLBUT0999",
+      "sha256": "870700a93cbbbad0e0ee1395691a4fbf29b81d2871399b351d22b53c9057b0f7",
+      "rows": 1252
+    },
+    {
+      "day": "2024-08-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240827&type=ALLBUT0999",
+      "sha256": "2abef03842a3943d8706a716f0f2b990f1a70609e081473b996532eea37132f9",
+      "rows": 1252
+    },
+    {
+      "day": "2024-08-28",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240828&type=ALLBUT0999",
+      "sha256": "0e41dd34be9a0523b57af5b72b1dc2a7f7f958161b5f752e47abb750db954eba",
+      "rows": 1252
+    },
+    {
+      "day": "2024-08-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240829&type=ALLBUT0999",
+      "sha256": "c75651b34349b64255048cba26306a3893a097588b0094e15c397e94f3268c09",
+      "rows": 1251
+    },
+    {
+      "day": "2024-08-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240830&type=ALLBUT0999",
+      "sha256": "e1a672a567615bc7e592ce8ad3fc7cd64db85272660839956824d99830b26e91",
+      "rows": 1251
+    },
+    {
+      "day": "2024-09-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240902&type=ALLBUT0999",
+      "sha256": "bcc26e1cf37a3f34f6cbe926ff64d901e264527aefd5dd41cca4e383e8491eb5",
+      "rows": 1252
+    },
+    {
+      "day": "2024-09-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240903&type=ALLBUT0999",
+      "sha256": "d2e442588ee23929be2800e3280118f0e8417b225ebed665972fa216d02a61a0",
+      "rows": 1252
+    },
+    {
+      "day": "2024-09-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240904&type=ALLBUT0999",
+      "sha256": "aa4479ec479e5145459d14e6e77d4e452d7aed985d6fb71354257e9deb86a717",
+      "rows": 1252
+    },
+    {
+      "day": "2024-09-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240905&type=ALLBUT0999",
+      "sha256": "092f2d7daf1704a9a6c72b14cd94708e0a23bb69fb7be730a17686e67a7f6a1d",
+      "rows": 1253
+    },
+    {
+      "day": "2024-09-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240906&type=ALLBUT0999",
+      "sha256": "c79d520269c2c7180eb2e66562f46de3fb7d679689c3bcfb496840a010b7d6fc",
+      "rows": 1253
+    },
+    {
+      "day": "2024-09-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240909&type=ALLBUT0999",
+      "sha256": "71304d170e192e51269c140ab0b43a7c77d60420810bcc3c26adf8d8729394c7",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240910&type=ALLBUT0999",
+      "sha256": "84b9b9abdd5abcdce6288aa9cbf668195f8dfaab4485d9f1f6812a108b980f5a",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240911&type=ALLBUT0999",
+      "sha256": "7cb547845dc1b1592be3879b3d46ef3c63cdfca2dad07c8745bebd1ed8665323",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240912&type=ALLBUT0999",
+      "sha256": "a2bd8d7861f5b92c509bb9d571096ce3ecf2f277511000457c36f34f73685f08",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240913&type=ALLBUT0999",
+      "sha256": "793a7067b6fbe6584af67fac5a47193694aa4935f342fa2c844ca494bc696ef8",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240916&type=ALLBUT0999",
+      "sha256": "1ddaea5e68ce8bea59b4a2a15f0907d068bb1b99e9264fdbe828a66b943e1d7d",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240917&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-09-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240918&type=ALLBUT0999",
+      "sha256": "9ed8cc7232b031dcb22112793afe4d4c1cb3d8b1499a27cd7ded9af4c92cacac",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240919&type=ALLBUT0999",
+      "sha256": "38b4ebdc413171c4d1f88c0f43616dbf28de75968f68201f2b373a65cfc7c71d",
+      "rows": 1254
+    },
+    {
+      "day": "2024-09-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240920&type=ALLBUT0999",
+      "sha256": "f759b0ea172100bbd1d1effa5891c656f0e01b133d7be43f6498c79c133531b7",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240923&type=ALLBUT0999",
+      "sha256": "8dd3ff014b79dbc840cb5b8716e3e662197cdbbbb60c98b6241d762f31ef89d7",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240924&type=ALLBUT0999",
+      "sha256": "0f2c1046cfde1f8a4e601eef39400e850e7a16c26a9a347926270ae4a7d87868",
+      "rows": 1255
+    },
+    {
+      "day": "2024-09-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240925&type=ALLBUT0999",
+      "sha256": "67fe579a002248757a82af71300dbcf2acff1deae7dcacf00bbb60bdd2380017",
+      "rows": 1256
+    },
+    {
+      "day": "2024-09-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240926&type=ALLBUT0999",
+      "sha256": "8483419ed946de902dcb525c6ba6cbcd3b0a4caf44b01b4874f04867e39e18a8",
+      "rows": 1256
+    },
+    {
+      "day": "2024-09-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240927&type=ALLBUT0999",
+      "sha256": "0cc450ef9b7523135a0c420b8465f7b3e50b56f4a6cd3084485ff855b64aef3a",
+      "rows": 1256
+    },
+    {
+      "day": "2024-09-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240930&type=ALLBUT0999",
+      "sha256": "1875464be682fe064c15189bf1635c2998f1d09f89406a96fd70b14f631b4fcf",
+      "rows": 1258
+    },
+    {
+      "day": "2024-10-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241001&type=ALLBUT0999",
+      "sha256": "ef84d4f8144aeacd9f56b196d992e88e4385af317804f0d9f6d8d4f191075145",
+      "rows": 1258
+    },
+    {
+      "day": "2024-10-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241002&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-10-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241003&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-10-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241004&type=ALLBUT0999",
+      "sha256": "bb1c6f24a16f80abfbbfbb9b097158d6cbb966f62f1493ae98d2dbc9fd5b2e2b",
+      "rows": 1259
+    },
+    {
+      "day": "2024-10-07",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241007&type=ALLBUT0999",
+      "sha256": "0b2ee00c8ad5b1b49c6723e914c6f3f4640b88a098d2347dc7bf46bf64ca9c5c",
+      "rows": 1259
+    },
+    {
+      "day": "2024-10-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241008&type=ALLBUT0999",
+      "sha256": "d74cdb4b8dc296e23816f412b55074d6fbc240e0b412ebad58a94fe311690a05",
+      "rows": 1259
+    },
+    {
+      "day": "2024-10-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241009&type=ALLBUT0999",
+      "sha256": "6e223a4c6f2eebc0970862ad0ee20f7ebd10dd1327694f46b0a70fe25e4cbbb1",
+      "rows": 1256
+    },
+    {
+      "day": "2024-10-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241010&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-10-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241011&type=ALLBUT0999",
+      "sha256": "07f1fac214564664fff8442e67f307d24bd13ef80d7338bb5d420808a17abe98",
+      "rows": 1256
+    },
+    {
+      "day": "2024-10-14",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241014&type=ALLBUT0999",
+      "sha256": "7570b8cf62f67fd198c2179df5d72b35877b926c248a32f723eea8076c7094a1",
+      "rows": 1256
+    },
+    {
+      "day": "2024-10-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241015&type=ALLBUT0999",
+      "sha256": "a8c795ebbcde9dbfcb058c60d467ccd4a035c81722d0b7ebc9214b3e4c3039aa",
+      "rows": 1257
+    },
+    {
+      "day": "2024-10-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241016&type=ALLBUT0999",
+      "sha256": "77fb12ea3119a2725c59ff52d30f87901d2e094c6f709b23f35dd495bfcea3ab",
+      "rows": 1257
+    },
+    {
+      "day": "2024-10-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241017&type=ALLBUT0999",
+      "sha256": "ad4cf5652769aee32cefcc1573311c5cc1c98c71b718b6fca2d5b8d60b683f1e",
+      "rows": 1256
+    },
+    {
+      "day": "2024-10-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241018&type=ALLBUT0999",
+      "sha256": "ebe834e0df598522ed0339f8a8f846c942cdf8c5a6e53fdbb62da867062f44cc",
+      "rows": 1256
+    },
+    {
+      "day": "2024-10-21",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241021&type=ALLBUT0999",
+      "sha256": "a9c2bc396d886a2e130a70c0246e0a247540388d43bd6da8d4973f5c09ad166f",
+      "rows": 1258
+    },
+    {
+      "day": "2024-10-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241022&type=ALLBUT0999",
+      "sha256": "d2c5248a68d5406110cfc706c2ce56f9fe42d01fbc7170503aaebb8eee3cc020",
+      "rows": 1258
+    },
+    {
+      "day": "2024-10-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241023&type=ALLBUT0999",
+      "sha256": "aaf4a3cdee9edc818e3f7d7f2126ac1c8c1d4e815807e3c17abbb98442b5a410",
+      "rows": 1261
+    },
+    {
+      "day": "2024-10-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241024&type=ALLBUT0999",
+      "sha256": "0dbf9f89b551fe6fd3bad08b2ee52737afe8b12d7076589dfcfbe9914545f229",
+      "rows": 1261
+    },
+    {
+      "day": "2024-10-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241025&type=ALLBUT0999",
+      "sha256": "844d0617b3ad6e7863dcac720245ee2ff39d512d1f9d50fccf7d5ae9e77ec20b",
+      "rows": 1262
+    },
+    {
+      "day": "2024-10-28",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241028&type=ALLBUT0999",
+      "sha256": "d1aea73406f679eedc0e461bd1a1309218059afa2c1b17d11d9908b771aeff44",
+      "rows": 1263
+    },
+    {
+      "day": "2024-10-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241029&type=ALLBUT0999",
+      "sha256": "9291bd1744886218945075515f76963aa72a24e86ae5294126a787dc9fab0afc",
+      "rows": 1263
+    },
+    {
+      "day": "2024-10-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241030&type=ALLBUT0999",
+      "sha256": "7d7a52ee510beb65b74a9a45b8ce2ddbd3c451d61cad7b005786ef2007d14383",
+      "rows": 1263
+    },
+    {
+      "day": "2024-10-31",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241031&type=ALLBUT0999",
+      "sha256": "a5691b2512d7068ab2f69df75c3ef8fbc38dc565086422b1602656895c92c652",
+      "rows": 0
+    },
+    {
+      "day": "2024-11-01",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241101&type=ALLBUT0999",
+      "sha256": "b04364c70980f4a5e9205ad4c4034232cfc534f09ee177f19f8a5e345f9238e0",
+      "rows": 1259
+    },
+    {
+      "day": "2024-11-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241104&type=ALLBUT0999",
+      "sha256": "e52cb493187cdc674ac16052d576a077ec1f3d95314c4c8fa5d32d025e5d267c",
+      "rows": 1259
+    },
+    {
+      "day": "2024-11-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241105&type=ALLBUT0999",
+      "sha256": "3e53ba514533f609009b5195c688fde21c0f015160f603c2cd710dbc45c8c3f7",
+      "rows": 1259
+    },
+    {
+      "day": "2024-11-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241106&type=ALLBUT0999",
+      "sha256": "091532887041d0880bccf44c451ac5162f3091a282f2c0f66e0f133c92b49152",
+      "rows": 1259
+    },
+    {
+      "day": "2024-11-07",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241107&type=ALLBUT0999",
+      "sha256": "6ac8e33c472d308e4213f648ac67c602596d7f056ef702659ff4aac2ddc5931d",
+      "rows": 1259
+    },
+    {
+      "day": "2024-11-08",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241108&type=ALLBUT0999",
+      "sha256": "799aab37a0965b1784980cb6dcb1410704bead11603d4303c64f99f000cc84f6",
+      "rows": 1259
+    },
+    {
+      "day": "2024-11-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241111&type=ALLBUT0999",
+      "sha256": "e26a25f66b7112986ba54e3ca6f83bfee276ccdcf77164d7e6e069304feae293",
+      "rows": 1263
+    },
+    {
+      "day": "2024-11-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241112&type=ALLBUT0999",
+      "sha256": "cecf3639ca007a72ea977f767ab21a964b0d940c7d6c8bd887a4f03db0fe7067",
+      "rows": 1263
+    },
+    {
+      "day": "2024-11-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241113&type=ALLBUT0999",
+      "sha256": "0d08bff37a6e9b872bdfdf7daa57dce2269d13b38b6804b9131201dbb2996ec5",
+      "rows": 1263
+    },
+    {
+      "day": "2024-11-14",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241114&type=ALLBUT0999",
+      "sha256": "69fac6501d86fdd8b4184368a58bc8cce3a1c710f91f52ea892e9b5fdcc8137a",
+      "rows": 1264
+    },
+    {
+      "day": "2024-11-15",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241115&type=ALLBUT0999",
+      "sha256": "22ebd5cdba2d664cec63545eb585598d98ba32807a206641263919492c5eb7bb",
+      "rows": 1264
+    },
+    {
+      "day": "2024-11-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241118&type=ALLBUT0999",
+      "sha256": "87a8c6fed78d1febaaf0a1da98809b2c16bad8cc04fd6e110bd8d25591c6a8ea",
+      "rows": 1264
+    },
+    {
+      "day": "2024-11-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241119&type=ALLBUT0999",
+      "sha256": "6ceb1e0c0ff52c1e533b9f12199f0d9319a6b555c1ae113b947ba90fd1aa2e65",
+      "rows": 1265
+    },
+    {
+      "day": "2024-11-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241120&type=ALLBUT0999",
+      "sha256": "53179022988d42c3d319b4362ca65e9a7b1b2c6900061362c6b29293459822e4",
+      "rows": 1265
+    },
+    {
+      "day": "2024-11-21",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241121&type=ALLBUT0999",
+      "sha256": "dac555da356e8fc881dd3a2a977f99b7db6d19f77bc80f60cfd67541cea5b1ac",
+      "rows": 1265
+    },
+    {
+      "day": "2024-11-22",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241122&type=ALLBUT0999",
+      "sha256": "5651fa7f3306f9755b77ba472f45a28c839861791b406750b1c3bcb48d87661a",
+      "rows": 1265
+    },
+    {
+      "day": "2024-11-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241125&type=ALLBUT0999",
+      "sha256": "1fd5e543eb3448dba890e9b94dcb3e85cc5091724bf90f66731196f4630e9a5e",
+      "rows": 1266
+    },
+    {
+      "day": "2024-11-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241126&type=ALLBUT0999",
+      "sha256": "cd01fa5bb983035fe5d01114c9cd355c9453be49dfcc0242e7f72a0cb8390c0b",
+      "rows": 1269
+    },
+    {
+      "day": "2024-11-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241127&type=ALLBUT0999",
+      "sha256": "21dc8c99049297fac56583e541a313e83bb9fad5bce222e04422c6ec790cb255",
+      "rows": 1269
+    },
+    {
+      "day": "2024-11-28",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241128&type=ALLBUT0999",
+      "sha256": "50aa18cc0a595279989b6f441797a36145c45f3b7fdf11c8733a0df29701ffd7",
+      "rows": 1269
+    },
+    {
+      "day": "2024-11-29",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241129&type=ALLBUT0999",
+      "sha256": "356db50418c1c896ed08c8b1744e156342356b56f55e40d7e4b18d879d0f9aba",
+      "rows": 1269
+    },
+    {
+      "day": "2024-12-02",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241202&type=ALLBUT0999",
+      "sha256": "906b1ea5221ff50ed01be338993295af046dcd954e411f63d3351a0af3205d3f",
+      "rows": 1269
+    },
+    {
+      "day": "2024-12-03",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241203&type=ALLBUT0999",
+      "sha256": "2e1ca362f5909c927860f718fbf62714cd8670a6020e8fa85cc7b49473c1a869",
+      "rows": 1270
+    },
+    {
+      "day": "2024-12-04",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241204&type=ALLBUT0999",
+      "sha256": "21f41c6a798e866a178beedc10033fa334ea5ba0441679ffe131d7bf69c71751",
+      "rows": 1269
+    },
+    {
+      "day": "2024-12-05",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241205&type=ALLBUT0999",
+      "sha256": "62789b3a3fe04201f5ae204c13fc942e966ed3665bd8690323781e97c44bc4b4",
+      "rows": 1270
+    },
+    {
+      "day": "2024-12-06",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241206&type=ALLBUT0999",
+      "sha256": "95efb4fe742ae7f71a147a900f3cdf70af2f2013a5a79fa37b0733a3d91b9ee5",
+      "rows": 1272
+    },
+    {
+      "day": "2024-12-09",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241209&type=ALLBUT0999",
+      "sha256": "843312476b99cc7c3831ab6e662844aba037c46815c0fb4c42c12a50e34b8f96",
+      "rows": 1272
+    },
+    {
+      "day": "2024-12-10",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241210&type=ALLBUT0999",
+      "sha256": "07d1dc4d71f8e1cfb8e989c3ab868f4924eac04d6743d59b87e152128541f11e",
+      "rows": 1272
+    },
+    {
+      "day": "2024-12-11",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241211&type=ALLBUT0999",
+      "sha256": "591de8b9b58db0b8c46a2cb660eef70331b9f89dc1aab7af62634d3d68973b57",
+      "rows": 1274
+    },
+    {
+      "day": "2024-12-12",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241212&type=ALLBUT0999",
+      "sha256": "eb3e9e5bce7b3e7442291611cd5f21b7785e916932879a85809d8ec7106a807e",
+      "rows": 1274
+    },
+    {
+      "day": "2024-12-13",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241213&type=ALLBUT0999",
+      "sha256": "ebb4e19b8552279b29401c1957df6bd6f5fbb3274617e983e1be4517e70e4ea7",
+      "rows": 1274
+    },
+    {
+      "day": "2024-12-16",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241216&type=ALLBUT0999",
+      "sha256": "c7a534ad65a11e7bf3c6022d49385068076faa32310ff51a0007b88d92774a0b",
+      "rows": 1275
+    },
+    {
+      "day": "2024-12-17",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241217&type=ALLBUT0999",
+      "sha256": "ffbb831ced7e0b39c067f18f818d7dddfa4adbed1e1e2e3340b4558ffddcb6d6",
+      "rows": 1275
+    },
+    {
+      "day": "2024-12-18",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241218&type=ALLBUT0999",
+      "sha256": "6e4dd730374afd11e00b134491bbdb6a5b45c49a9365424d728a8f34abc83c0f",
+      "rows": 1275
+    },
+    {
+      "day": "2024-12-19",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241219&type=ALLBUT0999",
+      "sha256": "4a4feffa9395e5963c5a7cc5e3ca0943b6230338237a3be962600e3cc6e2580a",
+      "rows": 1273
+    },
+    {
+      "day": "2024-12-20",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241220&type=ALLBUT0999",
+      "sha256": "2119859ebd7feba1cd6ec1d31ab95ef079977ced3712bb0cc834ffc8934a522d",
+      "rows": 1273
+    },
+    {
+      "day": "2024-12-23",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241223&type=ALLBUT0999",
+      "sha256": "451b879a78f45cfea85c253c212b014506aa3a6b37c2ea4c909b05144f308913",
+      "rows": 1273
+    },
+    {
+      "day": "2024-12-24",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241224&type=ALLBUT0999",
+      "sha256": "fe48b5dc985ef02ce5ec66706b9f99915a2d34c5f6d1d74b602c15938cd3acad",
+      "rows": 1273
+    },
+    {
+      "day": "2024-12-25",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241225&type=ALLBUT0999",
+      "sha256": "a91e5cc1ff95dcd9dbec95e58f88f0f9d184f2ff3016834f1b682d5573fc6a7b",
+      "rows": 1273
+    },
+    {
+      "day": "2024-12-26",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241226&type=ALLBUT0999",
+      "sha256": "77f5c4194f6b1e59d85d8e276c97f28e8ece35bfbb86dbaadea73fa64ccba1b6",
+      "rows": 1273
+    },
+    {
+      "day": "2024-12-27",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241227&type=ALLBUT0999",
+      "sha256": "16fa0f911abd8e3527b8196d657dcda0b1fa5f3f7c36496a9c249b6887cc27e1",
+      "rows": 1273
+    },
+    {
+      "day": "2024-12-30",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241230&type=ALLBUT0999",
+      "sha256": "dc96d10099084cb646eb676f36e1da5231b5414f7d9ed3b91cc97332adecd2dc",
+      "rows": 1274
+    },
+    {
+      "day": "2024-12-31",
+      "url": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241231&type=ALLBUT0999",
+      "sha256": "574692e9324d577ef603b788c268bcc23a2cf52928c19665114a85c13ea5f015",
+      "rows": 1274
+    }
+  ],
+  "calendar_sources": [
+    {
+      "year": 2024,
+      "url": "https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&date=20240101",
+      "sha256": "af465bb1c10da0e4acfe99f9a6cc0edfdb96fa3f0d89835bed1316670a4de26d"
+    },
+    {
+      "file": "validation/v025/closures2024.json",
+      "sha256": "6edcd2e9b6e8e944aa2e730ae15a7b08db7e560e5de400f3ac2f6094e647e6a6",
+      "note": "Dated announcement evidence; visibility is conservative midnight on the closure day, exact prior-evening minute unavailable."
+    }
+  ],
+  "benchmark": [
+    {
+      "day": "2024-01-02",
+      "close": "17853.76",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240102&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-03",
+      "close": "17559.31",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240103&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-04",
+      "close": "17549.65",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240104&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-05",
+      "close": "17519.14",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240105&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-08",
+      "close": "17572.66",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240108&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-09",
+      "close": "17535.49",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240109&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-10",
+      "close": "17465.63",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240110&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-11",
+      "close": "17545.32",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240111&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-12",
+      "close": "17512.83",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240112&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-15",
+      "close": "17546.82",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240115&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-16",
+      "close": "17346.87",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240116&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-17",
+      "close": "17161.79",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240117&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-18",
+      "close": "17227.79",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240118&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-19",
+      "close": "17681.52",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240119&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-22",
+      "close": "17815.10",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240122&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-23",
+      "close": "17874.59",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240123&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-24",
+      "close": "17875.83",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240124&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-25",
+      "close": "18002.62",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240125&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-26",
+      "close": "17995.03",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240126&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-29",
+      "close": "18119.63",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240129&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-30",
+      "close": "18034.63",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240130&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-01-31",
+      "close": "17889.56",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240131&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-01",
+      "close": "17968.11",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240201&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-02",
+      "close": "18059.93",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240202&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-05",
+      "close": "18096.07",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240205&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-15",
+      "close": "18644.57",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240215&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-16",
+      "close": "18607.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240216&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-19",
+      "close": "18635.80",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240219&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-20",
+      "close": "18753.16",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240220&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-21",
+      "close": "18676.31",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240221&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-22",
+      "close": "18852.78",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240222&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-23",
+      "close": "18889.19",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240223&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-26",
+      "close": "18948.05",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240226&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-27",
+      "close": "18854.41",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240227&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-02-29",
+      "close": "18966.77",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240229&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-01",
+      "close": "18935.93",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240301&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-04",
+      "close": "19305.31",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240304&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-05",
+      "close": "19386.92",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240305&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-06",
+      "close": "19499.45",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240306&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-07",
+      "close": "19693.52",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240307&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-08",
+      "close": "19785.32",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240308&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-11",
+      "close": "19726.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240311&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-12",
+      "close": "19914.55",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240312&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-13",
+      "close": "19928.51",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240313&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-14",
+      "close": "19937.92",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240314&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-15",
+      "close": "19682.50",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240315&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-18",
+      "close": "19879.85",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240318&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-19",
+      "close": "19857.20",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240319&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-20",
+      "close": "19784.45",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240320&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-21",
+      "close": "20199.09",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240321&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-22",
+      "close": "20228.43",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240322&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-25",
+      "close": "20192.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240325&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-26",
+      "close": "20126.49",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240326&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-27",
+      "close": "20200.12",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240327&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-28",
+      "close": "20146.55",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240328&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-03-29",
+      "close": "20294.45",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240329&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-01",
+      "close": "20222.33",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240401&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-02",
+      "close": "20466.57",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240402&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-03",
+      "close": "20337.60",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240403&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-08",
+      "close": "20417.70",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240408&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-09",
+      "close": "20796.20",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240409&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-10",
+      "close": "20763.53",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240410&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-11",
+      "close": "20753.22",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240411&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-12",
+      "close": "20736.57",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240412&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-15",
+      "close": "20449.77",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240415&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-16",
+      "close": "19901.96",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240416&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-17",
+      "close": "20213.33",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240417&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-18",
+      "close": "20301.20",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240418&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-19",
+      "close": "19527.12",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240419&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-22",
+      "close": "19411.22",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240422&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-23",
+      "close": "19599.28",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240423&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-24",
+      "close": "20131.74",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240424&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-25",
+      "close": "19857.42",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240425&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-26",
+      "close": "20120.51",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240426&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-29",
+      "close": "20495.52",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240429&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-04-30",
+      "close": "20396.60",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240430&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-02",
+      "close": "20222.44",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240502&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-03",
+      "close": "20330.32",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240503&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-06",
+      "close": "20523.31",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240506&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-07",
+      "close": "20653.53",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240507&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-08",
+      "close": "20700.51",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240508&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-09",
+      "close": "20560.77",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240509&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-10",
+      "close": "20708.84",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240510&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-13",
+      "close": "20857.71",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240513&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-14",
+      "close": "20985.85",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240514&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-15",
+      "close": "21147.21",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240515&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-16",
+      "close": "21304.26",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240516&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-17",
+      "close": "21258.47",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240517&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-20",
+      "close": "21271.63",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240520&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-21",
+      "close": "21236.75",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240521&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-22",
+      "close": "21551.83",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240522&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-23",
+      "close": "21607.43",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240523&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-24",
+      "close": "21565.34",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240524&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-27",
+      "close": "21803.77",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240527&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-28",
+      "close": "21858.41",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240528&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-29",
+      "close": "21662.50",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240529&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-30",
+      "close": "21364.48",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240530&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-05-31",
+      "close": "21174.22",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240531&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-03",
+      "close": "21536.76",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240603&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-04",
+      "close": "21356.62",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240604&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-05",
+      "close": "21484.88",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240605&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-06",
+      "close": "21902.70",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240606&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-07",
+      "close": "21858.38",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240607&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-11",
+      "close": "21792.12",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240611&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-12",
+      "close": "22048.96",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240612&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-13",
+      "close": "22312.04",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240613&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-14",
+      "close": "22504.72",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240614&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-17",
+      "close": "22496.53",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240617&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-18",
+      "close": "22757.43",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240618&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-19",
+      "close": "23209.54",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240619&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-20",
+      "close": "23406.10",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240620&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-21",
+      "close": "23253.39",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240621&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-24",
+      "close": "22813.70",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240624&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-25",
+      "close": "22875.97",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240625&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-26",
+      "close": "22986.69",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240626&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-27",
+      "close": "22905.98",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240627&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-06-28",
+      "close": "23032.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240628&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-01",
+      "close": "23058.57",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240701&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-02",
+      "close": "22879.37",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240702&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-03",
+      "close": "23172.43",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240703&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-04",
+      "close": "23522.53",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240704&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-05",
+      "close": "23556.59",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240705&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-08",
+      "close": "23878.15",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240708&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-09",
+      "close": "23900.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240709&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-10",
+      "close": "24007.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240710&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-11",
+      "close": "24390.03",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240711&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-12",
+      "close": "23916.93",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240712&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-15",
+      "close": "23879.36",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240715&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-16",
+      "close": "23997.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240716&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-17",
+      "close": "23769.82",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240717&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-18",
+      "close": "23398.47",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240718&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-19",
+      "close": "22869.26",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240719&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-22",
+      "close": "22256.99",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240722&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-23",
+      "close": "22871.84",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240723&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-26",
+      "close": "22119.21",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240726&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-29",
+      "close": "22164.49",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240729&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-30",
+      "close": "22223.57",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240730&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-07-31",
+      "close": "22199.35",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240731&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-01",
+      "close": "22642.10",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240801&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-02",
+      "close": "21638.09",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240802&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-05",
+      "close": "19830.88",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240805&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-06",
+      "close": "20501.02",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240806&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-07",
+      "close": "21295.28",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240807&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-08",
+      "close": "20870.10",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240808&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-09",
+      "close": "21469.00",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240809&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-12",
+      "close": "21773.26",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240812&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-13",
+      "close": "21796.57",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240813&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-14",
+      "close": "22027.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240814&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-15",
+      "close": "21895.17",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240815&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-16",
+      "close": "22349.33",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240816&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-19",
+      "close": "22409.63",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240819&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-20",
+      "close": "22429.10",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240820&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-21",
+      "close": "22237.89",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240821&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-22",
+      "close": "22148.83",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240822&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-23",
+      "close": "22158.05",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240823&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-26",
+      "close": "22240.12",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240826&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-27",
+      "close": "22185.00",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240827&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-28",
+      "close": "22370.66",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240828&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-29",
+      "close": "22201.85",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240829&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-08-30",
+      "close": "22268.09",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240830&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-02",
+      "close": "22235.10",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240902&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-03",
+      "close": "22092.21",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240903&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-04",
+      "close": "21092.75",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240904&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-05",
+      "close": "21187.71",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240905&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-06",
+      "close": "21435.19",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240906&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-09",
+      "close": "21144.44",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240909&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-10",
+      "close": "21064.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240910&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-11",
+      "close": "21031.00",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240911&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-12",
+      "close": "21653.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240912&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-13",
+      "close": "21759.65",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240913&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-16",
+      "close": "21850.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240916&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-18",
+      "close": "21678.84",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240918&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-19",
+      "close": "22042.69",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240919&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-20",
+      "close": "22159.42",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240920&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-23",
+      "close": "22285.53",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240923&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-24",
+      "close": "22431.78",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240924&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-25",
+      "close": "22761.60",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240925&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-26",
+      "close": "22858.81",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240926&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-27",
+      "close": "22822.79",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240927&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-09-30",
+      "close": "22224.54",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20240930&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-01",
+      "close": "22390.39",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241001&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-04",
+      "close": "22302.71",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241004&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-07",
+      "close": "22702.56",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241007&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-08",
+      "close": "22611.39",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241008&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-09",
+      "close": "22659.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241009&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-11",
+      "close": "22901.64",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241011&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-14",
+      "close": "22975.29",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241014&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-15",
+      "close": "23292.04",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241015&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-16",
+      "close": "23010.98",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241016&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-17",
+      "close": "23053.84",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241017&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-18",
+      "close": "23487.27",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241018&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-21",
+      "close": "23542.53",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241021&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-22",
+      "close": "23535.43",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241022&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-23",
+      "close": "23334.76",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241023&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-24",
+      "close": "23192.52",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241024&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-25",
+      "close": "23348.45",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241025&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-28",
+      "close": "23198.07",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241028&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-29",
+      "close": "22926.59",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241029&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-10-30",
+      "close": "22820.43",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241030&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-01",
+      "close": "22780.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241101&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-04",
+      "close": "22965.39",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241104&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-05",
+      "close": "23106.79",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241105&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-06",
+      "close": "23217.38",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241106&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-07",
+      "close": "23408.82",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241107&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-08",
+      "close": "23553.89",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241108&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-11",
+      "close": "23529.64",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241111&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-12",
+      "close": "22981.77",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241112&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-13",
+      "close": "22860.23",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241113&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-14",
+      "close": "22715.38",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241114&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-15",
+      "close": "22742.77",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241115&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-18",
+      "close": "22546.54",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241118&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-19",
+      "close": "22848.80",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241119&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-20",
+      "close": "22688.36",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241120&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-21",
+      "close": "22555.66",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241121&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-22",
+      "close": "22904.32",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241122&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-25",
+      "close": "22948.37",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241125&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-26",
+      "close": "22678.76",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241126&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-27",
+      "close": "22334.78",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241127&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-28",
+      "close": "22298.90",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241128&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-11-29",
+      "close": "22262.50",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241129&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-02",
+      "close": "22736.93",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241202&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-03",
+      "close": "23027.46",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241203&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-04",
+      "close": "23255.33",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241204&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-05",
+      "close": "23267.94",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241205&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-06",
+      "close": "23193.27",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241206&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-09",
+      "close": "23273.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241209&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-10",
+      "close": "23125.08",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241210&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-11",
+      "close": "22903.63",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241211&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-12",
+      "close": "23046.80",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241212&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-13",
+      "close": "23020.48",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241213&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-16",
+      "close": "23039.90",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241216&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-17",
+      "close": "23018.01",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241217&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-18",
+      "close": "23168.67",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241218&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-19",
+      "close": "22932.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241219&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-20",
+      "close": "22510.25",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241220&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-23",
+      "close": "23104.54",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241223&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-24",
+      "close": "23120.24",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241224&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-25",
+      "close": "23220.13",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241225&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-26",
+      "close": "23246.94",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241226&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-27",
+      "close": "23275.68",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241227&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-30",
+      "close": "23190.20",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241230&type=ALLBUT0999"
+    },
+    {
+      "day": "2024-12-31",
+      "close": "23035.10",
+      "source": "https://www.twse.com.tw/exchangeReport/MI_INDEX?response=json&date=20241231&type=ALLBUT0999"
+    }
+  ]
+}

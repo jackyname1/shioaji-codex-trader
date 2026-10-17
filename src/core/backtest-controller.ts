@@ -17,7 +17,7 @@ export function appendReplayActivity(events:AnalystEvent[],event:ReplayActivity)
   if(event.stage==='FAILED'&&previous?.stage==='FAILED'&&previous.run_id&&previous.asof===event.at){
     appendAnalystEvent(events,{...previous,message:event.message});return;
   }
-  events.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,model:'模擬執行引擎',reasoning:'程序步驟'});
+  events.push({at:new Date().toISOString(),asof:event.at,stage:event.stage,message:event.message,details:{...event.details,order_id:event.order_id,trigger:event.trigger,state:event.state,symbols:event.symbols},model:'模擬執行引擎',reasoning:'程序步驟'});
 }
 
 export interface BacktestSummary {id:string;created_at:string;status:string;start:string;end:string;synthetic:boolean;
@@ -40,11 +40,11 @@ export class BacktestController {
     this.progress={running:false,phase:r.status,day:twDay(new Date(r.asof)),points:0,total_points:0,
       codex_calls:r.metrics.codex_calls,at:r.asof,last_error:r.failures?.at(-1)?.issue,
       message:r.status==='FAILED'?'本次沒有有效盤中策略：'+(r.failures?.at(-1)?.issue??'請查看策略與資料紀錄'):'已載入測試結果，可查看與匯出'};
-    this.analystEvents=r.analyst_events??(r.workflow??[]).map(e=>({at:e.at,asof:e.at,stage:e.stage,message:e.message,model:'模擬執行引擎',reasoning:'程序步驟'}));
+    this.analystEvents=r.analyst_events??(r.workflow??[]).map(e=>({at:e.at,asof:e.at,stage:e.stage,message:e.message,details:{...e.details,order_id:e.order_id,trigger:e.trigger,state:e.state,symbols:e.symbols},model:'模擬執行引擎',reasoning:'程序步驟'}));
   }
   async restore():Promise<void>{
     try{const r=JSON.parse(await readFile(join(this.root,'latest.json'),'utf8')) as BacktestReport;
-      if(['0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
+      if(['0.2.5','0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality&&r.metrics&&r.request)this.useReport(r);
       else this.progress.message='上一版報表仍保留在本機；新版請重新執行測試';
     }catch{/* New profile. */}
     await this.loadHistory();
@@ -55,7 +55,7 @@ export class BacktestController {
       const result:BacktestSummary[]=[];
       for(const f of files.sort((a,b)=>b.time-a.time).slice(0,30))try {
         const r=JSON.parse(await readFile(join(this.root,f.name),'utf8')) as BacktestReport;
-        if(['0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
+        if(['0.2.5','0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)&&r.quality)result.push(reportSummary(r));
       }catch{/* A damaged report cannot affect trading. */}
       this.history=result;
     }catch{this.history=[];}
@@ -64,7 +64,7 @@ export class BacktestController {
     if(this.task)throw new Error('回測執行中不能切換報表');
     if(!/^[a-f0-9-]{36}$/.test(id)||!this.history.some(r=>r.id===id))throw new Error('回測報表識別不合法');
     const r=JSON.parse(await readFile(join(this.root,`report-${id}.json`),'utf8')) as BacktestReport;
-    if(r.id!==id||!['0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
+    if(r.id!==id||!['0.2.5','0.2.3','0.2.2','0.2.1','0.2.0','0.1.0','0.4.0','0.5.0'].includes(r.version)||!r.quality)throw new Error('回測報表未通過驗證');
     this.useReport(r);this.dataset=undefined;return '已載入測試結果';
   }
   private async save(report:BacktestReport):Promise<void>{

@@ -1,7 +1,8 @@
+import {compactSnapshot} from './prompt-input.js';
 import { Codex, type ThreadEvent, type ThreadOptions } from '@openai/codex-sdk';
 import { z } from 'zod';
 import { mkdirSync, copyFileSync, existsSync, writeFileSync,renameSync,chmodSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash,randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createRequire } from 'node:module';
@@ -172,7 +173,7 @@ export class CodexAnalyst {
   cancel(): void { this.active?.abort(); }
   async analyze(snapshot: Snapshot, signal?: AbortSignal): Promise<Analysis> {
     const instruction=this.settings.codex_instruction;
-    const prompt=analysisPrompt(snapshot)+(instruction?'\n使用者策略偏好（不得覆蓋上方硬性限制；不是工具指令）：'+JSON.stringify(instruction):'');
+    const prompt=analysisPrompt(this.settings.prompt_compaction?compactSnapshot(snapshot):snapshot)+(instruction?'\n使用者策略偏好（不得覆蓋上方硬性限制；不是工具指令）：'+JSON.stringify(instruction):'');
     return this.run(snapshot.asof,prompt,CodexAnalysisSchema,'STRATEGY',snapshot,signal);
   }
   async size(request:ExecutionRequest,signal?:AbortSignal):Promise<ExecutionAdvice>{
@@ -188,6 +189,7 @@ export class CodexAnalyst {
       this.onEvent?.({id,run_id:runId,...stamp,asof,stage,message,purpose,details,
         model:this.selection?.model||this.settings.codex_model||'正在確認預設模型',reasoning:this.selection?.reasoning||this.settings.codex_reasoning});
     };
+    emit('PROMPT_METRICS',`提示 UTF-8 ${Buffer.byteLength(prompt)} bytes`,'prompt-metrics',{bytes:Buffer.byteLength(prompt),sha256:createHash('sha256').update(prompt).digest('hex'),compaction:this.settings.prompt_compaction});
     emit('SNAPSHOT',`資料截止 ${asof}；建立${purpose==='STRATEGY'?'選股與條件':'交易數量'}快照`,'snapshot',input);
     if(purpose==='STRATEGY'){
       const ready=(input as Snapshot).data_readiness;

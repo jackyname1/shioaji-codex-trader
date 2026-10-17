@@ -47,6 +47,7 @@ export function updateProtection(existing: Protection | undefined, symbol: strin
 }
 /** Cost-aware local defaults. Targets remain unchanged; the protection floor can only rise. */
 export function adaptProtection(p:Protection,position:Position,atr:number|undefined,s:Settings,bidCushion='0'):void {
+  if(s.research_exit_mode==='fixed')return;
   if(!s.adaptive_protection||position.shares<=0||!d(position.average_price).gt(0))return;
   const entry=d(position.average_price),vol=atr&&Number.isFinite(atr)&&atr>0?d(atr):entry.times('.02');
   p.entry_price=entry.toFixed();p.initial_risk??=Decimal.max(entry.minus(p.spec.stop_price),vol).toFixed();
@@ -83,4 +84,14 @@ export function evaluate(protection: Protection, price: string,tradeAt?:string):
   else if (s.trailing_activate !== null && s.trailing_fraction !== null && protection.trailing_armed
     && trailing!==null&&d(price).lte(trailing)) protection.triggered = 'TRAILING';
   return protection.triggered;
+}
+
+/** Opt-in paper/replay exit hypothesis. Reward forecasts remain independent of activation prices. */
+export function researchExit(spec:SmartSpec,entry:string,atr:number|undefined,s:Settings):SmartSpec {
+  if(s.research_exit_mode==='baseline')return spec;
+  if(s.research_exit_mode==='fixed')return {...spec,take_profit:spec.take_profit??spec.reward_target??null,trailing_activate:null,trailing_fraction:null};
+  if(!atr||!Number.isFinite(atr)||atr<=0)return spec;
+  return {...spec,take_profit:null,reward_target:spec.reward_target??spec.take_profit,
+    trailing_activate:d(entry).plus(Decimal.max(d(entry).minus(spec.stop_price).times('1.25'),d(atr).times('1.5'))).toFixed(),
+    trailing_fraction:Decimal.min('.08',Decimal.max('.02',d(atr).times('1.8').div(entry))).toFixed()};
 }

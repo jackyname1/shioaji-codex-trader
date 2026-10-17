@@ -157,7 +157,7 @@ test('Codex activity shows the actual model, official reasoning summary, complet
     yield { type: 'turn.completed' as const, usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1, cache_write_input_tokens: 0, reasoning_output_tokens: 0 } };
   })() });
   await new CodexAnalyst(SettingsSchema.parse({ codex_enabled: true }), '/unused', runner, undefined, e => events.push(e)).analyze(input);
-  assert.deepEqual(events.map(e => e.stage), ['SNAPSHOT', 'MODEL', 'RUNNING', 'REASONING', 'OUTPUT', 'USAGE', 'VALIDATING', 'DECISION']);
+  assert.deepEqual(events.map(e => e.stage), ['PROMPT_METRICS', 'SNAPSHOT', 'MODEL', 'RUNNING', 'REASONING', 'OUTPUT', 'USAGE', 'VALIDATING', 'DECISION']);
   assert.ok(events.every(e => e.asof === input.asof)); assert.equal(events.find(e=>e.stage==='REASONING')!.message,'OFFICIAL_REASONING_SUMMARY');
   assert.equal(events.find(e=>e.stage==='MODEL')!.message.includes('注入測試模型'),true);
   assert.deepEqual(events.find(e=>e.stage==='SNAPSHOT')!.details,input);

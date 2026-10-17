@@ -1,8 +1,10 @@
+import {candidateScore} from './entry-quality.js';
 import { AnalysisSchema, d, type Analysis, type Settings, type Snapshot } from './models.js';
 
 /** A deterministic baseline for fast estimates, using only the time-limited snapshot. */
 export function programAnalysis(snapshot: Snapshot, settings: Settings): Analysis {
-  const candidates = snapshot.universe.filter(c => snapshot.features[c.symbol]?.sufficient)
+  const pool=settings.entry_quality_enabled?[...snapshot.universe].sort((a,b)=>candidateScore(snapshot.features[b.symbol],undefined,settings,new Date(snapshot.asof),snapshot.portfolio_risk?.regime).score-candidateScore(snapshot.features[a.symbol],undefined,settings,new Date(snapshot.asof),snapshot.portfolio_risk?.regime).score||a.symbol.localeCompare(b.symbol)):snapshot.universe;
+  const candidates = pool.filter(c => snapshot.features[c.symbol]?.sufficient)
     .slice(0, settings.watch_max_symbols).map(c => c.symbol);
   return AnalysisSchema.parse({ snapshot_id: snapshot.snapshot_id,
     expires_at: new Date(Date.parse(snapshot.asof) + settings.plan_max_minutes * 60000).toISOString(),
