@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {spawn,type SpawnOptions} from 'node:child_process';
+import {spawn,spawnSync,type SpawnOptions} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {NativeConnection,ConnectionInputSchema} from '../src/desktop/credentials.js';
@@ -175,4 +175,17 @@ test('Windows clock repair uses only fixed system commands, with elevation confi
   const elevated=clockRepairCommand('C:\\Windows',true),script=Buffer.from(elevated.args.at(-1)!,'base64').toString('utf16le');
   assert.match(script,/-Verb RunAs/);assert.match(script,/-Wait -PassThru/);assert.doesNotMatch(script,/SJ_|API_KEY|SEC_KEY|ExecutionPolicy|cmd.exe/);
   assert.throws(()=>clockRepairCommand('relative',true));
+});
+test('Windows PowerShell parses both repair scripts and preserves success, failure and UAC cancellation',{skip:process.platform!=='win32'},()=>{
+  const command=clockRepairCommand(process.env.SystemRoot??'C:\\Windows',true);
+  const outer=Buffer.from(command.args.at(-1)!,'base64').toString('utf16le');
+  const innerEncoded=outer.match(/'-EncodedCommand','([A-Za-z0-9+/=]+)'/)![1]!;
+  const inner=Buffer.from(innerEncoded,'base64').toString('utf16le');
+  const parse=(script:string)=>`$t=$null;$e=$null;[void][System.Management.Automation.Language.Parser]::ParseInput([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${Buffer.from(script,'utf16le').toString('base64')}')),[ref]$t,[ref]$e);if($e.Count){exit 99};`;
+  for(const code of [0,1,1223]){
+    const mock=`function Start-Process { param($FilePath,$ArgumentList,$Verb,[switch]$Wait,[switch]$PassThru) if($Verb -ne 'RunAs' -or !$Wait -or !$PassThru){throw 'Invalid repair launch'}; ${code===1223?'throw [ComponentModel.Win32Exception]::new(1223)':`[pscustomobject]@{ExitCode=${code}}`} };`;
+    const script=parse(outer)+parse(inner)+mock+outer;
+    const r=spawnSync(command.binary,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8',timeout:15000,windowsHide:true});
+    assert.equal(r.status,code,r.stderr);
+  }
 });
