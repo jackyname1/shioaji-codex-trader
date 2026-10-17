@@ -84,3 +84,11 @@ test('explainable score flags chasing, nearby resistance, tiny ATR stop and stal
  assert.match(candidateScore(f,{...q,ask:'130'},s,now,'TREND').reasons.join(),/追價/);
  assert.match(candidateScore(f,q,s,now,'TREND',50,{stop_price:'99',take_profit:'115',trailing_activate:null,trailing_fraction:null}).reasons.join(),/ATR/);
 });
+
+test('drawdown, regime and loss mechanisms can be isolated without attributing bundled effects to one guard',()=>{
+ const highVol=Object.fromEntries(Object.entries(features()).map(([k,f])=>[k,{...f,atr14:8}]));
+ const base=decide(undefined,'100000').state,a={...account(),cash:'95000'};
+ const dd=portfolioDecision(base,a,highVol,[],{...s,portfolio_components:'drawdown'},now,true);assert.equal(dd.blocked,true);assert.match(dd.reasons.join(),/組合高點回撤/);
+ const regime=portfolioDecision(base,a,highVol,[],{...s,portfolio_components:'regime'},now,true);assert.equal(regime.blocked,false);assert.equal(regime.scale,'0.25');
+ const loss=portfolioDecision(base,a,highVol,[],{...s,portfolio_components:'loss_streak'},now,true);assert.equal(loss.blocked,false);assert.equal(loss.scale,'1');
+});

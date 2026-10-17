@@ -44,9 +44,8 @@ def audit(document):
             models[(e.get('model'),e.get('reasoning'))]+=1;calls[e.get('purpose','UNKNOWN')]+=1
         if stage=='USAGE' and isinstance(s,dict):
             usage.update({k:v or 0 for k,v in s.items() if isinstance(v,(int,float)) or v is None})
-        if stage=='OUTPUT' and e.get('purpose')!='EXECUTION':
-            try: analysis=json.loads(msg)
-            except ValueError: continue
+        if stage=='DECISION' and isinstance(s,dict):
+            analysis=s
             if not full or full[-1].get('review_only'): continue
             for decision in analysis.get('decisions',[]):
                 decisions[decision['symbol']]=decision
@@ -58,11 +57,12 @@ def audit(document):
             if r:
                 a=r['account'];sizing.append(dict(at=at,symbol=s['symbol'],action=s['action'],request_id=s['request_id'],
                     strategy_shares=r.get('condition',{}).get('shares'),actual_shares=s['shares'],actual_limit=s['limit_price'],
-                    equity=a['equity'],available_cash=a['available_cash'],limits=r['hard_limits'],lots=r['lots'],holdings=a['positions']))
+                    equity=a['equity'],available_cash=a['available_cash'],limits=r['hard_limits'],lots=r['lots'],holdings=a['positions'],features=r.get('features'),protection=r.get('protection'),condition=r.get('condition')))
         if stage=='TRIGGER':
             m=re.match(r'(\d+) (BUY|SELL)：(.*)',msg)
             if m:
-                symbol,action,reason=m.groups();triggers[(symbol,action)]=dict(at=at,reason=reason,stop_price=protections.get(symbol,{}).get('stop_price'))
+                symbol,action,reason=m.groups();context=s.get('order',{}).get('trigger_context') if isinstance(s,dict) else None
+                triggers[(symbol,action)]=dict(at=at,reason=reason,stop_price=context['stop_price'] if context else protections.get(symbol,{}).get('stop_price'),context=context)
         if stage=='SUBMISSION':
             m=SUBMIT.fullmatch(msg)
             if m:
@@ -78,8 +78,8 @@ def audit(document):
             fill_delay_seconds=(timestamp(at)-timestamp(sub['at'])).total_seconds() if sub else None,
             adverse_vs_limit=(price-sub['limit'])*(1 if action=='BUY' else -1) if sub else None,
             trigger_at=trigger['at'] if trigger else None,trigger=trigger['reason'] if trigger else None,
-            stop_price=trigger.get('stop_price') if trigger else None,
-            stop_shortfall_per_share=D(trigger['stop_price'])-price if action=='SELL' and trigger and trigger.get('stop_price') else None)
+            stop_price=trigger.get('stop_price') if trigger else None,trigger_context=trigger.get('context') if trigger else None,stop_source='EXACT_TRIGGER_CONTEXT' if trigger and trigger.get('context') else 'PRIOR_VALIDATED_SNAPSHOT',
+            stop_shortfall_per_share=D(trigger['stop_price'])-price if action=='SELL' and trigger and trigger['reason']=='STOP' and trigger.get('stop_price') else None)
         if action=='BUY':
             snap=next((r for r in reversed(list(requests.values())) if r['symbol']==symbol and r['asof']<=at),None)
             decision=snap.get('condition',{}) if snap else decisions.get(symbol,{})

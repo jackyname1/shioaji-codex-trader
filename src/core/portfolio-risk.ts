@@ -49,25 +49,26 @@ export function portfolioDecision(previous:PortfolioState|undefined,a:Account,fe
   const expectancy=recent.length?recent.reduce((v,t)=>v.plus(t.pnl),d(0)).div(recent.length):null;
   let streak=0;for(const t of [...closed].reverse()){if(d(t.pnl).gte(0))break;streak++;}
   const reasons:string[]=[];let scale=d(1);
+  const useDD=s.portfolio_components==='all'||s.portfolio_components==='drawdown',useRegime=s.portfolio_components==='all'||s.portfolio_components==='regime',useLoss=s.portfolio_components==='all'||s.portfolio_components==='loss_streak';
   if(s.portfolio_risk_enabled){
     if(!valid||!chronological)reasons.push('組合資產快照無效或時間倒退');
     if(valid&&chronological){
-      if(dd.gte(s.portfolio_drawdown_fraction)&&!state.drawdown_latched){state.drawdown_latched=true;
+      if(useDD&&dd.gte(s.portfolio_drawdown_fraction)&&!state.drawdown_latched){state.drawdown_latched=true;
         state.blocked_until_session=state.session_index+s.portfolio_cooldown_sessions;}
       const last=closed.at(-1)?.id;
-      if(streak>=s.portfolio_loss_streak&&last&&last!==state.last_loss_event){state.loss_latched=true;state.last_loss_event=last;
+      if(useLoss&&streak>=s.portfolio_loss_streak&&last&&last!==state.last_loss_event){state.loss_latched=true;state.last_loss_event=last;
         state.blocked_until_session=Math.max(state.blocked_until_session??0,state.session_index+s.portfolio_cooldown_sessions);}
       const cooled=state.session_index>=(state.blocked_until_session??0);
       if(cooled&&dd.lt(d(s.portfolio_drawdown_fraction).div(2)))state.drawdown_latched=false;
-      if(cooled&&regime.regime==='TREND')state.loss_latched=false;
+      if(cooled&&(!useRegime||regime.regime==='TREND'))state.loss_latched=false;
     }
-    if(state.drawdown_latched)reasons.push('組合高點回撤封鎖新增風險；等待冷卻及回撤恢復');
-    if(state.loss_latched)reasons.push('連續虧損冷卻；等待交易日及趨勢恢復');
-    if(regime.regime==='UNKNOWN')reasons.push('市場廣度代理資料不足，保留現金');
-    if(dd.gte(d(s.portfolio_drawdown_fraction).div(2)))scale=Decimal.min(scale,'.5');
-    if(regime.regime==='HIGH_RISK')scale=Decimal.min(scale,'.25');
-    if(regime.regime==='RANGE')scale=Decimal.min(scale,'.5');
-    if(recent.length>=3&&expectancy?.lt(0))scale=Decimal.min(scale,'.5');
+    if(useDD&&state.drawdown_latched)reasons.push('組合高點回撤封鎖新增風險；等待冷卻及回撤恢復');
+    if(useLoss&&state.loss_latched)reasons.push('連續虧損冷卻；等待交易日及趨勢恢復');
+    if(useRegime&&regime.regime==='UNKNOWN')reasons.push('市場廣度代理資料不足，保留現金');
+    if(useDD&&dd.gte(d(s.portfolio_drawdown_fraction).div(2)))scale=Decimal.min(scale,'.5');
+    if(useRegime&&regime.regime==='HIGH_RISK')scale=Decimal.min(scale,'.25');
+    if(useRegime&&regime.regime==='RANGE')scale=Decimal.min(scale,'.5');
+    if(useLoss&&recent.length>=3&&expectancy?.lt(0))scale=Decimal.min(scale,'.5');
   }
   if(reasons.length)scale=d(0);
   return {state,drawdown_fraction:dd.toFixed(),...regime,scale:scale.toFixed(),blocked:scale.eq(0),reasons,

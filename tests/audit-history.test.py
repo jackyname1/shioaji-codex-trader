@@ -32,4 +32,13 @@ class AuditTests(unittest.TestCase):
       module.write_outputs(module.audit(document()),pathlib.Path(tmp))
       self.assertEqual(len((pathlib.Path(tmp)/'events.jsonl').read_text().splitlines()),6)
       self.assertEqual(len((pathlib.Path(tmp)/'fills.csv').read_text(encoding='utf-8-sig').splitlines()),5)
+ def test_unvalidated_model_output_cannot_change_the_recorded_stop(self):
+    x=document();x['events'][0]['details']['existing_protection']={'9001':{'stop_price':'9'}}
+    x['events'].insert(1,event('2026-01-02T01:00:10Z','OUTPUT',json.dumps({'decisions':[{'symbol':'9001','smart':{'stop_price':'999'}}]})))
+    x['events'].insert(3,event('2026-01-05T00:59:00Z','TRIGGER','9001 SELL：STOP'))
+    r=module.audit(x);self.assertEqual(r['fills'][1]['stop_price'],'9')
+ def test_exact_trigger_context_and_fill_identity_survive(self):
+    x=document();t=event('2026-01-05T00:59:00Z','TRIGGER','9001 SELL：STOP');t['details']={'order':{'trigger_context':{'stop_price':'8','effective_stop':'8'}}};x['events'].insert(2,t)
+    x['events'][3]['details']={'fill':{'id':'fill-id'},'order_id':'order-id'}
+    r=module.audit(x);self.assertEqual(r['fills'][1]['stop_source'],'EXACT_TRIGGER_CONTEXT');self.assertEqual(r['fills'][1]['id'],'fill-id');self.assertEqual(r['fills'][1]['order_id'],'order-id')
 if __name__=='__main__':unittest.main()

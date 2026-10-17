@@ -62,5 +62,13 @@
     "TWSE-only identifier filter is not a verified full historical stock master",
     "No full fundamental/news/attention/disposition history",
     "An unchanged rules baseline is not an exact rerun of model-selected uploaded trades"
-  ]
+  ],
+  "exploratory_mechanism_ablation": {
+    "variants": [
+      "B_only_drawdown",
+      "B_only_regime",
+      "B_only_loss_streak"
+    ],
+    "reason": "Separate causal mechanisms; bundled B results had already been observed. These are exploratory ablations, not a newly untouched holdout or parameter-selection evidence."
+  }
 }

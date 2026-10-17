@@ -1,10 +1,14 @@
 # Shioaji Codex Trader
 
-**目前版本：[v0.2.5 驗證中](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.4)** · Windows x64 免安裝
+**目前版本：[v0.2.5 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.5)** · Windows x64 免安裝
 
 台灣股票桌面工作台：以 Shioaji 取得行情，讓 Codex 設定選股與買賣條件，由程式核對價格、股數、現金及風控。提供即時模擬、歷史回放和實盤帳戶介面；歷史測試使用獨立虛擬帳戶。新版啟動維持模擬模式、自動執行關閉。
 
 ## 這版更新
+
+- **恢復原授權風控。** 所有模式強制現金25%、單筆可投資資金10%、單檔20%、持倉75%、日新增20%／5筆與日損失2%；加碼重新核對合併持倉風險。
+- **組合風控與研究比較。** 高點跨重啟保存；回撤、連敗、市場廣度代理、進場評分及固定／ATR退場可獨立回放，預設關閉，禁止新研究功能套用實盤。新2024動態歷史池比較尚未證實正期望值；不自動挑選參數。
+- **可核對的執行紀錄。** 匯出保留完整成交／委託、停損觸發報價與建置提交；提供Decimal/FIFO帳務工具、同源AI試驗規格與提示大小遙測。臨時休市只於可知時間後影響交割，缺日曆繼續預留。
 
 - **登入失敗原因與恢復。** 內建程序提前退出會保留安全錯誤代碼、退出碼、訊號及等待時間；區分 CA、系統時間、網路、權杖與本機啟動問題。只在辨識到明確 CA 錯誤時嘗試一次不載入 CA 的行情登入，保留原設定；實盤仍核對有效 CA。健康檢查逐次計算失敗，不再把所有啟動問題都歸因於金鑰／IP。
 
@@ -14,7 +18,7 @@
 - **持倉與完整報表。** 點持倉可切換主圖，顯示股數、可賣量、平均買價、含買費成本、浮損益、比例與保護追蹤。回測提供完成交易勝率、Profit Factor、日 Sharpe、盤後持倉、退場與等待分類，委託識別串起觸發、提交和成交。
 - **跨平台與實際畫面驗收。** Linux／Windows 測試、Windows 來源及封裝 GUI 驗證，README 使用本版實際 Windows 隔離測試截圖；資料與帳戶均為測試用途。
 
-原始 v0.2.2 JSON 核帳為 +0.5895%，平均盤後持倉 41.8518%；另以公開日資料完成 17 組同假設比較。樣本外原程式策略 +14.1740%，三項研究改善全部啟用為 -1.7222%，所以沒有預設啟用表現較差的選項。這些是不同資料與方法的測試，不能視為實盤獲利保證。完整指標、參數、限制與重現方法見 [v0.2.3 驗證報告](docs/V0.2.3_VALIDATION.md)。
+0.2.5 使用2024年逐日動態股票池，獨立比較組合風控、進場與退場，並保留所有不利結果。尚未證實長期正期望值或真實零股收益優勢，因此研究預設不啟用；市場／費稅／流動性限制及重現方法見 [0.2.5 驗證說明](docs/V0.2.5_VALIDATION.md)，本次結果與平台檢查記錄見 [PR #28](https://github.com/jackyname1/shioaji-codex-trader/pull/28)。
 
 ## Windows 介面
 
@@ -22,36 +26,36 @@
 
 歷史回放：日期、本金、播放時鐘、圖表、每日選股、費稅與成交紀錄集中在同一工作台；點選持倉後主圖和選中列同步。
 
-![v0.2.4 歷史回放工作台，隔離測試資料](docs/screenshots/workbench-v0.2.4.png)
+![v0.2.5 歷史回放工作台，隔離測試資料](docs/screenshots/workbench-v0.2.5.png)
 
-下列為 v0.2.4 已驗證實際 Windows 畫面；0.2.5 新圖將於 Windows 驗證後同步。0.2.5 回放已恢復授權風控，研究功能須明確勾選。
+0.2.5 實際 Windows 隔離測試畫面：回放已恢復授權風控，研究功能須明確勾選。
 
-![v0.2.4 回測資金配置，隔離測試資料](docs/screenshots/capital-profile-v0.2.4.png)
+![v0.2.5 回測資金配置，隔離測試資料](docs/screenshots/capital-profile-v0.2.5.png)
 
 智慧條件：展開個股的「智慧條件與追蹤」，優先顯示反彈低點、移動高點及觸發價；收合後恢復五檔資訊。收益目標不是賣出指令。
 
-![v0.2.4 反彈與智慧退場追蹤，隔離測試資料](docs/screenshots/smart-conditions-v0.2.4.png)
+![v0.2.5 反彈與智慧退場追蹤，隔離測試資料](docs/screenshots/smart-conditions-v0.2.5.png)
 
 即時模擬：以真實行情與虛擬資金演練策略、條件檢查、股數確認及委託核對。
 
-![v0.2.4 即時模擬版面，隔離測試資料](docs/screenshots/realtime-v0.2.4.png)
+![v0.2.5 即時模擬版面，隔離測試資料](docs/screenshots/realtime-v0.2.5.png)
 
 實盤帳戶及 API／CA 設定：截圖使用隔離資料展示欄位。
 
-![v0.2.4 實盤帳戶版面，隔離測試資料](docs/screenshots/live-v0.2.4.png)
-![v0.2.4 API 與 CA 設定，隔離測試資料](docs/screenshots/connection-v0.2.4.png)
+![v0.2.5 實盤帳戶版面，隔離測試資料](docs/screenshots/live-v0.2.5.png)
+![v0.2.5 API 與 CA 設定，隔離測試資料](docs/screenshots/connection-v0.2.5.png)
 
 登入故障範例：保留安全代碼與程序退出原因，可使用保存設定重試；截圖為簽章時間故障的隔離測試。
 
-![v0.2.4 登入錯誤安全代碼，隔離測試資料](docs/screenshots/native-login-failure-v0.2.4.png)
+![v0.2.5 登入錯誤安全代碼，隔離測試資料](docs/screenshots/native-login-failure-v0.2.5.png)
 
 完整 Codex 紀錄可搜尋及匯出 JSON，包含快照、正式推理摘要、結構化回覆、用量、核對結果與安全故障代碼。
 
-![v0.2.4 完整 Codex 紀錄，隔離測試資料](docs/screenshots/codex-history-v0.2.4.png)
+![v0.2.5 完整 Codex 紀錄，隔離測試資料](docs/screenshots/codex-history-v0.2.5.png)
 
 ## 開始使用
 
-1. 從 [v0.2.4 Release](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.4) 下載 `Shioaji-Codex-Trader-0.2.4-Windows-x64.exe`。先從舊程式系統匣選擇「結束程式」，再開啟新版；單一執行個體機制會把再次啟動導回仍執行中的舊版本。右下角可核對實際版本。
+1. 從 [v0.2.5 Release](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.5) 下載 `Shioaji-Codex-Trader-0.2.5-Windows-x64.exe`。先從舊程式系統匣選擇「結束程式」，再開啟新版；單一執行個體機制會把再次啟動導回仍執行中的舊版本。右下角可核對實際版本。
 2. 若登入失敗，錯誤會顯示安全代碼；「連線診斷」可匯出程序退出及健康檢查紀錄。舊版通用錯誤無法回推出底層原因，未持有使用者金鑰的隔離測試也不代表已驗證其實際帳戶登入。
 3. 按右上角「帳戶與設定」，輸入 API Key、Secret Key，再按「登入並記住」。實盤下單另需有效 CA 憑證及密碼。登入與設定共用於模擬和實盤。
 4. 按右側 Codex「登入」，完成官方瀏覽器登入並按「測試連線」。模型留空時解析帳戶預設模型；畫面顯示實際模型及推理強度。

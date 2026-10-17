@@ -27,6 +27,9 @@ variants.push(['C_entry_quality',{entry_quality_enabled:true}],['C_atr_entries',
  ['E_research_combined',{portfolio_risk_enabled:true,portfolio_drawdown_fraction:'0.04',portfolio_cooldown_sessions:2,entry_quality_enabled:true,research_exit_mode:'atr_trail'}]);
 const cases=[];
 for(const [fold,period] of protocol.walk_forward.entries())for(const [name,overrides] of variants)cases.push({fold:fold+1,...period,name,overrides,participation:'0.01'});
+// Exploratory mechanism ablations added after bundle diagnostics; never used for parameter selection.
+for(const [fold,period] of protocol.walk_forward.entries())for(const component of ['drawdown','regime','loss_streak'])
+ cases.push({fold:fold+1,...period,name:'B_only_'+component,exploratory_ablation:true,overrides:{portfolio_risk_enabled:true,portfolio_components:component},participation:'0.01'});
 // Stress is predeclared, applied to A and the combined research hypothesis, never optimized.
 for(const name of ['A_original_rules','E_research_combined'])for(const [label,overrides,participation] of [
  ['low_liquidity',{},'0.001'],['slip30bps',{risk_slippage_fraction:'0.003'},'0.01'],['slip50bps',{risk_slippage_fraction:'0.005'},'0.01']])
@@ -40,7 +43,7 @@ const metadata={engine_sha256,protocol,protocol_sha256:createHash('sha256').upda
 const selected=process.env.TRADER_COMPARE_CASE;
 if(selected===undefined){
  let next=0;const results=[];
- await Promise.all(Array.from({length:2},async()=>{for(;;){const index=next++;if(index>=cases.length)return;
+ await Promise.all(Array.from({length:4},async()=>{for(;;){const index=next++;if(index>=cases.length)return;
   const file=output+`.case${index}.json`;
   if(!existsSync(file)||JSON.parse(readFileSync(file)).engine_sha256!==engine_sha256||JSON.parse(readFileSync(file)).dataset_sha256!==metadata.dataset_sha256||JSON.parse(readFileSync(file)).protocol_sha256!==metadata.protocol_sha256)await new Promise((done,fail)=>{const child=spawn(process.execPath,[process.argv[1],dataPath,baselinePath,file],{stdio:'inherit',env:{...process.env,TRADER_COMPARE_CASE:String(index)}});
    child.once('error',fail);child.once('exit',code=>code===0?done():fail(Error(`case ${index} failed (${code})`)));});

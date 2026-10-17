@@ -163,6 +163,7 @@ export const SettingsSchema = z.strictObject({
   entry_tracking_minutes:quantity.min(5).max(360).default(90),
   // Research gates are opt-in and paper/replay only until independent validation.
   portfolio_risk_enabled:z.boolean().default(false),
+  portfolio_components:z.enum(['all','drawdown','regime','loss_streak']).default('all'),
   portfolio_drawdown_fraction:positiveFraction.default('0.04'),
   portfolio_cooldown_sessions:quantity.min(1).max(20).default(2),
   portfolio_loss_streak:quantity.min(2).max(10).default(3),

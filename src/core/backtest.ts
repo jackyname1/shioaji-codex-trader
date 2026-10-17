@@ -126,7 +126,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   const reportSettings=Object.fromEntries(['min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
     'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','plan_max_minutes','experience_enabled',
     'watch_max_symbols','watch_min_amount','watch_remove_after_scans','entry_strategy_mode','adaptive_protection','dynamic_allocation',
-    'risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes','portfolio_risk_enabled','portfolio_drawdown_fraction','portfolio_cooldown_sessions','portfolio_loss_streak','entry_quality_enabled','research_exit_mode','max_portfolio_stop_fraction','prompt_compaction'].map(k=>[k,settings[k as keyof Settings]]));
+    'risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes','portfolio_risk_enabled','portfolio_components','portfolio_drawdown_fraction','portfolio_cooldown_sessions','portfolio_loss_streak','entry_quality_enabled','research_exit_mode','max_portfolio_stop_fraction','prompt_compaction'].map(k=>[k,settings[k as keyof Settings]]));
   if(dataset.frequency==='DAILY'&&request.strategy_schedule==='fixed')throw new Error('回測日 K 無法還原固定時刻的盤中行情；請使用分鐘 K，或選間隔排程作開盤時點的近似測試');
   const store=new Store(':memory:'),calendar=new TradingCalendar(store,dataset.synthetic),id=randomUUID();
   if(dataset.calendar)store.saveSessions(dataset.calendar);store.set('experience_scope','backtest:'+id);store.saveSettings(settings);

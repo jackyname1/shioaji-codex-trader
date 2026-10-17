@@ -189,7 +189,7 @@ export class CodexAnalyst {
       this.onEvent?.({id,run_id:runId,...stamp,asof,stage,message,purpose,details,
         model:this.selection?.model||this.settings.codex_model||'正在確認預設模型',reasoning:this.selection?.reasoning||this.settings.codex_reasoning});
     };
-    emit('PROMPT_METRICS',`提示 UTF-8 ${Buffer.byteLength(prompt)} bytes`,'prompt-metrics',{bytes:Buffer.byteLength(prompt),sha256:createHash('sha256').update(prompt).digest('hex'),compaction:this.settings.prompt_compaction});
+    emit('PROMPT_METRICS',`提示 UTF-8 ${Buffer.byteLength(prompt)} bytes`,'prompt-metrics',{bytes:Buffer.byteLength(prompt),sha256:createHash('sha256').update(prompt).digest('hex'),compaction:purpose==='STRATEGY'&&this.settings.prompt_compaction});
     emit('SNAPSHOT',`資料截止 ${asof}；建立${purpose==='STRATEGY'?'選股與條件':'交易數量'}快照`,'snapshot',input);
     if(purpose==='STRATEGY'){
       const ready=(input as Snapshot).data_readiness;

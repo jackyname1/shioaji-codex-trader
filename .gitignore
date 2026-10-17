@@ -26,3 +26,6 @@ private/
 validation/run-audits/
 validation/*.case*.json
 __pycache__/
+
+validation/**/*.case*.json
+validation/**/run-audits/
