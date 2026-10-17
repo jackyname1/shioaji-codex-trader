@@ -793,10 +793,13 @@ async function verifyConnectionLifecycle():Promise<void>{
   if(!await js('!document.querySelector("#repair-login-time").hidden && !document.querySelector("#connection-status").textContent.includes("CA")'))throw new Error('Signing repair is missing or failed login still claims a CA problem');
   await js('document.querySelector("#repair-login-time").click()');
   await wait('window.trader.state().then(s=>s.connected)');
+  await wait('!document.querySelector("#settings-dialog").open');
   current=await state();if(fixture.clockRepairs!==2||fixture.mutations||current.broker_diagnostics?.startup?.code
     ||current.broker_diagnostics?.startup?.clock_repair!=='synced')throw new Error('One-click signing repair did not recover safely');
   // Force a cold connection for the following production-environment validation.
   await nativeConnection.close();
+  await js('document.querySelector("#open-settings").click()');
+  await wait('document.querySelector("#settings-dialog").open');
   fixture.nativeFailure=false;fixture.simulation=true;
   await js('document.querySelector("#connect-saved").click()');
   await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("未取得正式行情")');
