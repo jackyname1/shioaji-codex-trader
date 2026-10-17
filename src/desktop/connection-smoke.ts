@@ -9,10 +9,9 @@ import type {TradingService} from '../core/service.js';
 
 /** Used only by --smoke-test. Every request and process is isolated; live mutations are rejected. */
 export class ConnectionSmoke {
-  simulation=false;failWorkspace=false;nativeFailure=false;launches=0;mutations=0;clockRepairs=0;
+  simulation=false;failWorkspace=false;nativeFailure=false;launches=0;mutations=0;
   native(root:string):NativeConnection{return new NativeConnection(root,async()=>'/SYNTHETIC/native',{
     origin:async()=>'http://127.0.0.1:19099',run:async()=>({stdout:'--no-open --production'}),
-    repairClock:async elevated=>{this.clockRepairs++;if(elevated){this.nativeFailure=false;return 'synced';}return 'denied';},
     launch:((_:string,args:readonly string[])=>{if(!args.includes('--production'))throw new Error('Production market flag is missing');this.launches++;
       const child=Object.assign(new EventEmitter(),{exitCode:null as number|null,stderr:new PassThrough(),stdout:new PassThrough(),kill:()=>true});
       child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit',0,null));return true;};
@@ -29,7 +28,7 @@ export class ConnectionSmoke {
     const path=new URL(String(input)).pathname;
     if(this.nativeFailure)throw new Error('Isolated native service has not started');
     if(/place_order|cancel_order/.test(path)){this.mutations++;throw new Error('Real mutations forbidden');}
-    if(path==='/api/v1/info')return Response.json({simulation:this.simulation,version:'1.7.7'});
+    if(path==='/api/v1/info')return Response.json({simulation:this.simulation,version:'1.7.8'});
     if(path==='/api/v1/health')return Response.json({status:'healthy',token_stale:false,token_expires_in_seconds:3600,ca_expired:false,ca_expires_in_days:30});
     if(path.endsWith('/auth/accounts'))return Response.json([{account_type:'S',broker_id:'SYNTHETIC',account_id:'SYNTHETIC_ACCOUNT',signed:true}]);
     if(path.endsWith('/stream/data'))return new Response(new ReadableStream<Uint8Array>({start(c){c.enqueue(new TextEncoder().encode('event: heartbeat\ndata: {}\n\n'));init?.signal?.addEventListener('abort',()=>{try{c.close();}catch{}},{once:true});}}),{headers:{'content-type':'text/event-stream'}});

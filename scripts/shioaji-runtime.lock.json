@@ -1,14 +1,14 @@
 {
-  "version": "1.7.7",
+  "version": "1.7.8",
   "repository": "Sinotrade/Shioaji",
   "assets": {
     "win32-x64": {
-      "name": "shioaji-v1.7.7-Windows-x86_64.zip",
-      "sha256": "5bf1594daa90f40eb831ecc5a83e48a4d86d35d2aab67f1271ff04a5c4ab6e4f"
+      "name": "shioaji-v1.7.8-Windows-x86_64.zip",
+      "sha256": "e82749b7e560f5c7f087a6549babc3cc80ad9ea9db19b96770a9c6240dedfad9"
     },
     "linux-x64": {
-      "name": "shioaji-v1.7.7-Linux-x86_64.tar.gz",
-      "sha256": "fa7b50533e9ea39289ff5219125f30d47ac7cfab5f890beb29747486a7686ac0"
+      "name": "shioaji-v1.7.8-Linux-x86_64.tar.gz",
+      "sha256": "61a7224c379b47a7b6d09679a75b573ffd7c935d42d177e0164e4f198191e955"
     }
   }
 }

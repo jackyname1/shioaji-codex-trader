@@ -378,8 +378,6 @@ function renderExtras(state:DesktopState):void {
   // Keep the user's choice. A transient encryption failure must not silently turn "remember" off.
   el<HTMLInputElement>('remember-keys').disabled=state.connection.busy;
   el<HTMLButtonElement>('connect-saved').disabled=!state.connection.remembered||state.connection.busy;
-  el<HTMLButtonElement>('repair-login-time').hidden=state.broker_diagnostics?.startup?.code!=='SIGN_TIME'||!!state.connection.server_ready;
-  el<HTMLButtonElement>('repair-login-time').disabled=state.connection.busy;
   const auth=state.codex_auth;
   text('codex-auth-state',auth.testing?'測試中':auth.test_state==='failed'?'連線待修復':auth.state==='ready'?(auth.test_state==='connected'?'連線成功':'已登入'):auth.state==='pending'?'登入中':auth.state==='checking'?'檢查中':'未登入');
   text('codex-login',auth.state==='ready'?'重新登入':'登入');
@@ -580,10 +578,6 @@ el<HTMLFormElement>('connection-form').addEventListener('submit',e=>{e.preventDe
     if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;
   }finally{el<HTMLButtonElement>('connect-api').disabled=false;}
 });});
-el('repair-login-time').addEventListener('click',()=>void run(async()=>{
-  const result=await window.trader.repairLoginTime({api_key:value('api-key'),secret_key:value('secret-key'),ca_path:value('ca-path'),ca_password:value('ca-password'),remember:checked('remember-keys')});
-  connectionDirty=false;await loadSavedConnection(true);if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;
-}));
 el('connect-saved').addEventListener('click',()=>void run(async()=>{const result=await window.trader.connectSaved();await loadSavedConnection(true);if((await window.trader.state()).connected)el<HTMLDialogElement>('settings-dialog').close();return result;}));el('forget-keys').addEventListener('click',()=>void run(async()=>{
   const result=await window.trader.forgetCredentials();connectionDirty=false;await loadSavedConnection(true);return result;
 }));

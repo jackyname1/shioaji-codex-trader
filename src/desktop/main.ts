@@ -143,7 +143,7 @@ function desktopIssue(error:unknown):string {
   if(error instanceof Error&&error.message==='這個資料庫已有執行中的程式')return '交易工作台資料庫仍由另一個程式使用，請從系統匣完全結束舊版後重試';
   return brokerIssue(error);
 }
-async function login(input:unknown,repairClock=false):Promise<string>{
+async function login(input:unknown):Promise<string>{
   if(connectionBusy)throw new Error('連線仍在進行');
   if(backtest.progress.running)throw new Error('回測仍在執行，請先停止再重新連線');
   const saved=await vault.read(),validated=connectionInput(input,saved);
@@ -157,7 +157,7 @@ async function login(input:unknown,repairClock=false):Promise<string>{
     try{await vault.save(validated);}finally{credentialState=await vault.status();}
     loginStage='正在準備交易工作台';await connect(mode,settings,false);
     if(!service)throw new BrokerError(initialError||'交易工作台尚未建立');
-    loginStage='';await nativeConnection.start(validated,repairClock);
+    loginStage='';await nativeConnection.start(validated);
     loginStage='正在載入帳務與行情';await connect(mode,settings);
     if(!service?.engine.connected)throw new BrokerError(initialError||service?.engine.dataIssue||'交易工作台尚未完成連線');
     return validated.remember?'Shioaji 已連線，登入設定已保存':'Shioaji 已連線，本次設定未保存';
@@ -367,10 +367,6 @@ function registerIpc(): void {
   });
   const apiConnect=(input:unknown):Promise<string>=>operations.run(()=>login(input));
   handle('trader:connect-api',apiConnect);
-  handle('trader:repair-login-time',input=>operations.run(()=>{
-    if(nativeConnection.connected||nativeConnection.diagnostics().startup?.code!=='SIGN_TIME')throw new BrokerError('目前沒有需要修復的登入簽章時間錯誤');
-    return login(input,true);
-  }));
   handle('trader:connect-saved',async()=>{const input=await vault.read();if(!input)throw new Error('尚未記住 API 金鑰');return apiConnect(input);});
   handle('trader:forget-credentials',()=>operations.run(async()=>{await vault.clear();credentialState=await vault.status();return '已移除記住的金鑰與憑證設定';}));
   handle('trader:chart',async value=>{
@@ -420,7 +416,7 @@ function refreshWorkspaceStatus():void {
 }
 function connected():boolean{refreshWorkspaceStatus();return ((smoke&&!smokeConnection)||nativeConnection.connected)&&!!service?.engine.connected;}
 function diagnosticSnapshot(){
-  if(smoke&&!smokeConnection){const at=new Date().toISOString();return {version:'1.7.7',stream_connected:true,generation:1,trade_cache:'Healthy',
+  if(smoke&&!smokeConnection){const at=new Date().toISOString();return {version:'1.7.8',stream_connected:true,generation:1,trade_cache:'Healthy',
     health:{status:'healthy' as const,token_stale:false,ca_expired:false},endpoints:[
       {endpoint:'/health',stage:'登入狀態',attempts:1,successes:1,failures:0,last_attempt_at:at,last_success_at:at,issue:'',http_status:null,retry_at:null},
       {endpoint:'/portfolio/account_balance',stage:'交割戶餘額',attempts:2,successes:1,failures:1,last_attempt_at:at,last_success_at:at,
@@ -471,7 +467,7 @@ async function smokeTest(): Promise<void> {
   smokeMark('SHIOAJI_NATIVE');
   if(!process.argv.includes('--ui-only')||app.isPackaged){const binary=await brokerPath();
     const native=await promisify(execFile)(binary,['--version'],{timeout:20000,windowsHide:true,env:{...process.env,PATH:''}});
-    if(!native.stdout.includes('1.7.7'))throw new Error('內建 Shioaji 版本未通過');
+    if(!native.stdout.includes('1.7.8'))throw new Error('內建 Shioaji 版本未通過');
     const help=await promisify(execFile)(binary,['server','start','--help'],{timeout:20000,windowsHide:true});
     if(!help.stdout.includes('--no-open'))throw new Error('內建 Shioaji 啟動方式未通過');
   }
@@ -789,17 +785,8 @@ async function verifyConnectionLifecycle():Promise<void>{
   current=await state();if(current.connected||!current.connection.remembered||current.broker_diagnostics?.startup?.code!=='SIGN_TIME'
     ||current.broker_diagnostics.startup.process_exit_code!==17||JSON.stringify(current.broker_diagnostics).includes('SYNTHETIC_'))
     throw new Error('Native process failure lost its safe classification, exit code or saved login');
+  if(!await js('!document.querySelector("#repair-login-time") && !("repairLoginTime" in window.trader)'))throw new Error('Removed clock repair is still exposed in the GUI');
   await captureConnection('SYNTHETIC-ui-native-login-failure.png');
-  if(!await js('!document.querySelector("#repair-login-time").hidden && !document.querySelector("#connection-status").textContent.includes("CA")'))throw new Error('Signing repair is missing or failed login still claims a CA problem');
-  await js('document.querySelector("#repair-login-time").click()');
-  await wait('window.trader.state().then(s=>s.connected)');
-  await wait('!document.querySelector("#settings-dialog").open');
-  current=await state();if(fixture.clockRepairs!==2||fixture.mutations||current.broker_diagnostics?.startup?.code
-    ||current.broker_diagnostics?.startup?.clock_repair!=='synced')throw new Error('One-click signing repair did not recover safely');
-  // Force a cold connection for the following production-environment validation.
-  await nativeConnection.close();
-  await js('document.querySelector("#open-settings").click()');
-  await wait('document.querySelector("#settings-dialog").open');
   fixture.nativeFailure=false;fixture.simulation=true;
   await js('document.querySelector("#connect-saved").click()');
   await wait('document.querySelector("#settings-dialog .dialog-message.failed")?.textContent.includes("未取得正式行情")');
