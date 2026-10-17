@@ -134,3 +134,10 @@ test('a controlled replay compares balanced and legacy allocation with the same 
   assert.ok([...byDay.values()].every(amount=>amount<=40000));assert.ok(snapshots.every(s=>s.capital));
   assert.match(analysisPrompt(snapshots[0]!),/order_limit_twd/);assert.equal(base.order_budget_basis,'AFTER_RESERVE');
 });
+
+test('standard replay aliases preserve stricter saved reward/risk, loss budget and soft exposure target',()=>{
+ const strict=SettingsSchema.parse({min_entry_reward_risk:'2',max_trade_risk_fraction:'0.001',target_exposure_fraction:'0.30'});
+ for(const profile of ['active','balanced'] as const){const s=replayCapitalSettings(strict,profile);
+  assert.equal(s.min_entry_reward_risk,'2');assert.equal(s.max_trade_risk_fraction,'0.001');assert.equal(s.target_exposure_fraction,'0.30');}
+ assert.deepEqual(replayCapitalSettings(strict,'custom'),strict);
+});

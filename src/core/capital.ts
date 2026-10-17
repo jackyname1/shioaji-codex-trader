@@ -23,7 +23,11 @@ export function capitalSnapshot(a:Account,s:Settings){
 }
 export type CapitalSnapshot=ReturnType<typeof capitalSnapshot>;
 export function replayCapitalSettings(base:Settings,profile:'active'|'balanced'|'custom'):Settings{
-  // Legacy names remain readable in old exports; neither can expand the authorized envelope.
-  return authorizedRisk(profile==='custom'?base:SettingsSchema.parse({...base,
-    target_exposure_fraction:'0.50',min_entry_reward_risk:'1.2',max_trade_risk_fraction:'0.01',watch_max_symbols:profile==='active'?16:base.watch_max_symbols}));
+  // Legacy names remain readable; no profile may loosen a stricter saved constraint.
+  if(profile==='custom')return authorizedRisk(base);
+  return authorizedRisk(SettingsSchema.parse({...base,
+    target_exposure_fraction:d(base.target_exposure_fraction).lte('.50')?base.target_exposure_fraction:'0.50',
+    min_entry_reward_risk:d(base.min_entry_reward_risk).gte('1.2')?base.min_entry_reward_risk:'1.2',
+    max_trade_risk_fraction:d(base.max_trade_risk_fraction).gt(0)&&d(base.max_trade_risk_fraction).lte('.01')?base.max_trade_risk_fraction:'0.01',
+    watch_max_symbols:profile==='active'?16:base.watch_max_symbols}));
 }
