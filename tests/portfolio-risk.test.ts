@@ -92,3 +92,13 @@ test('drawdown, regime and loss mechanisms can be isolated without attributing b
  const regime=portfolioDecision(base,a,highVol,[],{...s,portfolio_components:'regime'},now,true);assert.equal(regime.blocked,false);assert.equal(regime.scale,'0.25');
  const loss=portfolioDecision(base,a,highVol,[],{...s,portfolio_components:'loss_streak'},now,true);assert.equal(loss.blocked,false);assert.equal(loss.scale,'1');
 });
+
+test('an oversized different holding blocks new risk without preventing a lawful protective exit',()=>{
+ const store=new Store(':memory:');try{
+  const cfg=SettingsSchema.parse({}),risk=new Risk(cfg,new TradingCalendar(store,true)),a=account();a.cash='77000';
+  a.positions=[{symbol:'9002',shares:230,sellable:230,average_price:'90',last_price:'100'}];
+  assert.match(risk.check(order(),a,quote(),instrument(),now,'100000').join(),/既有 9002.*停止新增風險/);
+  assert.deepEqual(risk.check(order({symbol:'9002',action:'SELL',purpose:'PROTECTION',shares:10,limit_price:'100'}),a,
+   {...quote(),symbol:'9002',last:'100',bid:'100',ask:'100.5'},{...instrument(),symbol:'9002',reference:'100',limit_down:'90',limit_up:'110'},now,'100000'),[]);
+ }finally{store.close();}
+});

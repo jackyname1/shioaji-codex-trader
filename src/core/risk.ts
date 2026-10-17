@@ -76,6 +76,15 @@ export class Risk {
     const held = p ? d(p.last_price).times(p.shares) : d(0);
     const symbolReserved = buys.filter(o => o.symbol === order.symbol).reduce((sum, o) => sum.plus(d(o.limit_price).times(remaining(o))), d(0));
     if (held.plus(symbolReserved).plus(amount).gt(e.times(s.max_symbol_fraction))) reasons.push('超過單一標的上限');
+    // A legacy oversized holding or standing buy in another symbol must not be
+    // ignored when admitting new risk. Existing shares are never force-sold here.
+    for(const symbol of new Set([...account.positions.map(p=>p.symbol),...buys.map(o=>o.symbol)])){
+      if(symbol===order.symbol)continue;
+      const position=account.positions.find(p=>p.symbol===symbol);
+      const value=(position?d(position.last_price).times(position.shares):d(0)).plus(
+        buys.filter(o=>o.symbol===symbol).reduce((sum,o)=>sum.plus(d(o.limit_price).times(remaining(o))),d(0)));
+      if(value.gt(e.times(s.max_symbol_fraction)))reasons.push(`既有 ${symbol} 超過單一標的上限，停止新增風險`);
+    }
     const exposure = buys.reduce((sum, o) => sum.plus(d(o.limit_price).times(remaining(o))), marketValue(account));
     if (exposure.plus(amount).gt(e.times(s.max_exposure_fraction))) reasons.push('超過總持倉上限');
     const todayBuys=account.orders.filter(o=>o.local_id!==order.local_id&&o.action==='BUY'&&twDay(new Date(o.created_at))===twDay(now)&&(active(o)||o.filled>0));
