@@ -67,7 +67,7 @@ test('API secrets are encrypted at rest, are absent from CLI arguments and error
     assert.equal(env.SJ_PRODUCTION, 'true'); assert.equal(env.OPENAI_API_KEY, undefined); assert.equal(env.LIVE_TRADING, undefined);
     const commands: string[][] = []; let probes = 0;const binary=async()=>join(root,'shioaji');const origin=async()=>'http://127.0.0.1:9081';
     const native = new NativeConnection(root,binary,{origin,run: async (_binary, args, opts) => { commands.push(args); if (args.includes('--help')) return { stdout: '--no-open' };
-      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; },fetcher: async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false, status:'degraded', token_stale:false }); },launch:((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,root);
+      assert.equal(opts.env.SJ_API_KEY, 'TEST_KEY'); return { stdout: '' }; },fetcher: async () => { if (++probes === 1) throw new Error('offline'); return Response.json({ simulation: false, version:'1.7.8', status:'degraded', token_stale:false }); },launch:((_binary:string,args:string[],opts:Record<string,unknown>)=>{commands.push(args);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HTTP_ADDR,'127.0.0.1:9081');assert.equal((opts.env as NodeJS.ProcessEnv).SJ_HOME_PATH,undefined);
       assert.deepEqual(args,['server','start','--no-open','--production']);assert.equal((opts.env as NodeJS.ProcessEnv).SJ_API_KEY,'TEST_KEY');
       const child=new EventEmitter() as EventEmitter&{exitCode:number|null;kill:()=>boolean};child.exitCode=null;child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};return child;}) as typeof spawn});
     await native.start(input);assert.equal(native.connected,true);assert.equal(native.baseUrl,'http://127.0.0.1:9081');
@@ -102,7 +102,7 @@ test('the internal broker automatically avoids an occupied port without changing
 test('the bundled runtime rejects corruption, missing files and paths outside its own resources', async()=>{
   const root=mkdtempSync(join(tmpdir(),'broker-bundle-')),name=process.platform==='win32'?'shioaji.exe':'shioaji',path=join(root,name);
   const bytes=Buffer.from('isolated runtime fixture');writeFileSync(path,bytes);
-  const manifest={version:'1.7.7',platform:process.platform,arch:process.arch,relative_path:name,sha256:createHash('sha256').update(bytes).digest('hex')};
+  const manifest={version:'1.7.8',platform:process.platform,arch:process.arch,relative_path:name,sha256:createHash('sha256').update(bytes).digest('hex')};
   try{await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);
     writeFileSync(join(root,'runtime.json'),JSON.stringify(manifest));assert.equal(await bundledShioajiPath(root),await realpath(path));
     writeFileSync(path,'corrupted');await assert.rejects(bundledShioajiPath(root),/內建 Shioaji/);

@@ -3,22 +3,20 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {spawn,spawnSync,type SpawnOptions} from 'node:child_process';
+import {spawn,type SpawnOptions} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {NativeConnection,ConnectionInputSchema} from '../src/desktop/credentials.js';
+import {NativeConnection,ConnectionInputSchema,brokerEnvironment} from '../src/desktop/credentials.js';
 import {NativeStartup} from '../src/desktop/native-startup.js';
-import {clockRepairCommand,type ClockRepair} from '../src/desktop/clock-repair.js';
 import {activateWindow} from '../src/desktop/window-activation.js';
 import {connectionLabel} from '../src/desktop/connection-state.js';
 
 const input=ConnectionInputSchema.parse({api_key:'SYNTHETIC_PRIVATE_KEY',secret_key:'SYNTHETIC_PRIVATE_SECRET'});
 const root=()=>mkdtempSync(join(tmpdir(),'native-startup-'));
-function fixture(folder:string,options:{output?:string;failures?:number;health?:object;http?:number;spawnError?:boolean;repairClock?:ClockRepair}={}) {
+function fixture(folder:string,options:{output?:string;failures?:number;health?:object;http?:number;spawnError?:boolean}={}) {
   let launches=0;const children:ReturnType<typeof spawn>[]=[];const environments:NodeJS.ProcessEnv[]=[];
   const native=new NativeConnection(folder,async()=>'/SYNTHETIC/native',{
     origin:async()=>'http://127.0.0.1:19998',run:async()=>({stdout:'--no-open'}),pollMs:1,timeoutMs:60,
-    repairClock:options.repairClock??(async()=> 'unsupported'),
     launch:((_binary:string,_args:readonly string[],opts:Parameters<typeof spawn>[2])=>{
       launches++;environments.push(opts?.env??{});
       const child=Object.assign(new EventEmitter(),{exitCode:null as number|null,signalCode:null as string|null,stdout:new PassThrough(),stderr:new PassThrough(),
@@ -32,8 +30,9 @@ function fixture(folder:string,options:{output?:string;failures?:number;health?:
       });
       return child;
     }) as unknown as typeof spawn,
-    fetcher:async()=>{
+    fetcher:async(url)=>{
       if(launches<=(options.failures??0))throw new Error('SYNTHETIC_PRIVATE_NETWORK');
+      if(String(url).endsWith('/info'))return Response.json({simulation:false,version:'1.7.8'});
       return Response.json(options.health??{status:'degraded',token_stale:false,ca_expired:false,simulation:false}, {status:options.http??200});
     },
   });
@@ -57,7 +56,7 @@ test('a real isolated subprocess exit is diagnosed without exposing stderr or cr
   const native=new NativeConnection(folder,async()=>process.execPath,{
     origin:async()=>'http://127.0.0.1:19998',run:async()=>({stdout:'--no-open'}),timeoutMs:5000,pollMs:5,
     launch:((_binary:string,arguments_:readonly string[],options:SpawnOptions)=>{args=arguments_;return spawn(process.execPath,[script],options);}) as unknown as typeof spawn,
-    fetcher:async()=>{throw new Error('offline');},
+    fetcher:async(url)=>{throw new Error('offline');},
   });
   try{
     await assert.rejects(native.start(input),/SIGN_TIME/);
@@ -115,52 +114,11 @@ test('a service exit after readiness clears connectivity and only exports a know
   }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
 });
 
-test('a confirmed signing failure resynchronizes once and starts a fresh native session with the original CA',async()=>{
-  const folder=root(),path=join(folder,'SYNTHETIC.pfx');writeFileSync(path,'synthetic certificate');let repairs=0;
-  const f=fixture(folder,{output:'Sign data is timeout',failures:1,repairClock:async elevated=>{assert.equal(elevated,false);repairs++;return 'synced';}});
-  try{
-    await f.native.start({...input,ca_path:path,ca_password:'SYNTHETIC_CA'});
-    assert.equal(f.launches,2);assert.equal(repairs,1);assert.equal(f.native.connected,true);assert.equal(f.native.hasCa,true);
-    assert.equal(f.environments[1]?.SJ_CA_PATH,path);assert.equal(f.native.diagnostics().startup?.clock_retry,true);
-    assert.equal(f.native.diagnostics().startup?.clock_repair,'synced');assert.equal(f.native.diagnostics().startup?.code,undefined);
+test('a signing rejection stops immediately without changing OS time, elevating, discarding CA or looping',async()=>{
+  const folder=root(),f=fixture(folder,{output:'Sign data is timeout',failures:1});
+  try{await assert.rejects(f.native.start(input),/SIGN_TIME/);assert.equal(f.launches,1);
+    assert.ok(!JSON.stringify(f.native.diagnostics()).includes('clock_'));assert.equal(f.native.connected,false);
   }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
-});
-test('failed time repair and repeated signing errors stop without a login loop or discarded CA',async()=>{
-  for(const result of ['synced','denied','cancelled','timeout','failed'] as const){
-    const folder=root();let repairs=0;
-    const f=fixture(folder,{output:'Sign data is timeout',failures:10,repairClock:async()=>{repairs++;return result;}});
-    try{
-      await assert.rejects(f.native.start(input),/SIGN_TIME/);assert.equal(repairs,1);
-      assert.equal(f.launches,result==='synced'?2:1);assert.equal(f.native.connected,false);
-      assert.equal(f.native.diagnostics().startup?.clock_repair,result);
-      assert.equal(f.native.diagnostics().startup?.clock_retry,result==='synced');
-    }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
-  }
-});
-test('elevated repair requires an observed signing failure and never reuses a cancelled request',async()=>{
-  const folder=root();let repairs=0;
-  const f=fixture(folder,{output:'Sign data is timeout',failures:1,repairClock:async elevated=>{repairs++;return elevated?'synced':'denied';}});
-  try{
-    await assert.rejects(f.native.start(input,true),/目前沒有/);assert.equal(repairs,0);
-    await assert.rejects(f.native.start(input),/SIGN_TIME/);assert.equal(repairs,1);
-    await f.native.start(input,true);assert.equal(repairs,2);assert.equal(f.launches,2);assert.equal(f.native.connected,true);
-    await assert.rejects(f.native.start(input,true),/目前沒有/);assert.equal(repairs,2);
-  }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
-  const cancelled=root();let resolveRepair!:(value:'synced')=>void,started!:()=>void;
-  const startedRepair=new Promise<void>(resolve=>{started=resolve;});
-  const pending=fixture(cancelled,{output:'Sign data is timeout',failures:1,repairClock:()=>new Promise(resolve=>{resolveRepair=resolve;started();})});
-  try{
-    const login=pending.native.start(input);const rejected=assert.rejects(login);
-    await startedRepair;await pending.native.close();resolveRepair('synced');await rejected;
-    assert.equal(pending.launches,1);assert.equal(pending.native.connected,false);
-  }finally{await pending.native.close();rmSync(cancelled,{recursive:true,force:true});}
-});
-test('time repair is never attempted for other startup failures',async()=>{
-  for(const output of ['invalid api key','Ca Password Incorrect','Unknown native failure']){
-    const folder=root(),f=fixture(folder,{output,failures:1,repairClock:async()=>{throw new Error('Time repair must not run');}});
-    try{await assert.rejects(f.native.start(input));assert.equal(f.launches,1);assert.equal(f.native.diagnostics().startup?.clock_repair,undefined);}
-    finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
-  }
 });
 test('recovered startup messages cannot misclassify a later exit or a failed login as a CA fault',()=>{
   const startup=new NativeStartup();startup.consume('stderr','Sign data is timeout');startup.ready();startup.exited(1,null);
@@ -170,22 +128,71 @@ test('recovered startup messages cannot misclassify a later exit or a failed log
   const calls:string[]=[];activateWindow({isDestroyed:()=>false,isMinimized:()=>true,restore:()=>calls.push('restore'),show:()=>calls.push('show'),focus:()=>calls.push('focus')});
   assert.deepEqual(calls,['restore','show','focus']);
 });
-test('Windows clock repair uses only fixed system commands, with elevation confined to explicit repair',()=>{
-  const basic=clockRepairCommand('C:\\Windows',false);assert.deepEqual(basic.args,['/resync','/rediscover']);assert.match(basic.binary,/System32\\w32tm.exe$/);
-  const elevated=clockRepairCommand('C:\\Windows',true),script=Buffer.from(elevated.args.at(-1)!,'base64').toString('utf16le');
-  assert.match(script,/-Verb RunAs/);assert.match(script,/-Wait -PassThru/);assert.doesNotMatch(script,/SJ_|API_KEY|SEC_KEY|ExecutionPolicy|cmd.exe/);
-  assert.throws(()=>clockRepairCommand('relative',true));
+test('Pro-compatible launch keeps SDK/Windows client settings, overrides local HTTP auth, and excludes unrelated secrets',()=>{
+  const env=brokerEnvironment({APPDATA:'SYNTHETIC_APPDATA',LOCALAPPDATA:'SYNTHETIC_LOCAL',SJ_PROXY:'SYNTHETIC_PROXY',TZ:'Asia/Taipei',
+    SJ_HOME_PATH:'SYNTHETIC_EXPLICIT_SDK_HOME',SJ_HTTP_AUTH:'true',SJ_HTTP_TLS_KEY:'SYNTHETIC_UNRELATED_TLS',OPENAI_API_KEY:'SYNTHETIC_OTHER_KEY'},input);
+  assert.equal(env.APPDATA,'SYNTHETIC_APPDATA');assert.equal(env.LOCALAPPDATA,'SYNTHETIC_LOCAL');assert.equal(env.TZ,'Asia/Taipei');
+  assert.equal(env.SJ_PROXY,'SYNTHETIC_PROXY');assert.equal(env.SJ_HOME_PATH,'SYNTHETIC_EXPLICIT_SDK_HOME');
+  assert.equal(env.SJ_HTTP_AUTH,'false');assert.equal(env.SJ_HTTP_TLS_KEY,undefined);assert.equal(env.OPENAI_API_KEY,undefined);
+  assert.equal(brokerEnvironment({},input).SJ_HOME_PATH,undefined);
 });
-test('Windows PowerShell parses both repair scripts and preserves success, failure and UAC cancellation',{skip:process.platform!=='win32'},()=>{
-  const command=clockRepairCommand(process.env.SystemRoot??'C:\\Windows',true);
-  const outer=Buffer.from(command.args.at(-1)!,'base64').toString('utf16le');
-  const innerEncoded=outer.match(/'-EncodedCommand','([A-Za-z0-9+/=]+)'/)![1]!;
-  const inner=Buffer.from(innerEncoded,'base64').toString('utf16le');
-  const parse=(script:string)=>`$t=$null;$e=$null;[void][System.Management.Automation.Language.Parser]::ParseInput([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${Buffer.from(script,'utf16le').toString('base64')}')),[ref]$t,[ref]$e);if($e.Count){exit 99};`;
-  for(const code of [0,1,1223]){
-    const mock=`function Start-Process { param($FilePath,$ArgumentList,$Verb,[switch]$Wait,[switch]$PassThru) if($Verb -ne 'RunAs' -or !$Wait -or !$PassThru){throw 'Invalid repair launch'}; ${code===1223?'throw [ComponentModel.Win32Exception]::new(1223)':`[pscustomobject]@{ExitCode=${code}}`} };`;
-    const script=parse(outer)+parse(inner)+mock+outer;
-    const r=spawnSync(command.binary,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8',timeout:15000,windowsHide:true});
-    assert.equal(r.status,code,r.stderr);
+test('API listener and broker session are separate gates, and an old or simulated API never becomes ready',async()=>{
+  for(const info of [{version:'1.7.8',simulation:false},{version:'1.7.7',simulation:false},{version:'1.7.8',simulation:true}]){
+    const folder=root(),paths:string[]=[];let healthCalls=0;
+
+    const native=new NativeConnection(folder,async()=>'/SYNTHETIC/native',{
+      run:async()=>({stdout:'--no-open'}),origin:async()=>'http://127.0.0.1:19998',timeoutMs:100,pollMs:1,
+      launch:((_binary:string,_args:readonly string[],options:Parameters<typeof spawn>[2])=>{
+        assert.equal(options?.env?.SJ_HOME_PATH,undefined);assert.equal(options?.env?.SJ_HTTP_AUTH,'false');
+        const process=Object.assign(new EventEmitter(),{exitCode:null as number|null,stdout:new PassThrough(),stderr:new PassThrough(),
+          kill:()=>{process.exitCode=0;setImmediate(()=>process.emit('exit',0,null));return true;}});return process;
+      }) as unknown as typeof spawn,
+      fetcher:async url=>{const path=new URL(String(url)).pathname;paths.push(path);
+        return path.endsWith('/info')?Response.json(info):Response.json({status:'degraded',session_recovering:++healthCalls<3});},
+    });
+    try{
+      if(info.version==='1.7.8'&&!info.simulation){await native.start(input);assert.equal(native.connected,true);assert.equal(healthCalls,3);}
+      else{await assert.rejects(native.start(input),/版本不符/);assert.equal(healthCalls,0);assert.equal(native.connected,false);}
+      assert.equal(paths[0],'/api/v1/info');assert.equal(native.diagnostics().bundled_version,'1.7.8');
+    }finally{await native.close();rmSync(folder,{recursive:true,force:true});}
   }
+});
+test('a local HTTP auth rejection is distinct from rejected broker credentials and does not loop',async()=>{
+  for(const denied of ['info','health']){
+    const folder=root();let requests=0;
+    const native=new NativeConnection(folder,async()=>'/SYNTHETIC/native',{
+      run:async()=>({stdout:'--no-open'}),origin:async()=>'http://127.0.0.1:19998',timeoutMs:500,pollMs:1,
+      launch:(()=>{const child=Object.assign(new EventEmitter(),{exitCode:null as number|null,stdout:new PassThrough(),stderr:new PassThrough(),
+        kill:()=>{child.exitCode=0;setImmediate(()=>child.emit('exit',0,null));return true;}});return child;}) as unknown as typeof spawn,
+      fetcher:async url=>{requests++;return String(url).endsWith('/'+denied)?new Response('',{status:401}):Response.json({simulation:false,version:'1.7.8'});},
+    });
+    try{await assert.rejects(native.start(input),/HTTP_AUTH/);assert.equal(requests,denied==='info'?1:2);assert.equal(native.connected,false);}
+    finally{await native.close();rmSync(folder,{recursive:true,force:true});}
+  }
+});
+test('a forced shutdown waits for exit, and an unkillable owned child blocks the next login',async()=>{
+  for(const stuck of [false,true]){
+    const folder=root();let launches=0,exited=false;
+    let child:EventEmitter & {exitCode:number|null;stdout:PassThrough;stderr:PassThrough;kill:(signal?:string)=>boolean};
+    const native=new NativeConnection(folder,async()=>'/SYNTHETIC/native',{
+      run:async()=>({stdout:'--no-open'}),origin:async()=>'http://127.0.0.1:19998',timeoutMs:50,pollMs:1,shutdownMs:10,
+      launch:(()=>{launches++;assert.ok(launches===1||exited,'new login must wait for the prior exit');
+        child=Object.assign(new EventEmitter(),{exitCode:null as number|null,stdout:new PassThrough(),stderr:new PassThrough(),kill:(signal?:string)=>{
+          if(signal==='SIGKILL'&&!stuck)setTimeout(()=>{exited=true;child.exitCode=0;child.emit('exit',0,null);},3);return true;}});return child;
+      }) as unknown as typeof spawn,fetcher:async url=>Response.json(String(url).endsWith('/info')?{simulation:false,version:'1.7.8'}:{status:'healthy'}),
+    });
+    try{await native.start(input);
+      if(stuck){await assert.rejects(native.start({...input,secret_key:'SYNTHETIC_NEW'}),/程序尚未結束/);assert.equal(launches,1);}
+      else{await native.start({...input,secret_key:'SYNTHETIC_NEW'});assert.equal(launches,2);assert.equal(native.connected,true);}
+    }finally{child!.exitCode=0;child!.emit('exit',0,null);await native.close();rmSync(folder,{recursive:true,force:true});}
+  }
+});
+
+test('a child already terminated by a signal does not block a fresh login',async()=>{
+  const folder=root(),f=fixture(folder);
+  try{await f.native.start(input);const prior=f.children[0]!;
+    Object.defineProperty(prior,'signalCode',{value:'SIGTERM',writable:true});prior.emit('exit',null,'SIGTERM');
+    Object.defineProperty(prior,'exitCode',{value:null,writable:true});
+    await f.native.start(input);assert.equal(f.launches,2);assert.equal(f.native.connected,true);
+  }finally{await f.native.close();rmSync(folder,{recursive:true,force:true});}
 });

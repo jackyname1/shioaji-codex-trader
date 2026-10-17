@@ -148,7 +148,7 @@ test('native startup waits beyond info readiness for a usable health body, accep
   child.kill=()=>{child.exitCode=0;setImmediate(()=>child.emit('exit'));return true;};
   const native=new NativeConnection(root,async()=>join(root,'fixture-binary'),{
     origin:async()=>'http://127.0.0.1:9081',run:async()=>({stdout:'--no-open'}),launch:(()=>child) as unknown as typeof spawn,
-    fetcher:async input=>String(input).endsWith('/health')?Response.json({status:'degraded',session_recovering:++probes<3,token_stale:false}):Response.json({simulation:false}),
+    fetcher:async input=>String(input).endsWith('/health')?Response.json({status:'degraded',session_recovering:++probes<3,token_stale:false}):Response.json({simulation:false,version:'1.7.8'}),
   });
   try{await native.start(ConnectionInputSchema.parse({api_key:'TEST_KEY',secret_key:'TEST_SECRET',remember:false}));
     assert.equal(probes,3);assert.equal(native.connected,true);assert.equal(native.hasCa,false);

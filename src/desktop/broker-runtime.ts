@@ -4,9 +4,11 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { z } from 'zod';
 
+export const BUNDLED_SHIOAJI_VERSION='1.7.8';
+
 export async function bundledShioajiPath(root: string): Promise<string> {
   try {
-    const manifest = z.object({ version: z.literal('1.7.7'), platform: z.literal(process.platform),
+    const manifest = z.object({ version: z.literal(BUNDLED_SHIOAJI_VERSION), platform: z.literal(process.platform),
       arch: z.literal(process.arch), relative_path: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/) })
       .parse(JSON.parse(await readFile(join(root, 'runtime.json'), 'utf8')));
     const binary = await realpath(resolve(root, manifest.relative_path)), parent = await realpath(root);
