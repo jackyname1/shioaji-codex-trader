@@ -23,4 +23,9 @@ test('small trades cannot invent a profitable exit inside the limit and a differ
   const small=breakEvenExitPrice(100,'30.05','33',s),large=breakEvenExitPrice(1000,'30.05','33',s);
   assert.ok(small&&large&&d(small).gt(large));assert.equal(breakEvenExitPrice(0,'30.05','33',s),null);
   assert.equal(breakEvenExitPrice(100,'30.05','29',s),null);
+  // At 33.35 net is +0.1665; the next tick 33.40 crosses a tax rounding step and net is -0.334.
+  // A monotone binary search incorrectly returned 33.45 and skipped the first profitable legal price.
+  assert.equal(breakEvenExitPrice(10,'29.2','35.6',s),'33.35');
+  assert.ok(d(roundTripEstimate(10,'29.2','33.35',s).estimated_net_target_gain!).gt(0));
+  assert.ok(d(roundTripEstimate(10,'29.2','33.4',s).estimated_net_target_gain!).lt(0));
 });
