@@ -5,6 +5,7 @@ import { TradingCalendar } from './calendar.js';
 import {authorizedRisk} from './risk-policy.js';
 import {orderBudget} from './capital.js';
 import {fee} from './costs.js';
+import {lotQuantityIssues,stockInstrumentKind} from './stock-lot.js';
 export {fee} from './costs.js';
 
 export function tickSize(price: Decimal.Value): Decimal {
@@ -31,7 +32,7 @@ export class Risk {
     if (!this.calendar.inSession(now, order.lot)) reasons.push('非已確認的交易時段');
     if (!instrument || instrument.symbol !== order.symbol) reasons.push('缺少已確認的商品資料');
     else {
-      if (instrument.kind !== 'STOCK') reasons.push('僅允許上市櫃普通股票');
+      if (instrument.kind !== 'STOCK'||stockInstrumentKind(instrument.symbol,instrument.name)!=='STOCK') reasons.push('僅允許上市櫃普通股票');
       if (twDay(new Date(instrument.verified_at)) !== twDay(now)) reasons.push('商品資料不是今日資料');
       if (instrument.suspended || instrument.disposition) reasons.push('暫停交易或處置股');
       if (instrument.attention && !s.allow_attention && order.action === 'BUY') reasons.push('注意股禁止新增買進');
@@ -40,8 +41,8 @@ export class Risk {
         reasons.push('價格超出已確認的漲跌停範圍');
     }
     if (!alignedPrice(order.limit_price)) reasons.push('價格不符合股票跳動單位');
-    if (order.lot === 'ODD' && (order.shares < 1 || order.shares > 999)) reasons.push('零股委託必須為 1–999 股');
-    if (order.lot === 'COMMON' && (!s.whole_lots || order.shares % 1000 !== 0)) reasons.push('整股未啟用或股數不符');
+    reasons.push(...lotQuantityIssues(order.lot,order.shares));
+    if (order.lot === 'COMMON' && !s.whole_lots) reasons.push('整股尚未啟用');
     if (!quote || quote.symbol !== order.symbol || quote.odd !== (order.lot === 'ODD')) reasons.push('缺少對應市場行情');
     else {
       if (quote.simulated) reasons.push('試算行情不得當成成交行情');
@@ -50,6 +51,7 @@ export class Risk {
       if (d(quote.bid).lte(0) || d(quote.ask).lte(0) || d(quote.bid).gt(quote.ask)) reasons.push('買賣報價不完整');
       else if (d(quote.ask).minus(quote.bid).div(quote.last).gt(s.max_spread_fraction)) reasons.push('零股買賣價差過大');
       if (d(order.limit_price).div(quote.last).minus(1).abs().gt(s.price_deviation_fraction)) reasons.push('委託價偏離最新成交價');
+      if((order.action==='BUY'?quote.ask_shares:quote.bid_shares)<=0)reasons.push('對手方無有效可成交深度，等待新報價');
     }
     const others = account.orders.filter(o => active(o) && o.local_id !== order.local_id);
     if (others.some(o => ['PREPARED','UNKNOWN','SUBMITTING'].includes(o.status))) reasons.push('存在尚未核對的委託');

@@ -13,6 +13,8 @@ import { largestStockScanner, type StockScanner } from './scanner.js';
 import { LiveSession } from '../core/live-session.js';
 import { BrokerHealthSchema, BrokerError, brokerStageIssue, marketReady, requestStage } from './health.js';
 import { RequestDiagnostics, type BrokerDiagnostics } from './diagnostics.js';
+import {stockOrderPayload} from './stock-order.js';
+import {stockInstrumentKind} from '../core/stock-lot.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -29,8 +31,8 @@ const stockSchema = z.object({ security_type: z.literal('STK'), code: z.string()
 const nativeTradeSchema = z.object({ contract: z.object({ code: z.string(), security_type: z.literal('STK'), exchange: z.string() }),
   order: z.object({ id: z.string().min(1), action: z.enum(['Buy','Sell']), price: number, quantity: count,
     order_lot: z.string(), order_cond: z.string(), price_type: z.string(), order_type: z.string(),
-    custom_field: z.string().nullable().optional(), account: selectorSchema.omit({signed:true}),
-  }), status: z.object({ status: z.string(), order_ts: z.number().finite(), order_quantity: count,
+    custom_field: z.string().nullable().optional(), daytrade_short:z.boolean().optional(),account: selectorSchema.omit({signed:true}),
+  }), status: z.object({ id:z.string().optional(),status: z.string(), order_ts: z.number().finite(), order_quantity: count,
     deal_quantity: count, cancel_quantity: count.optional(), modified_price: number.nullable().optional(),
   }),
 });
@@ -137,6 +139,7 @@ export class ShioajiHttpBroker implements Broker {
   private readCooldowns=new Map<string,number>();
   private healthCheckedAt=0;
   private lastTradeCache:string|null=null;
+  private mutationInFlight=false;
   constructor(readonly store: Store, public settings: Settings, readonly allowLive = false,
     private readonly fetcher: typeof fetch = fetch, private readonly liveSession = new LiveSession(),private readonly clock=Date.now) {
     this.production = settings.mode === 'live';
@@ -341,7 +344,7 @@ export class ShioajiHttpBroker implements Broker {
       const sourceDate = /^\d{4}-\d{2}-\d{2}$/.test(raw.update_date) ? raw.update_date : '';
       if (!sourceDate) throw new BrokerError('Shioaji 商品資料日期無法核對，等待契約更新');
       const value = InstrumentSchema.parse({ symbol, name: raw.name, exchange: raw.exchange, category: raw.category,
-        kind: /^[1-9]\d{3}$/.test(symbol) ? 'STOCK' : symbol.startsWith('00') ? 'ETF' : 'OTHER',
+        kind: stockInstrumentKind(symbol,raw.name),
         reference: raw.reference, limit_down: raw.limit_down, limit_up: raw.limit_up,
         suspended: raw.trading_suspended, disposition: raw.disposition_level > 0, attention: raw.attention_flag,
         verified_at: `${sourceDate}T00:00:00+08:00` });
@@ -370,8 +373,17 @@ export class ShioajiHttpBroker implements Broker {
   }
   normalizeTrade(trade: NativeTrade, local?: Order): Order {
     const native = trade.order, status = trade.status;
+    if(status.id!==undefined&&status.id!==native.id)throw new BrokerError('券商委託識別與狀態不符');
+    if(!['TSE','OTC'].includes(trade.contract.exchange))throw new BrokerError('券商委託交易所不支援');
+    const instrument=this.metadata.get(trade.contract.code);
+    if(instrument&&instrument.exchange!==trade.contract.exchange)throw new BrokerError('券商委託交易所與商品資料不符');
+    if(this.selected&&(native.account.account_type!=='S'||native.account.broker_id!==this.selected.broker_id
+      ||native.account.account_id!==this.selected.account_id))throw new BrokerError('券商委託回傳帳戶不符');
     const factor = ['Common','Fixing'].includes(native.order_lot) ? 1000 : 1;
     const quantity = (status.order_quantity || native.quantity) * factor, filled = status.deal_quantity * factor;
+    if(!Number.isSafeInteger(quantity)||!Number.isSafeInteger(filled)||quantity<=0||filled>quantity
+      ||status.status==='Filled'&&filled!==quantity||status.status==='PartFilled'&&filled===0)
+      throw new BrokerError('券商成交數量與狀態不一致，等待重新核對');
     const action = native.action === 'Buy' ? 'BUY' : 'SELL';
     const states: Record<string, Order['status']> = { Filled: 'FILLED', Cancelled: 'CANCELLED', PartFilled: 'PARTIAL',
       Failed: 'REJECTED', Inactive: 'REJECTED', Submitted: 'PENDING', PreSubmitted: 'SUBMITTING', PendingSubmit: 'SUBMITTING' };
@@ -379,10 +391,10 @@ export class ShioajiHttpBroker implements Broker {
     const modifiedPrice = d(status.modified_price ?? '0');
     const price = modifiedPrice.gt(0) ? modifiedPrice : d(native.price);
     if (local) {
-      if (local.symbol !== trade.contract.code || local.action !== action || local.shares !== quantity
+      if (local.broker_id&&local.broker_id!==native.id || local.symbol !== trade.contract.code || local.action !== action || local.shares !== quantity
         || !d(local.limit_price).eq(price) || native.custom_field !== local.tag
         || native.order_lot !== (local.lot === 'ODD' ? 'IntradayOdd' : 'Common')
-        || native.order_cond !== 'Cash' || native.price_type !== 'LMT' || native.order_type !== 'ROD'
+        || native.order_cond !== 'Cash' || native.price_type !== 'LMT' || native.order_type !== 'ROD' || native.daytrade_short===true
         || filled < local.filled) throw new Error('券商與本機委託資料不符');
       return OrderSchema.parse({ ...local, broker_id: native.id,
         status: local.status === 'CANCEL_PENDING' && ['PENDING','PARTIAL','SUBMITTING'].includes(mapped) ? 'CANCEL_PENDING' : mapped, filled });
@@ -390,7 +402,7 @@ export class ShioajiHttpBroker implements Broker {
     const reservePrice = price.gt(0) ? price.toFixed() : this.metadata.get(trade.contract.code)?.limit_up;
     if (!reservePrice || d(reservePrice).lte(0)) throw new BrokerError('Shioaji 外部市價委託尚無可核對的預留價格，等待商品資料');
     // Unknown/unsupported external orders freeze new orders while still reserving cash/inventory.
-    const supported = native.order_cond === 'Cash' && ['Common','IntradayOdd'].includes(native.order_lot);
+    const supported = native.order_cond === 'Cash' && native.daytrade_short!==true && ['Common','IntradayOdd'].includes(native.order_lot);
     return OrderSchema.parse({ local_id: 'external-' + native.id, broker_id: native.id,
       tag: createHash('sha256').update(native.id).digest('hex').slice(0,6), symbol: trade.contract.code,
       action, shares: quantity, limit_price: reservePrice, lot: factor === 1000 ? 'COMMON' : 'ODD',
@@ -412,7 +424,7 @@ export class ShioajiHttpBroker implements Broker {
       return AccountSchema.parse(prior?{...prior,complete:false,issue}:{asof:now.toISOString(),cash:'0',settlement_debits:'0',settlement_credits:'0',
         positions:[],orders:[],daily_buy_amount:'0',daily_buy_count:0,complete:false,issue,available:{cash:false,settlements:false,positions:false,orders:false}});
     }
-    const start = new Date(), sequence = this.eventSequence, generation = this.generation;
+    const start = new Date(this.clock()), sequence = this.eventSequence, generation = this.generation;
     const previous = this.lastAccount;
     const available={cash:previous?.available?.cash??!!previous,settlements:previous?.available?.settlements??!!previous,
       positions:previous?.available?.positions??!!previous,orders:previous?.available?.orders??!!previous};
@@ -462,8 +474,8 @@ export class ShioajiHttpBroker implements Broker {
       });available.positions=true;
     } catch(error){failed('庫存',error);}};
     await Promise.all([readBalance(),readSettlements(),readPositions()]);
-    if(sequence!==this.eventSequence||generation!==this.generation)issues.push('Shioaji 快照取得期間有委託或連線變動，等待重新核對');
-    this.dirty = sequence !== this.eventSequence || generation !== this.generation;
+    if(sequence!==this.eventSequence||generation!==this.generation||this.mutationInFlight)issues.push('Shioaji 快照取得期間有委託或連線變動，等待重新核對');
+    this.dirty = sequence !== this.eventSequence || generation !== this.generation || this.mutationInFlight;
     const issue=[...new Set(issues)].join('；');
     this.lastAccount = AccountSchema.parse({ asof: start.toISOString(), cash, settlement_debits: debits,
       settlement_credits: credits, positions, orders, complete: !issue, issue,available,
@@ -509,11 +521,17 @@ export class ShioajiHttpBroker implements Broker {
     if (!this.liveSession.authorized(this.store.get('account_fingerprint'),scope)) throw new NoSubmissionError('本次實盤授權已關閉');
   }
   async submit(o: Order): Promise<Order> {
+    if(this.mutationInFlight)throw new NoSubmissionError('已有送單或撤單正在核對，請等待完成');
+    this.mutationInFlight=true;
+    try{return await this.submitOnce(o);}finally{this.mutationInFlight=false;}
+  }
+  private async submitOnce(o:Order):Promise<Order>{
     let m: Instrument | undefined;
+    let payload:ReturnType<typeof stockOrderPayload>;
     try {
       await this.mutationReady();
-      m = (await this.instruments([o.symbol],new Date()))[o.symbol];
-      const now = new Date();
+      m = (await this.instruments([o.symbol],new Date(this.clock())))[o.symbol];
+      const now = new Date(this.clock());
       if (!m || !this.lastAccount || this.dirty) throw new NoSubmissionError('帳戶或商品資料尚未重新核對');
       const q = QuoteSchema.safeParse(this.parts.get(`${o.symbol}:${o.lot === 'ODD'}`));
       const baseline = this.store.get<{equity:string}>('baseline_' + twDay(now))?.equity;
@@ -523,27 +541,39 @@ export class ShioajiHttpBroker implements Broker {
         const plan = this.store.plan();
         if (!plan || plan.id !== o.plan_id || Date.parse(plan.analysis.expires_at) <= now.getTime()) throw new NoSubmissionError('買進計畫已過期');
       }
+      payload=stockOrderPayload(o,m,this.selected);
       if (!this.liveSession.authorized(this.store.get('account_fingerprint'))) throw new NoSubmissionError('本次實盤授權已關閉');
     } catch (error) {
       if (error instanceof NoSubmissionError) throw error;
       throw new NoSubmissionError('送單前連線或資料核對失敗，未送出券商委託');
     }
-    const payload = { contract: { security_type:'STK',exchange:m.exchange,code:o.symbol }, stock_order:{
-      action: o.action === 'BUY' ? 'Buy' : 'Sell', price: Number(o.limit_price), quantity: o.lot === 'ODD' ? o.shares : o.shares / 1000,
-      price_type:'LMT', order_type:'ROD', order_lot:o.lot === 'ODD' ? 'IntradayOdd' : 'Common', order_cond:'Cash',
-      daytrade_short:false, custom_field:o.tag, account:{ broker_id:this.selected!.broker_id,account_id:this.selected!.account_id } } };
+    // A write invalidates purchasing power even if its HTTP response is lost or malformed.
     // Exactly one network attempt; any uncertain outcome is reconciled by the engine.
-    const trade = nativeTradeSchema.parse(await this.request('/order/place_order',payload));
+    const trade = nativeTradeSchema.parse(await this.mutate('/order/place_order',payload));
+    if(trade.contract.exchange!==m.exchange)throw new BrokerError('券商委託回傳交易所不符');
     return this.normalizeTrade(trade,o);
   }
   async cancel(o: Order): Promise<Order> {
+    if(this.mutationInFlight)throw new NoSubmissionError('已有送單或撤單正在核對，請等待完成');
+    this.mutationInFlight=true;
+    try{return await this.cancelOnce(o);}finally{this.mutationInFlight=false;}
+  }
+  private async cancelOnce(o:Order):Promise<Order>{
     try { await this.mutationReady('cancel'); await this.refreshTrades(true); }
     catch { throw new NoSubmissionError('撤單前連線或授權核對失敗，未送出撤單'); }
-    const trade = this.trades.find(t => t.order.id === o.broker_id); if (!trade) throw new Error('撤單前查不到委託');
-    const current = this.normalizeTrade(trade,o); if (!active(current)) return current;
+    const trade = this.trades.find(t => t.order.id === o.broker_id); if (!trade) throw new NoSubmissionError('撤單前查不到委託，未送出撤單');
+    let current:Order;
+    try{current=this.normalizeTrade(trade,o);}catch{throw new NoSubmissionError('撤單前委託資料不符，未送出撤單');}
+    if (!active(current)) return current;
     if (!this.liveSession.authorized(this.store.get('account_fingerprint'),'cancel')) throw new NoSubmissionError('本次實盤授權已關閉，未送出撤單');
-    const result = nativeTradeSchema.parse(await this.request('/order/cancel_order',{ trade_id:o.broker_id }));
-    return this.normalizeTrade(result,{ ...o,status:'CANCEL_PENDING' });
+    const result = nativeTradeSchema.parse(await this.mutate('/order/cancel_order',{ trade_id:o.broker_id }));
+    return this.normalizeTrade(result,{ ...current,status:'CANCEL_PENDING' });
+  }
+  private async mutate(path:string,body:unknown):Promise<unknown>{
+    this.eventSequence++;this.dirty=true;this.authoritativeRequired=true;
+    try{return await this.request(path,body);}finally{
+      this.eventSequence++;this.dirty=true;this.authoritativeRequired=true;
+    }
   }
 }
 

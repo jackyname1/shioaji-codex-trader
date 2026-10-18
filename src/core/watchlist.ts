@@ -6,6 +6,7 @@ import {researchExit} from './smart.js';
 import {orderBudget} from './capital.js';
 import {multiOpportunity,type Opportunity} from './opportunities.js';
 import type {EntryTrack} from './models.js';
+import {COMMON_MAX_SHARES} from './stock-lot.js';
 
 export interface WatchEntry {
   symbol:string; name:string; state:'OBSERVE'|'RETAINED'; source:'CODEX'|'SCANNER';
@@ -118,7 +119,7 @@ export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|un
     orderBudget(e,s),cashRoom.minus(s.minimum_fee),
     e.times(s.max_symbol_fraction).minus(symbolHeld).minus(symbolReserved),e.times(s.max_exposure_fraction).minus(marketValue(a)).minus(reservedAmount),
     e.times(s.max_daily_buy_fraction).minus(a.daily_buy_amount));
-  let shares=Math.min(999000,Math.max(0,Math.floor(spend.div(limit).toNumber())));
+  let shares=Math.min(COMMON_MAX_SHARES,Math.max(0,Math.floor(spend.div(limit).toNumber())));
   if(!q.odd&&!s.whole_lots)return {reason:'整股尚未啟用'};
   shares=!q.odd?Math.floor(shares/1000)*1000:Math.min(999,shares);
   while(shares>0&&d(limit).times(shares).plus(fee(d(limit).times(shares).toFixed(),s)).gt(cashRoom))shares-=q.odd?1:1000;

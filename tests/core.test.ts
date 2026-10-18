@@ -92,7 +92,7 @@ test('analysis checks snapshot identity, expiry, available candidates, history a
   assert.throws(() => AnalysisSchema.parse({...a,stance:'HOLD_ONLY'}));
 });
 test('daily indicators use completed bars and handle flat prices',() => {
-  const bars = Array.from({length:60},(_,i) => ({date:`2026-08-${String(i+1).padStart(2,'0')}`,close:30,high:31,low:29,volume:100}));
+  const bars = Array.from({length:60},(_,i) => ({date:new Date(Date.UTC(2026,7,i+1)).toISOString().slice(0,10),close:30,high:31,low:29,volume:100}));
   const f = indicators(bars); assert.equal(f.ma60,30); assert.equal(f.rsi14,50); assert.equal(f.atr14,2);
   assert.equal(f.volume_ratio20,1); assert.equal(indicators(bars.slice(0,10)).sufficient,false);
 });

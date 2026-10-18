@@ -3,8 +3,11 @@ import { AnalysisSchema, ageSeconds, d, type Analysis, type Bar, type Features, 
 import { roundPrice, tickSize } from './risk.js';
 const mean = (x: number[]): number => x.reduce((a, b) => a + b, 0) / x.length;
 export function indicators(bars: Bar[]): Features {
-  if (bars.length < 20 || bars.some(b => ![b.close,b.high,b.low,b.volume].every(Number.isFinite)
-    || b.close <= 0 || b.high < b.low || b.volume < 0)) return { sufficient: false, sessions: bars.length };
+  if (bars.length < 20 || bars.some((b,i) => ![b.close,b.high,b.low,b.volume].every(Number.isFinite)
+    || b.close <= 0 || b.low<=0 || b.close>b.high || b.close<b.low || b.volume < 0
+    || !/^\d{4}-\d{2}-\d{2}$/.test(b.date)||!Number.isFinite(Date.parse(b.date))
+    || new Date(b.date).toISOString().slice(0,10)!==b.date || i>0&&b.date<=bars[i-1]!.date))
+    return { sufficient: false, sessions: bars.length,issue:'歷史價格、日期或先後順序不合法；不產生交易指標' };
   const closes = bars.map(b => b.close), last = bars.at(-1)!;
   const result: Features = { sufficient: true, sessions: bars.length, asof: last.date,
     daily_amount:last.amount??d(last.close).times(last.volume).toFixed(),
