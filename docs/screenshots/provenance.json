@@ -1,99 +1,109 @@
 {
-  "app_version": "0.2.8",
+  "app_version": "0.2.9",
   "platform": "Windows x64",
   "fixture": "isolated synthetic GUI smoke test; no user credentials or brokerage orders",
-  "source_commit": "2014acdf73a8fe425ff44bf7eb960f0c422804bf",
-  "source_tree": "bbd2122eaa98b6532991f8b4cc7365aa24491d33",
-  "workflow_run_id": 39147256616,
+  "source_commit": "afc4cae28f9b18108d2a406f7511f22de96f4ebf",
+  "source_tree": "eda266235fcc2e012ea388530bdf342df205e4b1",
+  "workflow_run_id": 39158133183,
   "images": [
     {
       "source_file": "SYNTHETIC-ui-paper-1600.png",
-      "path": "docs/screenshots/workbench-v0.2.8.png",
+      "path": "docs/screenshots/workbench-v0.2.9.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 256643,
-      "sha256": "706f4ebcdae137d3a935487bf78e01043dab5f9a62d18c8fdd1ac29ad8ecb294",
-      "git_blob_sha": "3e4c91051f356feb7232ea5758fd3e830c6984bc",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-paper-1600.png"
+      "size_bytes": 258499,
+      "sha256": "01ed81c843e03ce79b5be91ab93d7780f3b90377f060f54343053489d60c31d3",
+      "git_blob_sha": "40951dad419322576c5776a1a0a4e21915b97d7b",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-paper-1600.png"
     },
     {
       "source_file": "SYNTHETIC-ui-capital-profile.png",
-      "path": "docs/screenshots/capital-profile-v0.2.8.png",
+      "path": "docs/screenshots/capital-profile-v0.2.9.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 305034,
-      "sha256": "46f5fd801e73e060b815ab89172fe0e6164b5e7a59e0047624f006421878900c",
-      "git_blob_sha": "e83142bfa245fd1152630a960a1b3c444c46c1e1",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-capital-profile.png"
+      "size_bytes": 310729,
+      "sha256": "ab96c965aca333390fbfb194b7b013957983f21cd76370bc4812b7ad447b8fde",
+      "git_blob_sha": "bcb6ba19f52acd9cf927a5b84034b6230e707b04",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-capital-profile.png"
     },
     {
       "source_file": "SYNTHETIC-ui-smart-conditions-1600.png",
-      "path": "docs/screenshots/smart-conditions-v0.2.8.png",
+      "path": "docs/screenshots/smart-conditions-v0.2.9.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 206555,
-      "sha256": "edc76c6e75f88b4c249fb204378a6baf696be0c88d95d81adf36d9208d2e4b63",
-      "git_blob_sha": "46a84ee8eebf4f208c253427a7e3cc3d9d3307ae",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-smart-conditions-1600.png"
+      "size_bytes": 208753,
+      "sha256": "c462602ede3dfcb9de52a40e2fb1bb90bb3bfa3b0f472836d2747980762edfd8",
+      "git_blob_sha": "20a4e41b539b27eec1e86640827dc41074bcd893",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-smart-conditions-1600.png"
     },
     {
       "source_file": "SYNTHETIC-ui-realtime-1600.png",
-      "path": "docs/screenshots/realtime-v0.2.8.png",
+      "path": "docs/screenshots/realtime-v0.2.9.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 259241,
-      "sha256": "c7484c9d65f9aaaf38e6122fcd6407d55c89caa5f38766a0c67086d1b416e9a1",
-      "git_blob_sha": "44831fadb42be9a4f5bc3017b3ee692a5ee490d9",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-realtime-1600.png"
+      "size_bytes": 263536,
+      "sha256": "97f3111115d49cdb03a3a9a6b1db4f68fcf26e04dc3483103717c5be7ed739b9",
+      "git_blob_sha": "3a24b84791844972a7c04dd559c66bb7e669549f",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-realtime-1600.png"
     },
     {
       "source_file": "SYNTHETIC-ui-live.png",
-      "path": "docs/screenshots/live-v0.2.8.png",
+      "path": "docs/screenshots/live-v0.2.9.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 253094,
-      "sha256": "ab2652e2a8f3eaecbb362ea16847b9ea95f537b75799773a448f2a37cd4903ef",
-      "git_blob_sha": "87cf3e6a21346116f4b8b6fdbd55ae4e872c385c",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-live.png"
+      "size_bytes": 256065,
+      "sha256": "45b0ae8f1bb801a9dce1b228a7acbfd89941f17147646398f3b78b54bdd47da8",
+      "git_blob_sha": "17b2f00d64eb6e0c5d657fbcdbc153727d4c86e2",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-live.png"
     },
     {
       "source_file": "SYNTHETIC-ui-connection.png",
-      "path": "docs/screenshots/connection-v0.2.8.png",
+      "path": "docs/screenshots/connection-v0.2.9.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 237645,
-      "sha256": "db6f38741456b080b70f5f423dd793087ccdd6bbfb210495f895aa0440a6f70a",
-      "git_blob_sha": "08498e7683d45d5db10e06294f75817de9649d31",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-connection.png"
+      "size_bytes": 238419,
+      "sha256": "a7f45c8a531eb2b5e796a70aae3c378eb9f886da2ba4bade00c90bfe265ac813",
+      "git_blob_sha": "75df26423c1586e19c7a7e663b047d7d244bed5a",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-connection.png"
     },
     {
       "source_file": "SYNTHETIC-ui-codex-history.png",
-      "path": "docs/screenshots/codex-history-v0.2.8.png",
+      "path": "docs/screenshots/codex-history-v0.2.9.png",
       "width": 1920,
       "height": 1080,
-      "size_bytes": 302583,
-      "sha256": "7488efc96cf744264b3598e1cbbae47686c0e10755f7dfd954b7bcb9f2f74d30",
-      "git_blob_sha": "fa2a374d38ca6f93da0537de1277e0e50c882650",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-codex-history.png"
+      "size_bytes": 319840,
+      "sha256": "d267edd4663a9eac598b1374573c48c744315009719cb8a46d63755e198afc3b",
+      "git_blob_sha": "d70469847246512274de3e9e6e464e3e22ad55f4",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-codex-history.png"
     },
     {
       "source_file": "SYNTHETIC-ui-native-login-failure.png",
-      "path": "docs/screenshots/native-login-failure-v0.2.8.png",
+      "path": "docs/screenshots/native-login-failure-v0.2.9.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 186652,
-      "sha256": "ebfc8395e4e5a6d15b66382f5400dcc68d1fb8bf19409d6a8a0ec6adc8719907",
-      "git_blob_sha": "fc9c6a752610fc0b5ffe8ffa6be54e19a47783c0",
-      "source_path": "docs/capture-bundles/v0.2.8/SYNTHETIC-ui-native-login-failure.png"
+      "size_bytes": 175757,
+      "sha256": "aea6264fd69ef07eba511c2262ada0a972ff230c97940cb37ebd766e85d61063",
+      "git_blob_sha": "c24abed61b3c630cfca4be099d6daf1498ebfbb9",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-native-login-failure.png"
+    },
+    {
+      "source_file": "SYNTHETIC-ui-tray.png",
+      "path": "docs/screenshots/tray-v0.2.9.png",
+      "width": 440,
+      "height": 690,
+      "size_bytes": 44136,
+      "sha256": "13c427139dc1c2b4d6a25248c41e2c2ada458213353a1e28fbb8dafcff2ffd50",
+      "git_blob_sha": "4bd705008a4105d03bc2e92f5946afb06da2953e",
+      "source_path": "docs/capture-bundles/v0.2.9/SYNTHETIC-ui-tray.png"
     }
   ],
-  "bundle_sha256": "02122deb04445c9dcdf1d29cdeaf60f4606a8c5798ec5d23c24663421378cbcd",
-  "workflow_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/39147256616",
-  "source_gui_job_id": 117733503922,
+  "bundle_sha256": "7e96a217eb2fd65dffcdb76ca53fc2d78eec6d151f518c7f2c3068001df6839d",
+  "workflow_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/39158133183",
+  "source_gui_job_id": 117765520706,
   "artifact_type": "git-screenshot-bundle",
-  "artifact_commit": "36a6066308c659f9a1293bb17c3e2914505c52cd",
-  "artifact_tree": "6195daa0b27cdb2ee378c04ce9a7341ef0804d5f",
-  "artifact_url": "https://github.com/jackyname1/shioaji-codex-trader/tree/36a6066308c659f9a1293bb17c3e2914505c52cd/docs/capture-bundles/v0.2.8",
-  "artifact_digest": "sha256:02122deb04445c9dcdf1d29cdeaf60f4606a8c5798ec5d23c24663421378cbcd",
+  "artifact_commit": "2e6f0e0297efcfd9342da4a184d61c564edcca01",
+  "artifact_tree": "aee0a676e9ef47df0dccf55beaa6cc3a258ced98",
+  "artifact_url": "https://github.com/jackyname1/shioaji-codex-trader/tree/2e6f0e0297efcfd9342da4a184d61c564edcca01/docs/capture-bundles/v0.2.9",
+  "artifact_digest": "sha256:7e96a217eb2fd65dffcdb76ca53fc2d78eec6d151f518c7f2c3068001df6839d",
   "digest_definition": "SHA256 of compact JSON pairs [source_file, sha256] in manifest order"
 }
