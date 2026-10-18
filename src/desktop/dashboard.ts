@@ -37,7 +37,7 @@ export function traySnapshot(state:DesktopState):TraySnapshot {
   const reserved=(a?.orders??[]).filter(o=>o.action==='BUY'&&!['FILLED','CANCELLED','REJECTED'].includes(o.status)).reduce((sum,o)=>{
     const amount=Number(o.limit_price)*(o.shares-o.filled);return sum+amount+Math.max(Number(settings.minimum_fee),Math.ceil(amount*Number(settings.fee_rate)));},0);
   const full=!!a&&available.cash&&available.settlements&&available.positions&&available.orders&&fresh;
-  const orders=r?.orders??[];
+  const orders=(a&&available.orders?a.orders:r?.orders??[]).filter(o=>!['FILLED','CANCELLED','REJECTED'].includes(o.status));
   return {workspace:state.workspace_mode==='live'?'正式交易 · 真實帳戶':replay?'歷史回放 · 模擬時間':'即時模擬 · 虛擬資金',
     activity:replay?state.backtest_running?state.replay_paused?'回放已暫停':'歷史回放中':'回放待命':!r?.connected?'等待連線':r.killed?'已停止新委託':r.paused?'暫停新增買進':!r.auto?'已連線 · 待命':r.sizing?'Codex 確認股數':r.analyzing?'Codex 更新條件':r.blocked?'新買進受阻':!r.session?'交易時段外 · 持續監控':'自動監測中',
     connection:state.connection.status,codex:state.codex_auth.message,issue:state.error||(!replay&&state.workspace_mode==='live'?state.live.issues.join('；'):'')||(!fresh&&a?'帳務已過期，等待重新核對':''),

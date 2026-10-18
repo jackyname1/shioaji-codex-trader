@@ -35,6 +35,14 @@ test('tray cash reserves pending buys and hides stale or partially confirmed bal
   a.available={cash:true,positions:true,orders:false,settlements:true};view=traySnapshot(state);assert.equal(view.cash,'—');assert.equal(view.equity,'—');
   delete a.available;a.asof='2020-01-01T00:00:00Z';assert.equal(traySnapshot(state).cash,'—');assert.match(traySnapshot(state).issue,/過期/);
 });
+test('tray includes broker-account external orders, excludes terminal states and falls back to known local pending orders',()=>{
+  const state=fixture(),r=state.runtime!,a=r.account!;
+  const order={symbol:'2330',action:'BUY',status:'PENDING',limit_price:'100',shares:10,filled:0,purpose:'EXTERNAL'} as typeof a.orders[number];
+  a.orders=[order,{...order,status:'FILLED',filled:10}];
+  assert.equal(traySnapshot(state).orders,1);assert.equal(traySnapshot(state).pending[0]!.symbol,'2330');
+  a.available={cash:true,positions:true,settlements:true,orders:false};r.orders=[{...order,symbol:'2454'}];
+  assert.equal(traySnapshot(state).pending[0]!.symbol,'2454');
+});
 test('tray projection omits main credentials, account identifiers, logs and grants',()=>{
   const state=fixture();state.settings=JSON.stringify({...SettingsSchema.parse({}),api_key:'SECRET_KEY'});state.logs=['SECRET_LOG'];state.live.account='PRIVATE_ACCOUNT';
   const result=JSON.stringify(traySnapshot(state));assert.doesNotMatch(result,/SECRET_KEY|SECRET_LOG|PRIVATE_ACCOUNT|auto_execute|authorized/);
