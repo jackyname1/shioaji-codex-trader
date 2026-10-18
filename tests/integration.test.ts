@@ -126,7 +126,7 @@ test('native order normalization checks identity, units, cumulative fills and pe
   assert.throws(() => broker.normalizeTrade({...trade,status:{...trade.status,deal_quantity:9}},local));
   assert.throws(() => broker.normalizeTrade({...trade,order:{...trade.order,price:'30.1'}},local));
   assert.equal(broker.normalizeTrade({...trade,order:{...trade.order,order_lot:'Common',quantity:1},
-    status:{...trade.status,order_quantity:1,deal_quantity:0}}).shares,1000); store.close();
+    status:{...trade.status,status:'Submitted',order_quantity:1,deal_quantity:0}}).shares,1000); store.close();
 });
 test('native subscriptions rotate only app-requested keys, retain requested inventory and enforce a bounded shared mode',async () => {
   const store=new Store(':memory:'),calls:{path:string;body:Record<string,unknown>}[]=[];

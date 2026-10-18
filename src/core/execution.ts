@@ -4,6 +4,8 @@ import { active, d, equity, remaining, type Account, type Decision, type Feature
   type Order, type Quote, type Settings, type SmartSpec } from './models.js';
 import { Risk, fee, roundPrice } from './risk.js';
 import {entryRiskIssues,entryQualityIssues,roundTripEstimate,rewardTarget} from './costs.js';
+import {COMMON_MAX_SHARES} from './stock-lot.js';
+import {breakEvenExitPrice} from './execution-economics.js';
 export {roundTripEstimate} from './costs.js';
 
 export const ExecutionAdviceSchema=z.strictObject({
@@ -22,6 +24,7 @@ export interface ExecutionLot {
   lot:'ODD'|'COMMON';quote:Quote;limit_price:string;min_price:string;max_price:string;
   step:number;min_shares?:number;max_shares:number;reasons:string[];
   cost_at_max_shares?:ReturnType<typeof roundTripEstimate>;
+  estimated_break_even_exit_price?:string|null;
 }
 export interface ExecutionRequest {
   request_id:string;asof:string;triggered_at:string;symbol:string;action:'BUY'|'SELL';purpose:Order['purpose'];
@@ -72,7 +75,7 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     ||ticket.smart.take_profit&&d(price).gte(ticket.smart.take_profit)))reasons.push('目前進場價已超過保護條件範圍');
   let units=0;
   if(!reasons.length){
-    let lo=1,hi=q.odd?999:999;
+    let lo=1,hi=q.odd?999:COMMON_MAX_SHARES/1000;
     while(lo<=hi){const mid=Math.floor((lo+hi)/2);if(!test(mid*step).length){units=mid;lo=mid+1;}else hi=mid-1;}
   }
   let minimum=units?step:0;
@@ -84,7 +87,8 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     else {let first=1;while(first<units&&entryQualityIssues(first*step,price,ticket.smart,s).length)first++;minimum=first*step;}
   }
   return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,min_shares:minimum,max_shares:units*step,reasons,
-    ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,rewardTarget(ticket.smart),s,ticket.smart?.stop_price??null)}:{})};
+    ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,rewardTarget(ticket.smart),s,ticket.smart?.stop_price??null),
+      estimated_break_even_exit_price:breakEvenExitPrice(units*step,price,instrument.limit_up,s)}:{})};
 }
 export function executionPrompt(request:ExecutionRequest):string {
   return `你是台灣現股交易數量確認器。本次已由程式確認 Codex 先前設定的條件觸發。
@@ -92,11 +96,13 @@ export function executionPrompt(request:ExecutionRequest):string {
 request_id、symbol 必須完全相符。action 只能沿用指定 BUY / SELL，或 HOLD 放棄本次行動。
 shares 一律是股數，不是張數；一張=1000股。ODD 是 1–999 股；COMMON 只能使用 1000 股倍數且必須有可用 COMMON 範圍。
 股數須介於所選 lots.min_shares 與 max_shares；限價必須在 min_price / max_price 內並符合台股跳動單位。
+COMMON 單筆最多 499 張（499000 股）。不能將不合法的大單或 1500 股直接當成一張半送出；選擇一個合法 lot，剩餘庫存只在前單結束與帳務重查後另評估。
 max_shares 是硬性風控上限，不是要求用滿；根據目前現金、保留現金、交割款、掛單占用、持倉集中度與風險決定較合適數量。
 capital.order_limit_twd 是程式已算好的單筆本金上限，不要另扣一次現金保留；capital.preferred_order_twd 是目標持倉不足時的配置參考。
 有合格訊號且未達目標持倉時，優先以配置參考與單筆停損預算選擇股數，縮小部位須說明具體風險，不要只沿用策略階段的小額參考股數。
 目標持倉是軟性參考，訊號、成本或風險不合格仍應 HOLD。縮小股數仍需達到 min_entry_reward_risk，停損含費稅不得超過 capital.max_trade_loss_twd（null 表示未啟用）。
 cost_at_max_shares 是該上限數量按目前買價與停利目標估算的雙邊手續費、賣出稅與淨價差，不代表保證獲利；縮小數量時最低手續費未必同比減少。
+estimated_break_even_exit_price 是所選 lot 上限數量、今日漲停範圍內涵蓋費稅與估計滑價的最低合法報價；null 代表該範圍內找不到。它只是成本門檻，不能當成目標價、勝率或保證成交。不同股數須重算，不能為超過門檻捏造或提高原策略收益目標。
 BUY 必須再按你選定股數估算成本，不能只看價格百分比；若目標價差不足覆蓋成本或資料不足，應 HOLD 並說明。reward_target 是預估實際退場價（含回落的考量），不會觸發賣出；與固定 take_profit 同時存在時成本採較低者。兩者都 null 時不得編造預期獲利。
 SELL 只能使用目前 sellable 的可賣庫存；今日新增零股不得當沖，不能借券、融資或賣空。
 SELL 的觸發可能是停損、停利、移動停損或定時策略減碼；清楚說明本次數量理由。

@@ -6,6 +6,7 @@ import {authorizedRisk} from './risk-policy.js';
 import { Store } from './store.js';
 import { TradingCalendar } from './calendar.js';
 import { Risk, alignedPrice, fee } from './risk.js';
+import {COMMON_MAX_SHARES} from './stock-lot.js';
 import { evaluate, updateProtection,trackEntry,entryReady,reboundExit,adaptProtection } from './smart.js';
 import { indicators, validateAnalysis } from './strategy.js';
 import { conditionIssue } from './conditions.js';
@@ -201,7 +202,10 @@ export class Engine {
         if (!bars) { try { bars = await this.broker.history(symbol,now); if (bars.length) this.store.set(key,bars); }
           catch(error) { bars = [];issue=brokerIssue(error); } }
         const f = indicators(bars);
-        if(!f.sufficient)f.issue=issue||`歷史 K 線只有 ${bars.length} 個已完成交易日，至少需要 20 日`;
+        if(!f.sufficient)f.issue=issue||f.issue||`歷史 K 線只有 ${bars.length} 個已完成交易日，至少需要 20 日`;
+        if(f.asof&&(f.asof>twDay(now)||f.asof===twDay(now)&&twClock(now)<'13:40')){
+          f.sufficient=false;f.issue='歷史資料包含尚未完成或未來交易日，停止新決策';
+        }
         if (this.settings.mode !== 'demo'||this.store.get('historical_real_data')) {
           let previous = '9999-12-31'; try { previous = this.calendar.next(twDay(now),-1); } catch { /* fail closed */ }
           if (!f.asof || f.asof < previous) { f.sufficient = false; f.issue ||= '歷史行情過期或交易日未知'; }
@@ -354,7 +358,7 @@ export class Engine {
       }
       const attempts = this.store.protectionAttempts(p.symbol,twDay(now));
       if (attempts >= 10) { this.logOnce('BLOCK',`${p.symbol} 保護出場嘗試已達上限，請核對委託`); continue; }
-      const protectionShares = protectionLot === 'COMMON' ? Math.floor(p.sellable / 1000) * 1000 : Math.min(999,p.sellable);
+      const protectionShares = protectionLot === 'COMMON' ? Math.min(COMMON_MAX_SHARES,Math.floor(p.sellable / 1000) * 1000) : Math.min(999,p.sellable);
       if(!d(q.bid).gt(0)||q.bid_shares<=0){this.decisionStates.set(p.symbol,{state:'WAIT',reason:`${trigger} 已觸發；無有效買盤／跌停排隊，未假設成交`,source:'PROTECTION'});continue;}
       await this.requestExecution({...this.newOrder(p.symbol,'SELL',protectionShares,q.bid,protectionLot,now,protection.plan_id,'PROTECTION'),exit_trigger:trigger as Order['exit_trigger'],trigger_context:{last:q.last,bid:q.bid,ask:q.ask,trade_at:q.trade_at,book_at:q.book_at,stop_price:protection.spec.stop_price,effective_stop:protection.protected_floor??protection.spec.stop_price}},
         now,'PROTECTION',undefined,undefined,trigger,protection.spec);

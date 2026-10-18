@@ -1,14 +1,15 @@
 # Shioaji Codex Trader
 
-**目前版本：[v0.2.7 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.7)** · Windows x64 免安裝
+**目前版本：[v0.2.8 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.2.8)** · Windows x64 免安裝
 
 台灣股票桌面工作台：以 Shioaji 取得行情，讓 Codex 設定選股與買賣條件，由程式核對價格、股數、現金及風控。提供即時模擬、歷史回放和實盤帳戶介面；歷史測試使用獨立虛擬帳戶。新版啟動維持模擬模式、自動執行關閉。
 
 ## 這版更新
 
-- **登入與 API 啟動對齊 Shioaji Pro。** 內建 SDK 升至官方 1.7.8，恢復 SDK 標準登入快取位置與 Windows 用戶環境；本機 HTTP 驗證明確關閉，避免環境設定干擾桌面連線。
-- **分開核對 API 與登入。** 先確認 `/info` 的版本與正式行情模式，再等 `/health` 的工作階段就緒；重新登入前必須確認舊子程序已退出。保留登入失敗視窗與保存設定重試。
-- **移除校時功能。** 不再執行 Windows 校時、要求 UAC 或提供校時按鈕。與 Pro 的具體差異、修正與驗證範圍見 [登入比對說明](docs/V0.2.7_LOGIN_PARITY.md)。
+- **官方委託格式集中驗證。** 買／賣、TSE／OTC、盤中零股 1–999 股、整股 1–499 張，明確帶入 LMT、ROD、Cash、daytrade_short=false、6 碼標籤及核對後帳戶；App 股數只在 API 邊界換算一次。
+- **送單與撤單互斥，寫入後重讀帳務。** 阻止同一份購買力被同時使用；成功、失敗或回應中斷後都先重查。帳戶、委託識別、交易所、累計成交量不符時保留待核對，未知結果禁止自動重送。
+- **成本與策略輸入核對。** 股數確認提供涵蓋估計雙邊費用、賣出稅及滑價的最低合法保本報價；它只是成本門檻，不是目標價。零深度不送新單；重複／倒序日期、異常 OHLC、未完成或未來日 K 不產生可交易訊號。
+- **研究與實盤分開驗證。** [策略研究及 API 核對](docs/V0.2.8_EXECUTION_RESEARCH.md)列出投資原則、整股／零股參數、故障測試與待實機核對項目。登入沿用 0.2.7；未使用真實金鑰或送出任何券商委託。無法以隔離測試保證券商端永不拒單或成交。
 
 以下保留 0.2.5 的交易與研究功能：
 
@@ -32,32 +33,32 @@
 
 歷史回放：日期、本金、播放時鐘、圖表、每日選股、費稅與成交紀錄集中在同一工作台；點選持倉後主圖和選中列同步。
 
-![v0.2.7 歷史回放工作台，隔離測試資料](docs/screenshots/workbench-v0.2.7.png)
+![v0.2.8 歷史回放工作台，隔離測試資料](docs/screenshots/workbench-v0.2.8.png)
 
-0.2.7 實際 Windows 隔離測試畫面：回放已恢復授權風控，研究功能須明確勾選。
+0.2.8 實際 Windows 隔離測試畫面：回放已恢復授權風控，研究功能須明確勾選。
 
-![v0.2.7 回測資金配置，隔離測試資料](docs/screenshots/capital-profile-v0.2.7.png)
+![v0.2.8 回測資金配置，隔離測試資料](docs/screenshots/capital-profile-v0.2.8.png)
 
 智慧條件：展開個股的「智慧條件與追蹤」，優先顯示反彈低點、移動高點及觸發價；收合後恢復五檔資訊。收益目標不是賣出指令。
 
-![v0.2.7 反彈與智慧退場追蹤，隔離測試資料](docs/screenshots/smart-conditions-v0.2.7.png)
+![v0.2.8 反彈與智慧退場追蹤，隔離測試資料](docs/screenshots/smart-conditions-v0.2.8.png)
 
 即時模擬：以真實行情與虛擬資金演練策略、條件檢查、股數確認及委託核對。
 
-![v0.2.7 即時模擬版面，隔離測試資料](docs/screenshots/realtime-v0.2.7.png)
+![v0.2.8 即時模擬版面，隔離測試資料](docs/screenshots/realtime-v0.2.8.png)
 
 實盤帳戶及 API／CA 設定：截圖使用隔離資料展示欄位。
 
-![v0.2.7 實盤帳戶版面，隔離測試資料](docs/screenshots/live-v0.2.7.png)
-![v0.2.7 API 與 CA 設定，隔離測試資料](docs/screenshots/connection-v0.2.7.png)
+![v0.2.8 實盤帳戶版面，隔離測試資料](docs/screenshots/live-v0.2.8.png)
+![v0.2.8 API 與 CA 設定，隔離測試資料](docs/screenshots/connection-v0.2.8.png)
 
 登入故障範例：保留安全代碼與程序退出原因，可使用保存設定重試；截圖為原生簽章拒絕的隔離測試。
 
-![v0.2.7 登入錯誤安全代碼，隔離測試資料](docs/screenshots/native-login-failure-v0.2.7.png)
+![v0.2.8 登入錯誤安全代碼，隔離測試資料](docs/screenshots/native-login-failure-v0.2.8.png)
 
 完整 Codex 紀錄可搜尋及匯出 JSON，包含快照、正式推理摘要、結構化回覆、用量、核對結果與安全故障代碼。
 
-![v0.2.7 完整 Codex 紀錄，隔離測試資料](docs/screenshots/codex-history-v0.2.7.png)
+![v0.2.8 完整 Codex 紀錄，隔離測試資料](docs/screenshots/codex-history-v0.2.8.png)
 
 ## 開始使用
 

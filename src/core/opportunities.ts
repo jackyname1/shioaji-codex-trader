@@ -4,6 +4,7 @@ import {roundPrice} from './risk.js';
 import {orderBudget} from './capital.js';
 import {entryQualityIssues,entryRiskIssues,fee,roundTripEstimate} from './costs.js';
 import {researchExit,entryReady,trackEntry} from './smart.js';
+import {COMMON_MAX_SHARES} from './stock-lot.js';
 
 export interface Opportunity {decision?:Decision;track?:EntryTrack;reason:string;score?:number;signal?:string}
 /** Three independent, bounded signals share a single symbol/order identity. No target is derived from a desired RR. */
@@ -59,7 +60,7 @@ export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Ac
   const budget=Decimal.min(orderBudget(e,s),e.times(rule.allocation_fraction).times(weight),s.dynamic_allocation?gap:Infinity,
     cash.minus(s.minimum_fee),e.times(s.max_symbol_fraction).minus(heldValue).minus(symbolReserved),e.times(s.max_exposure_fraction).minus(marketValue(a)).minus(principal),
     e.times(s.max_daily_buy_fraction).minus(a.daily_buy_amount));
-  const step=q.odd?1:1000;let max=Math.min(q.odd?999:999000,Math.max(0,Math.floor(budget.div(entry).toNumber()/step)*step));
+  const step=q.odd?1:1000;let max=Math.min(q.odd?999:COMMON_MAX_SHARES,Math.max(0,Math.floor(budget.div(entry).toNumber()/step)*step));
   // Loss is monotone in quantity; binary search finds the largest risk-valid size, then check minimum economics.
   let lo=0,hi=Math.floor(max/step);
   while(lo<hi){const mid=Math.ceil((lo+hi)/2),n=mid*step;
