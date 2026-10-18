@@ -1,6 +1,6 @@
 import {buildIdentity} from '../core/build-identity.js';
 import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, dialog, powerSaveBlocker,
-  safeStorage, shell, type IpcMainInvokeEvent } from 'electron';
+  safeStorage, shell, screen, type IpcMainInvokeEvent } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync,readFileSync,writeFileSync,statSync,mkdirSync } from 'node:fs';
@@ -35,8 +35,10 @@ import { DesktopSettings } from './settings.js';
 import { CodexLogin } from './codex-login.js';
 import { PaperBroker } from '../broker/paper.js';
 import { spendableCash } from '../core/execution.js';
+import {traySnapshot,panelBounds} from './dashboard.js';
 
 let window: BrowserWindow | undefined, tray: Tray | undefined, service: TradingService | undefined;
+let trayWindow:BrowserWindow|undefined;
 let trayTimer:NodeJS.Timeout|undefined,nativeStatusKey='';
 let nativeOverlayClears=0;
 let quitting = false, initialError = '', blocker: number | undefined;
@@ -202,7 +204,10 @@ function updateNativeStatus():void {
   if(process.platform==='win32')window?.setOverlayIcon(null,'');
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:`${workspace} · ${activity}`,enabled:false},{type:'separator'},
-    {label:'開啟交易工作台',click:()=>{foregroundRequested=true;activateWindow(window);}},
+    {label:'交易速覽',click:()=>void showTray()},
+    {label:'開啟交易工作台',click:()=>openDesktop('workspace')},
+    {label:'帳戶與設定',click:()=>openDesktop('settings')},
+    {label:'連線診斷',click:()=>openDesktop('diagnostics')},
     {label:paused?'恢復新增買進':'暫停新增買進',enabled:!replay&&!stopped,click:()=>void service?.command(paused?'resume':'pause').catch(()=>undefined)},
     {label:'停止全部新委託',enabled:!replay,click:()=>{liveActionEpoch++;void service?.command('stop').catch(()=>undefined);}},
     {type:'separator'},{label:'結束程式',click:()=>void exit()},
@@ -211,27 +216,49 @@ function updateNativeStatus():void {
 function createTray(): void {
   try {
     tray = new Tray(trayIcon());updateNativeStatus();trayTimer=setInterval(updateNativeStatus,1000);
-    tray.on('click',() => { foregroundRequested=true;activateWindow(window); });
-    tray.on('double-click',() => { foregroundRequested=true;activateWindow(window); });
+    tray.on('click',() => { if(trayWindow?.isVisible())trayWindow.hide();else void showTray(); });
+    tray.on('double-click',() => openDesktop('workspace'));
   } catch { tray = undefined; /* When no system tray is available, closing the window is a real exit. */
     window?.on('closed',() => void exit()); }
+}
+async function showTray():Promise<void> {
+  foregroundRequested=true;
+  if(!trayWindow||trayWindow.isDestroyed()){
+    trayWindow=new BrowserWindow({width:440,height:690,frame:false,resizable:false,show:false,skipTaskbar:true,alwaysOnTop:true,
+      backgroundColor:'#0c1016',webPreferences:{preload:join(directory,'tray-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+    trayWindow.setMenuBarVisibility(false);
+    trayWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+    trayWindow.webContents.on('will-navigate',event=>event.preventDefault());
+    trayWindow.on('blur',()=>{if(!smoke)trayWindow?.hide();});
+    trayWindow.on('close',event=>{if(!quitting){event.preventDefault();trayWindow?.hide();}});
+    await trayWindow.loadFile(join(directory,'tray.html'));
+  }
+  if(quitting||trayWindow.isDestroyed())return;
+  const anchor=tray?.getBounds()??{...screen.getCursorScreenPoint(),width:0,height:0};
+  trayWindow.setBounds(panelBounds(anchor,screen.getDisplayNearestPoint({x:anchor.x,y:anchor.y}).workArea));
+  trayWindow.show();trayWindow.focus();
+}
+function openDesktop(target:'workspace'|'settings'|'diagnostics'|'strategy',symbol?:string):void {
+  foregroundRequested=true;trayWindow?.hide();activateWindow(window);
+  window?.webContents.send('trader:open',{target,symbol});
+}
+function registerTrayIpc():void {
+  const handle=(name:string,action:(value:unknown)=>unknown)=>ipcMain.handle(name,(event,value:unknown)=>{
+    if(!trayWindow||event.sender!==trayWindow.webContents||event.senderFrame!==trayWindow.webContents.mainFrame)throw new Error('無效的速覽 IPC 來源');
+    return action(value);
+  });
+  handle('tray:state',()=>traySnapshot(desktopState()));
+  handle('tray:hide',()=>trayWindow?.hide());
+  handle('tray:open',value=>{
+    const parsed=z.strictObject({target:z.enum(['workspace','settings','diagnostics','strategy']),symbol:z.string().regex(/^\d{4,6}$/).optional()}).parse(value);
+    openDesktop(parsed.target,parsed.symbol);
+  });
 }
 function trusted(event: IpcMainInvokeEvent): void {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
     throw new Error('無效的桌面 IPC 來源');
 }
-function registerIpc(): void {
-  const handle = (name: string, action: (value: unknown) => unknown | Promise<unknown>): void => {
-    ipcMain.handle(name,async (event,value: unknown) => {
-      trusted(event);
-      try { return await action(value); }
-      catch (e) {if(e instanceof BrokerError||e instanceof CodexError)throw new Error(e.message);
-        if(e instanceof z.ZodError)throw new Error('設定驗證未通過：'+e.issues.slice(0,3).map(i=>`${i.path.join('.')||'設定'} ${i.message}`).join('；'));
-        throw new Error(e instanceof Error && /^(?:回測|連線|CA|圖表|API|Codex|本機|用法|未知指令|委託 ID|實盤|每種|交易模式|須先|目前模式|請先|尚未|上一輪|程式正在|無法|本輪|自動|設定|停止)/.test(e.message)
-        ? e.message : '操作未完成，請核對本機狀態與設定'); }
-    });
-  };
-  handle('trader:state',() => ({status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
+function desktopState():DesktopState { return ({status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
     settings:JSON.stringify(service?.engine.settings ?? commonSettings.apply(SettingsSchema.parse({mode}),mode,nativeConnection.baseUrl),null,2),
     connected:connected(),workspace_mode:mode==='live'?'live':'paper',error:initialError||service?.engine.dataIssue||'',backtest:backtest.text(),backtest_running:backtest.progress.running,
     backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:codexLogin.status.message,
@@ -257,7 +284,21 @@ function registerIpc(): void {
     analyst_events:[...(service?.analystEvents??[]).map(e=>({...compactAnalystEvent(e),context:'live' as const})),...backtest.analystEvents.slice(-200).map(e=>({...compactAnalystEvent(e),context:'replay' as const}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-400),
     replay:backtest.frame??null,replay_paused:backtest.clock.paused,replay_speed:backtest.clock.speed,replay_clock:backtest.clock.snapshot(),
     replay_symbols:replaySymbols(),codex_models:codexModels(),simulation_scope:simulationScope,
-    codex_selection:codexLogin.status.model?{model:codexLogin.status.model,reasoning:codexLogin.status.reasoning??'default'}:null} satisfies DesktopState));
+    codex_selection:codexLogin.status.model?{model:codexLogin.status.model,reasoning:codexLogin.status.reasoning??'default'}:null} satisfies DesktopState);
+}
+function registerIpc(): void {
+  registerTrayIpc();
+  const handle = (name: string, action: (value: unknown) => unknown | Promise<unknown>): void => {
+    ipcMain.handle(name,async (event,value: unknown) => {
+      trusted(event);
+      try { return await action(value); }
+      catch (e) {if(e instanceof BrokerError||e instanceof CodexError)throw new Error(e.message);
+        if(e instanceof z.ZodError)throw new Error('設定驗證未通過：'+e.issues.slice(0,3).map(i=>`${i.path.join('.')||'設定'} ${i.message}`).join('；'));
+        throw new Error(e instanceof Error && /^(?:回測|連線|CA|圖表|API|Codex|本機|用法|未知指令|委託 ID|實盤|每種|交易模式|須先|目前模式|請先|尚未|上一輪|程式正在|無法|本輪|自動|設定|停止)/.test(e.message)
+        ? e.message : '操作未完成，請核對本機狀態與設定'); }
+    });
+  };
+  handle('trader:state',desktopState);
   handle('trader:command',async value => {
     if (typeof value !== 'string' || value.length > 2000 || !service) throw new Error('未知指令或程式尚未啟動');
     if (value.trim() === 'exit') { await exit(); return '結束程式'; }
@@ -573,8 +614,41 @@ async function smokeTest(): Promise<void> {
       open:document.querySelector('.conditions-details').open,overflow:document.documentElement.scrollWidth>innerWidth};})()`);
     if(!smartUi.open||smartUi.overflow||height>=900&&!smartUi.allVisible||!['低點','高點','已啟動','收益目標（不觸發）','優先停損'].every(v=>smartUi.text.includes(v)))
       throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
+    const strategyUi=await window.webContents.executeJavaScript(`(()=>{const card=document.querySelector('#strategy-stocks .stock-strategy'),box=document.querySelector('.strategy-card').getBoundingClientRect();
+      return {text:card?.textContent,width:card?.getBoundingClientRect().right<=box.right,removed:!document.querySelector('#codex-instruction-control,#command-form'),
+        setting:document.querySelector('#settings-dialog #codex-model-control')!==null};})()`);
+    if(!strategyUi.width||!strategyUi.removed||!strategyUi.setting||!['參考','觸發','價格','保護','理由'].every(v=>strategyUi.text?.includes(v)))throw new Error('個股策略視窗與模型設定位置未通過');
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }
+  smokeMark('TRAY_GUI');
+  if(tray)tray.emit('click');else await showTray();
+  for(let n=0;n<30&&(!trayWindow||trayWindow.webContents.isLoading());n++)await new Promise(resolve=>setTimeout(resolve,100));
+  if(!trayWindow?.isVisible())throw new Error('系統匣單擊未開啟速覽');
+  await new Promise(resolve=>setTimeout(resolve,1100));
+  const overview=trayWindow!;
+  const trayState=await overview.webContents.executeJavaScript(`(async()=>({bridge:typeof window.overview?.state==='function',main:typeof window.trader,node:typeof window.require,
+    data:await window.overview.state(),text:document.body.textContent,panels:document.querySelectorAll('[data-panel]').length,
+    overflow:document.documentElement.scrollWidth>innerWidth,blocked:await import('electron').then(()=>false,()=>true)}))()`);
+  if(!trayState.bridge||trayState.main!=='undefined'||trayState.node!=='undefined'||!trayState.blocked||trayState.panels!==4||trayState.overflow
+    ||!trayState.data.strategies.some((d:{symbol:string})=>d.symbol===smartSymbol))
+    throw new Error('系統匣資訊或隔離橋接未通過');
+  // The tray must be unable to read the main window's saved credential endpoint or submit commands.
+  if(!await overview.webContents.executeJavaScript(`window.overview.state().then(s=>!('settings' in s)&&!('live' in s)&&!('logs' in s))`))throw new Error('速覽不得取得完整桌面設定');
+  await overview.webContents.executeJavaScript(`document.querySelector('#customize').click();const input=document.querySelector('[data-section="watch"]');input.click();document.querySelector('#privacy').click()`);
+  if(!await overview.webContents.executeJavaScript(`document.querySelector('[data-panel="watch"]').hidden&&document.querySelector('#cash').textContent==='••••'`))throw new Error('速覽顯示設定或金額遮罩失敗');
+  await overview.webContents.executeJavaScript(`document.querySelector('[data-section="watch"]').click();document.querySelector('#privacy').click();document.querySelector('#customize').click()`);
+  overview.webContents.debugger.attach('1.3');
+  await overview.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width:440,height:690,deviceScaleFactor:1,mobile:false});
+  const trayShot=await overview.webContents.debugger.sendCommand('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}) as {data:string};
+  writeFileSync(join(artifacts,'SYNTHETIC-ui-tray.png'),Buffer.from(trayShot.data,'base64'));overview.webContents.debugger.detach();
+  await overview.webContents.executeJavaScript(`document.querySelector('#settings').click()`);await new Promise(resolve=>setTimeout(resolve,600));
+  if(overview.isVisible()||!window.isVisible()||!await window.webContents.executeJavaScript(`document.querySelector('#settings-dialog').open`))throw new Error('速覽未開啟主視窗設定');
+  await window.webContents.executeJavaScript(`document.querySelector('#settings-dialog').close()`);
+  await showTray();await overview.webContents.executeJavaScript(`document.querySelector('#strategies [data-symbol]').click()`);await new Promise(resolve=>setTimeout(resolve,1600));
+  if(overview.isVisible()||await window.webContents.executeJavaScript(`document.querySelector('#chart-symbol').value`)!==smartSymbol)throw new Error('速覽選股未連動主圖');
+  await showTray();await overview.webContents.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))`);await new Promise(resolve=>setTimeout(resolve,100));
+  if(overview.isVisible())throw new Error('Esc 未收起速覽');
+  console.log('Tray click, settings, selected symbol, section toggles, privacy, isolated IPC and Escape: PASS');
   await window.webContents.executeJavaScript(`document.querySelector('.conditions-details').open=false`);
   await window.webContents.executeJavaScript(`document.querySelector('#open-diagnostics').click()`);await new Promise(resolve=>setTimeout(resolve,400));
   const diag=await window.webContents.executeJavaScript(`(async()=>{const s=await window.trader.state();return {open:document.querySelector('#diagnostics-dialog').open,
@@ -733,9 +807,9 @@ async function smokeTest(): Promise<void> {
       const visible=selector=>{const node=document.querySelector(selector),box=node.getBoundingClientRect();return box.width>0&&box.height>0&&box.top>=0&&box.bottom<=innerHeight&&box.right<=innerWidth;};
       return {mode:document.body.dataset.workspace,scope:document.body.dataset.simulation,watchRows:document.querySelectorAll('#overview-watch tbody tr').length,
         watchPrices:[...document.querySelectorAll('#overview-watch tbody tr td:nth-child(3)')].some(cell=>cell.textContent!=='—'),pnl:document.querySelector('#bt-pnl').textContent,
-        panels:['.watch-panel','.positions-panel','.chart-panel','.codex-panel','.execution-panel'].every(visible),auth:['#codex-login','#codex-test','#codex-device'].every(visible),
+        panels:['.watch-panel','.positions-panel','.chart-panel','.codex-panel','.execution-panel','.strategy-card'].every(visible),auth:['#codex-login','#codex-test','#codex-device'].every(visible),
         simulation:visible('.simulation-controls'),equity:visible('.equity-panel'),orders:visible('#orders'),runtime:visible('.runtime-controls'),
-        pages:document.querySelectorAll('[data-page],[data-tab]').length,width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,
+        pages:document.querySelectorAll('[data-page],[data-tab],#codex-instruction-control,#command-form').length,width:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,
         viewport:innerWidth,viewportHeight:innerHeight,times:document.querySelector('#s-times').value,
         settings:document.querySelector('#settings-dialog').open};})()`);
     if(result.mode!==expected||result.scope!==scope||!result.panels||!result.auth||result.pages||result.width>result.viewport||result.height>result.viewportHeight||result.settings
@@ -876,7 +950,7 @@ async function exit(): Promise<void> {
   backtest?.cancel();await backtest?.wait();
   await service?.close(); service = undefined;await nativeConnection?.close();
   if (blocker !== undefined) powerSaveBlocker.stop(blocker);
-  tray?.destroy(); window?.destroy();
+  trayWindow?.destroy();tray?.destroy(); window?.destroy();
   if (smoke){rmSync(dataRoot,{recursive:true,force:true});if(smokeDeadline)clearTimeout(smokeDeadline);
     smokeMark(smokeChecksCompleted?'PASSED':'FAILED',smokeChecksCompleted?'':'GUI checks did not complete');
     if(!smokeChecksCompleted){app.exit(1);return;}}

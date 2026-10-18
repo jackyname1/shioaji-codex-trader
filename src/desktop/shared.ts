@@ -31,6 +31,7 @@ export interface DesktopState { status: string; logs: string[]; settings: string
   replay:ReplayFrame|null;replay_paused:boolean;replay_speed:number;replay_clock?:ReplayClockState;replay_symbols:{symbol:string;name:string}[];
   codex_models:string[];simulation_scope?:'realtime'|'replay';codex_selection?:{model:string;reasoning:string}|null }
 export interface TraderBridge {
+  onOpen(listener:(request:{target:string;symbol?:string})=>void):()=>void;
   state(): Promise<DesktopState>;
   command(input: string): Promise<string>;
   saveSettings(text: string): Promise<string>;

@@ -1,6 +1,6 @@
 {
   "name": "shioaji-codex-trader",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "description": "Shioaji market workbench with Codex strategies and historical simulation",
   "main": "dist/src/desktop/main.js",

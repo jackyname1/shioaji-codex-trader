@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 
 const repository='jackyname1/shioaji-codex-trader';
 export const captureFiles=['SYNTHETIC-ui-paper-1600.png','SYNTHETIC-ui-capital-profile.png','SYNTHETIC-ui-smart-conditions-1600.png',
-  'SYNTHETIC-ui-realtime-1600.png','SYNTHETIC-ui-live.png','SYNTHETIC-ui-connection.png','SYNTHETIC-ui-codex-history.png','SYNTHETIC-ui-native-login-failure.png'];
+  'SYNTHETIC-ui-realtime-1600.png','SYNTHETIC-ui-live.png','SYNTHETIC-ui-connection.png','SYNTHETIC-ui-codex-history.png','SYNTHETIC-ui-native-login-failure.png','SYNTHETIC-ui-tray.png'];
 const hash=(bytes,algorithm='sha256')=>createHash(algorithm).update(bytes).digest('hex');
 export function captureManifest(root,version,source,tree,run){
   if(!/^\d+\.\d+\.\d+$/.test(version)||![source,tree].every(x=>/^[a-f0-9]{40}$/.test(x))||!/^\d+$/.test(String(run)))
@@ -16,7 +16,7 @@ export function captureManifest(root,version,source,tree,run){
     const bytes=readFileSync(join(root,name));
     if(bytes.length<24||bytes.length>2*1024*1024||bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw new Error('Invalid GUI capture: '+name);
     const width=bytes.readUInt32BE(16),height=bytes.readUInt32BE(20);
-    if(width!==(name.includes('codex-history')?1920:1600)||height!==(name.includes('codex-history')?1080:960))throw new Error('Unexpected capture dimensions: '+name);
+    if(width!==(name.includes('tray')?440:name.includes('codex-history')?1920:1600)||height!==(name.includes('tray')?690:name.includes('codex-history')?1080:960))throw new Error('Unexpected capture dimensions: '+name);
     return {source_file:name,path:`docs/capture-bundles/v${version}/${name}`,width,height,size_bytes:bytes.length,sha256:hash(bytes),
       git_blob_sha:hash(Buffer.concat([Buffer.from(`blob ${bytes.length}\0`),bytes]),'sha1')};
   });

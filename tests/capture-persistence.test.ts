@@ -7,14 +7,14 @@ import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 
-test('Windows capture manifests bind all eight allowlisted images, dimensions, source tree and Git/SHA256 digests',async()=>{
+test('Windows capture manifests bind all nine allowlisted images, dimensions, source tree and Git/SHA256 digests',async()=>{
   const {captureFiles,captureManifest}=await import(pathToFileURL(resolve('scripts/save-windows-captures.mjs')).href);
   const root=mkdtempSync(join(tmpdir(),'capture-manifest-'));
   try{
     for(const name of captureFiles){const bytes=Buffer.alloc(32);Buffer.from('89504e470d0a1a0a','hex').copy(bytes);
-      bytes.writeUInt32BE(name.includes('codex-history')?1920:1600,16);bytes.writeUInt32BE(name.includes('codex-history')?1080:960,20);writeFileSync(join(root,name),bytes);}
+      bytes.writeUInt32BE(name.includes('tray')?440:name.includes('codex-history')?1920:1600,16);bytes.writeUInt32BE(name.includes('tray')?690:name.includes('codex-history')?1080:960,20);writeFileSync(join(root,name),bytes);}
     const manifest=captureManifest(root,'0.2.2','a'.repeat(40),'b'.repeat(40),123);
-    assert.equal(manifest.images.length,8);assert.equal(manifest.source_commit,'a'.repeat(40));assert.equal(manifest.source_tree,'b'.repeat(40));
+    assert.equal(manifest.images.length,9);assert.equal(manifest.source_commit,'a'.repeat(40));assert.equal(manifest.source_tree,'b'.repeat(40));
     for(const image of manifest.images){const bytes=readFileSync(join(root,image.source_file));
       assert.equal(image.sha256,createHash('sha256').update(bytes).digest('hex'));
       assert.equal(image.git_blob_sha,createHash('sha1').update(Buffer.concat([Buffer.from(`blob ${bytes.length}\0`),bytes])).digest('hex'));
