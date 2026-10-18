@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {stockOrderPayload} from '../src/broker/stock-order.js';
+import {stockInstrumentKind} from '../src/core/stock-lot.js';
 import {ShioajiHttpBroker} from '../src/broker/http.js';
 import {LiveSession} from '../src/core/live-session.js';
 import {Store} from '../src/core/store.js';
@@ -12,6 +13,14 @@ import {TradingCalendar} from '../src/core/calendar.js';
 import {account,instrument,now,order,quote,rig} from './helpers.js';
 
 const selected={account_type:'S',broker_id:'TEST',account_id:'SYNTHETIC',signed:true};
+test('legacy four-digit TDRs, preferred shares and ETFs are excluded from the ordinary-stock order boundary',()=>{
+  assert.equal(stockInstrumentKind('9103','美德醫療-DR'),'OTHER');
+  assert.equal(stockInstrumentKind('9105','泰金寶'),'OTHER');
+  assert.equal(stockInstrumentKind('2891B','特別股'),'OTHER');
+  assert.equal(stockInstrumentKind('0050','ETF'),'ETF');
+  assert.equal(stockInstrumentKind('2330','台積電'),'STOCK');assert.equal(stockInstrumentKind('9914','美利達'),'STOCK');
+  assert.throws(()=>stockOrderPayload(order({symbol:'9103',status:'SUBMITTING'}),{...instrument(),symbol:'9103',name:'美德醫療-DR'},selected),NoSubmissionError);
+});
 test('official HTTP payload is exact for TSE/OTC, both actions, and odd/common boundary quantities',()=>{
   for(const exchange of ['TSE','OTC'] as const)for(const action of ['BUY','SELL'] as const)
     for(const [lot,shares,quantity] of [['ODD',1,1],['ODD',999,999],['COMMON',1000,1],['COMMON',499000,499]] as const){

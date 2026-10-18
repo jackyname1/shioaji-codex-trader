@@ -14,6 +14,7 @@ import { LiveSession } from '../core/live-session.js';
 import { BrokerHealthSchema, BrokerError, brokerStageIssue, marketReady, requestStage } from './health.js';
 import { RequestDiagnostics, type BrokerDiagnostics } from './diagnostics.js';
 import {stockOrderPayload} from './stock-order.js';
+import {stockInstrumentKind} from '../core/stock-lot.js';
 
 const number = z.union([z.number().finite(), z.string().regex(/^-?\d+(?:\.\d+)?$/)]).transform(v => money(v));
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -343,7 +344,7 @@ export class ShioajiHttpBroker implements Broker {
       const sourceDate = /^\d{4}-\d{2}-\d{2}$/.test(raw.update_date) ? raw.update_date : '';
       if (!sourceDate) throw new BrokerError('Shioaji 商品資料日期無法核對，等待契約更新');
       const value = InstrumentSchema.parse({ symbol, name: raw.name, exchange: raw.exchange, category: raw.category,
-        kind: /^[1-9]\d{3}$/.test(symbol) ? 'STOCK' : symbol.startsWith('00') ? 'ETF' : 'OTHER',
+        kind: stockInstrumentKind(symbol,raw.name),
         reference: raw.reference, limit_down: raw.limit_down, limit_up: raw.limit_up,
         suspended: raw.trading_suspended, disposition: raw.disposition_level > 0, attention: raw.attention_flag,
         verified_at: `${sourceDate}T00:00:00+08:00` });

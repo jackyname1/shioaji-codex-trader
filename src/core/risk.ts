@@ -5,7 +5,7 @@ import { TradingCalendar } from './calendar.js';
 import {authorizedRisk} from './risk-policy.js';
 import {orderBudget} from './capital.js';
 import {fee} from './costs.js';
-import {lotQuantityIssues} from './stock-lot.js';
+import {lotQuantityIssues,stockInstrumentKind} from './stock-lot.js';
 export {fee} from './costs.js';
 
 export function tickSize(price: Decimal.Value): Decimal {
@@ -32,7 +32,7 @@ export class Risk {
     if (!this.calendar.inSession(now, order.lot)) reasons.push('非已確認的交易時段');
     if (!instrument || instrument.symbol !== order.symbol) reasons.push('缺少已確認的商品資料');
     else {
-      if (instrument.kind !== 'STOCK') reasons.push('僅允許上市櫃普通股票');
+      if (instrument.kind !== 'STOCK'||stockInstrumentKind(instrument.symbol,instrument.name)!=='STOCK') reasons.push('僅允許上市櫃普通股票');
       if (twDay(new Date(instrument.verified_at)) !== twDay(now)) reasons.push('商品資料不是今日資料');
       if (instrument.suspended || instrument.disposition) reasons.push('暫停交易或處置股');
       if (instrument.attention && !s.allow_attention && order.action === 'BUY') reasons.push('注意股禁止新增買進');
