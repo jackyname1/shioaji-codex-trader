@@ -20,7 +20,7 @@ export interface RuntimeView {
   decisions:{symbol:string;state:string;reason:string;source:string}[];
   features:Record<string,import('../core/models.js').Features>;metadata:Record<string,import('../core/models.js').Instrument>;
 }
-export interface DesktopState { status: string; logs: string[]; settings: string; connected: boolean; error: string;
+export interface DesktopState { clock_diagnostic?:import('../core/clock-diagnostics.js').ClockDiagnostic;status: string; logs: string[]; settings: string; connected: boolean; error: string;
   workspace_mode?:'paper'|'live';
   backtest:string; backtest_running:boolean; backtest_report:boolean; experience:string; codex_login:string;
   codex_auth:CodexLoginState;broker_diagnostics?:BrokerDiagnostics|null;

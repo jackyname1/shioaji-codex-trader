@@ -78,7 +78,7 @@ test('unknown submission results retain one durable intent and are never automat
     assert.equal(submits,1);assert.equal(r.engine.pendingExecutions.size,0);
   }finally{await dispose(r);}
 });
-test('new odd-lot inventory is monitored immediately, cannot exit that day, and can size a protective sale on the next session',async()=>{
+test('new odd-lot inventory is monitored immediately, cannot exit that day, and sends deterministic protection on the next session',async()=>{
   const r=await enabled();try{
     const {id,input}=await request(r);assert.equal(await r.engine.confirmExecution(id,{...await testSize(input),shares:7},now),true);
     await r.engine.tick(new Date(now.getTime()+3000));r.market.marketPrice='28.5';
@@ -87,9 +87,9 @@ test('new odd-lot inventory is monitored immediately, cannot exit that day, and 
     r.engine.watch.entries=[];await r.engine.refreshAccount(new Date(now.getTime()+9000));
     assert.equal(r.engine.watch.entries[0]!.symbol,'9001');assert.equal(r.engine.watch.entries[0]!.state,'RETAINED');
     const next=new Date('2026-10-12T10:00:00+08:00');await r.engine.tick(next);
-    const exitId=r.engine.nextExecutionId()!,exit=(await r.engine.executionRequest(exitId,next))!;
-    assert.equal(exit.action,'SELL');assert.equal(exit.source,'PROTECTION');assert.equal(exit.account.positions[0]!.sellable,7);
-    assert.equal(await r.engine.confirmExecution(exitId,await testSize(exit),next),true);
+    assert.equal(r.engine.nextExecutionId(),undefined);
+    assert.equal(r.store.orders().find(o=>o.action==='SELL')!.shares,7);
+    assert.equal(r.store.orders().find(o=>o.action==='SELL')!.purpose,'PROTECTION');
     await r.engine.tick(new Date(next.getTime()+3000));assert.equal(r.store.orders().find(o=>o.action==='SELL')!.filled,7);
   }finally{await dispose(r);}
 });

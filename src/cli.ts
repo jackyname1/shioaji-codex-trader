@@ -1,3 +1,4 @@
+import {diagnoseClock} from './core/clock-diagnostics.js';
 import { join, resolve } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { mkdtempSync, rmSync,readFileSync,writeFileSync } from 'node:fs';
@@ -11,6 +12,7 @@ import { formatBacktestReport } from './core/backtest.js';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2), demo = args.includes('--demo'), doctor = args.includes('--doctor');
+  if(args.includes('--clock-check')){console.log(JSON.stringify(await diagnoseClock(),null,2));return;}
   if(args.includes('--backtest')) {
     const value=(key:string):string|undefined=>args.find(a=>a.startsWith('--'+key+'='))?.slice(key.length+3);
     const profile=join(homedir(),'.shioaji-codex-trader','backtests'),controller=new BacktestController(profile);

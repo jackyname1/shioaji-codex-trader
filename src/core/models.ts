@@ -156,6 +156,9 @@ export const SettingsSchema = z.strictObject({
   fee_rate: fraction.default('0.001425'), minimum_fee: nonnegative.default('20'),
   sell_tax_rate: fraction.default('0.003'),
   entry_strategy_mode:z.enum(['legacy','multi']).default('legacy'),
+  // Explicit alternatives for controlled comparisons; never inferred from model prose.
+  entry_policy:z.enum(['legacy','trend','pullback','breakout']).default('legacy'),
+  execution_sizing:z.enum(['codex','deterministic']).default('codex'),
   adaptive_protection:z.boolean().default(true), dynamic_allocation:z.boolean().default(false),
   risk_slippage_fraction:fraction.refine(v=>d(v).lte('0.05')).default('0.001'),
   overnight_gap_fraction:fraction.default('0.05'), max_gap_risk_fraction:fraction.default('0.02'),
@@ -192,7 +195,7 @@ export const SettingsSchema = z.strictObject({
   candidate_pool_size: quantity.min(20).max(100).default(40), demo_cash: positive.default('100000'),
   start_minimized: z.boolean().default(false), keep_awake: z.boolean().default(true),
 }).refine(s => d(s.max_exposure_fraction).plus(s.min_cash_fraction).lte(1), '現金保留加持倉上限不得超過 100%')
-  .refine(s => !['live','readonly'].includes(s.mode)||!s.portfolio_risk_enabled&&!s.entry_quality_enabled&&!s.prompt_compaction&&s.research_exit_mode==='baseline', '研究風險與選股功能僅供回放或模擬')
+  .refine(s => !['live','readonly'].includes(s.mode)||s.entry_policy==='legacy'&&!s.portfolio_risk_enabled&&!s.entry_quality_enabled&&!s.prompt_compaction&&s.research_exit_mode==='baseline', '研究風險與選股功能僅供回放或模擬')
   .refine(s => s.postmarket_time >= '13:40' && s.postmarket_time <= '17:00', '盤後檢討時間須為 13:40–17:00');
 export type Settings = z.infer<typeof SettingsSchema>;
 /** Upgrade persisted 0.1 settings without carrying manual confirmation gates forward. */

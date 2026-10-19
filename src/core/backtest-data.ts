@@ -5,6 +5,7 @@ import { TradingCalendar,applyCalendarExceptions } from './calendar.js';
 import { roundPrice, tickSize } from './risk.js';
 import { addDays, d, twDay, twClock, SessionSchema,type SessionDay, type Account, type Bar, type Candidate, type Instrument, type Order, type Quote } from './models.js';
 import type { Broker } from '../broker/types.js';
+import {assumedQuote,type FillAssumption} from './fill-assumptions.js';
 
 export const validDay = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value)
   && !Number.isNaN(Date.parse(value)) && new Date(value+'T00:00:00Z').toISOString().slice(0,10) === value;
@@ -15,6 +16,7 @@ export const HistoryPointSchema = z.strictObject({
   reference_price:price.optional(),suspended:z.boolean().optional(),corporate_action:z.boolean().optional(),
   amount_twd:z.string().regex(/^\d+(?:\.\d+)?$/).optional(),
   bid:price.optional(),ask:price.optional(),bid_shares:z.number().int().nonnegative().optional(),ask_shares:z.number().int().nonnegative().optional(),
+  book_lot:z.enum(['ODD','COMMON']).optional(),
 }).refine(x => d(x.high).gte(x.open) && d(x.high).gte(x.close) && d(x.low).lte(x.open) && d(x.low).lte(x.close), 'OHLC 範圍不符')
   .refine(x => (x.bid === undefined) === (x.ask === undefined) && (!x.bid || d(x.bid).lte(x.ask!)), '買賣報價不符');
 export type HistoryPoint = z.infer<typeof HistoryPointSchema>;
@@ -56,7 +58,7 @@ export function normalizeHistoryPoints(input:HistoryPoint[],conflicts:'reject'|'
     const previous=unique.get(key);
     if(previous){duplicates++;
       const equal=(['open','high','low','close','bid','ask','amount_twd','reference_price'] as const).every(k=>previous[k]===undefined||p[k]===undefined?previous[k]===p[k]:d(previous[k]!).eq(p[k]!))
-        &&(['volume_shares','bid_shares','ask_shares','suspended','corporate_action'] as const).every(k=>previous[k]===p[k]);
+        &&(['volume_shares','bid_shares','ask_shares','suspended','corporate_action','book_lot'] as const).every(k=>previous[k]===p[k]);
       if(!equal){if(conflicts==='reject')throw new Error(`回測股票 ${p.symbol} 在 ${new Date(p.at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})} 的價格或成交量不一致，請核對 CSV 後重新匯入`);revisions++;}
     }
     unique.set(key,p);
@@ -121,7 +123,7 @@ export class HistoricalMarket implements Broker {
   private bySymbol=new Map<string,HistoryPoint[]>(); private daily=new Map<string,Bar[]>();
   private dailyLast=new Map<string,string>();
   private firstQuote=new Map<string,string>();
-  constructor(readonly dataset:HistoryDataset,readonly participation:string,readonly slippageFraction='0') {
+  constructor(readonly dataset:HistoryDataset,readonly participation:string,readonly slippageFraction='0',readonly fillAssumption:FillAssumption='legacy') {
     for(const p of dataset.points)if(!this.firstQuote.has(p.symbol))this.firstQuote.set(p.symbol,p.at);
     for(const p of [...(dataset.daily_history??[]),...dataset.points]) {const rows=this.bySymbol.get(p.symbol)??[];rows.push(p);this.bySymbol.set(p.symbol,rows);}
     for(const [symbol,rows] of this.bySymbol) {
@@ -158,13 +160,17 @@ export class HistoricalMarket implements Broker {
       if(this.dataset.daily_history&&(!this.firstQuote.has(symbol)||p.at<this.firstQuote.get(symbol)!))return [];
       const previous=this.previousDays(symbol,now).at(-1),reference=p.reference_price??String(previous?.close??0);
       if(p.suspended||p.corporate_action&&!p.reference_price||!d(reference).gt(0)||d(p.close).lt(d(reference).times('.9'))||d(p.close).gt(d(reference).times('1.1')))return [];
-      const last=roundPrice(p.close), tick=tickSize(last), bid=roundPrice(d(p.bid??roundPrice(d(last).minus(tick))).times(d(1).minus(this.slippageFraction))),ask=roundPrice(d(p.ask??roundPrice(d(last).plus(tick),false)).times(d(1).plus(this.slippageFraction)),false);
+      const last=roundPrice(p.close),tick=tickSize(last);
       const depth=Math.floor(d(p.volume_shares).times(this.participation).toNumber());
-      return (this.wholeLots?[true,false]:[true]).map(odd=>({symbol,last,bid,ask,odd,simulated:false,
-        book_source:p.bid!==undefined&&p.bid_shares!==undefined&&p.ask_shares!==undefined?'OBSERVED' as const:'APPROXIMATE' as const,
+      return (this.wholeLots?[true,false]:[true]).map(odd=>{
+        const book=p.book_lot===(odd?'ODD':'COMMON'),bid=roundPrice(d(book?p.bid??d(last).minus(tick):d(last).minus(tick)).times(d(1).minus(this.slippageFraction))),
+          ask=roundPrice(d(book?p.ask??d(last).plus(tick):d(last).plus(tick)).times(d(1).plus(this.slippageFraction)),false);
+        const capacity=this.wholeLots?Math.floor(depth/2):depth;
+        return assumedQuote({symbol,last,bid,ask,odd,simulated:false,
+        book_source:p.book_lot===(odd?'ODD':'COMMON')&&p.bid!==undefined&&p.ask!==undefined&&p.bid_shares!==undefined&&p.ask_shares!==undefined?'OBSERVED' as const:'APPROXIMATE' as const,
         trade_at:p.at,book_at:p.at,
-        bid_shares:d(bid).lt(roundPrice(d(reference).times('.9'),false))?0:p.bid_shares??(d(last).lte(roundPrice(d(reference).times('.9'),false))?0:depth),
-        ask_shares:d(ask).gt(roundPrice(d(reference).times('1.1')))?0:p.ask_shares??(d(last).gte(roundPrice(d(reference).times('1.1')))?0:depth)}));});
+        bid_shares:d(bid).lt(roundPrice(d(reference).times('.9'),false))?0:(book?p.bid_shares:undefined)??(d(last).lte(roundPrice(d(reference).times('.9'),false))?0:capacity),
+        ask_shares:d(ask).gt(roundPrice(d(reference).times('1.1')))?0:(book?p.ask_shares:undefined)??(d(last).gte(roundPrice(d(reference).times('1.1')))?0:capacity)},this.fillAssumption,this.dataset.frequency!=='DAILY');});});
   }
   private previousDays(symbol:string,now:Date):Bar[]{return (this.daily.get(symbol)??[]).filter(b=>b.date<twDay(now));}
   async history(symbol:string,now:Date):Promise<Bar[]> {

@@ -32,6 +32,7 @@ def audit(document):
         raise ValueError('Virtual event time is not monotone')
     lots, fills, trades, snapshots, sizing = collections.defaultdict(list), [], [], [], []
     requests, decisions, submissions, triggers, protections, episodes = {}, {}, {}, {}, {}, {}
+    orders_by_id, triggers_by_id, seen_fills = {}, {}, set()
     usage, calls, models, full = collections.Counter(), collections.Counter(), collections.Counter(), []
     for index,e in enumerate(events):
         stage, at, msg, s = e['stage'], e['asof'], e['message'], e.get('details')
@@ -58,6 +59,11 @@ def audit(document):
                 a=r['account'];sizing.append(dict(at=at,symbol=s['symbol'],action=s['action'],request_id=s['request_id'],
                     strategy_shares=r.get('condition',{}).get('shares'),actual_shares=s['shares'],actual_limit=s['limit_price'],
                     equity=a['equity'],available_cash=a['available_cash'],limits=r['hard_limits'],lots=r['lots'],holdings=a['positions'],features=r.get('features'),protection=r.get('protection'),condition=r.get('condition')))
+        order=s.get('order') if isinstance(s,dict) else None
+        if isinstance(order,dict) and order.get('local_id'):
+            orders_by_id[order['local_id']]=dict(at=order.get('created_at',at),shares=order['shares'],limit=D(order['limit_price']),status=order['status'])
+            if stage=='TRIGGER':
+                context=order.get('trigger_context');triggers_by_id[order['local_id']]=dict(at=at,reason=order.get('exit_trigger') or order.get('trigger_reason'),stop_price=context.get('stop_price') if context else None,context=context)
         if stage=='TRIGGER':
             m=re.match(r'(\d+) (BUY|SELL)：(.*)',msg)
             if m:
@@ -72,7 +78,18 @@ def audit(document):
         if not m: raise ValueError(f'Unrecognized fill at event {index}')
         symbol,action,n,price,fee,tax=m.groups();n,price,fee,tax=int(n),D(price),D(fee),D(tax)
         if n<=0 or price<=0 or min(fee,tax)<0: raise ValueError('Invalid fill')
-        sub,trigger=submissions.get((symbol,action)),triggers.get((symbol,action))
+        raw_fill=s.get('fill',{}) if isinstance(s,dict) else {}
+        fill_id=raw_fill.get('id');order_id=raw_fill.get('order_id') or (s or {}).get('order_id')
+        if fill_id:
+            if fill_id in seen_fills: raise ValueError('Duplicate fill ID')
+            seen_fills.add(fill_id)
+        if any(k in raw_fill for k in ['symbol','action','shares','price','fee','tax']):
+            if (raw_fill['symbol'],raw_fill['action'],raw_fill['shares'],D(raw_fill['price']),D(raw_fill['fee']),D(raw_fill['tax']))!=(symbol,action,n,price,fee,tax):
+                raise ValueError('Structured fill disagrees with message')
+        sub=orders_by_id.get(order_id) if order_id else submissions.get((symbol,action))
+        trigger=triggers_by_id.get(order_id) if order_id else triggers.get((symbol,action))
+        if not raw_fill.get('symbol'):  # Older exports may contain identity-only fill details.
+            sub=sub or submissions.get((symbol,action));trigger=trigger or triggers.get((symbol,action))
         f=dict(id=(s or {}).get('fill',{}).get('id') if isinstance(s,dict) else None,order_id=(s or {}).get('order_id') if isinstance(s,dict) else None,index=index,at=at,symbol=symbol,action=action,shares=n,price=price,fee=fee,tax=tax,
             submitted_at=sub['at'] if sub else None,limit_price=sub['limit'] if sub else None,
             fill_delay_seconds=(timestamp(at)-timestamp(sub['at'])).total_seconds() if sub else None,
@@ -98,6 +115,7 @@ def audit(document):
                 lot['shares']-=used;lot['principal']-=p;lot['fees']-=b;needed-=used;principal+=p;buy_fees+=b
             if needed: raise ValueError(f'{symbol}: sell exceeds known inventory; opening positions are missing')
             f.update(net_pnl=price*n-principal-buy_fees-fee-tax,allocated_buy_fees=buy_fees,gross_pnl=price*n-principal,entry_at=entry_at)
+            if raw_fill.get('realized_pnl') is not None and abs(D(raw_fill['realized_pnl'])-f['net_pnl'])>D('.000001'): raise ValueError('FIFO PnL disagrees with structured fill')
             ep=episodes[symbol];ep['pnl']+=f['net_pnl'];ep['exit_fees']+=fee;ep['taxes']+=tax
             if sum(l['shares'] for l in lots[symbol])==0:
                 ep.update(exit_at=at,holding_hours=(timestamp(at)-timestamp(ep['entry_at'])).total_seconds()/3600,
@@ -111,9 +129,10 @@ def audit(document):
     sells=[f for f in fills if f['action']=='SELL'];realized=sum((f['net_pnl'] for f in sells),D(0))
     gains=sum((t['pnl'] for t in trades if t['pnl']>0),D(0));losses=-sum((t['pnl'] for t in trades if t['pnl']<0),D(0))
     wins,lost=sum(t['pnl']>0 for t in trades),sum(t['pnl']<0 for t in trades)
+    complete_cash=all(all(k in s['account'] for k in ['cash','settlement_debits','settlement_credits']) for s in [full[0],full[-1]])
     exposure=lambda a:sum((D(p['last_price'])*p['shares'] for p in a['positions']),D(0))/D(a['equity'])*100
     summary=dict(export_version=document.get('version'),source_commit=document.get('build',{}).get('source_commit'),build=document.get('build'),
-        version_assurance='Export declares a version, not a commit or signed binary identity',events=len(events),
+        version_assurance='Build identity is declared by the export; it does not independently attest the binary or data source',events=len(events),
         stage_counts=dict(collections.Counter(e['stage'] for e in events)),initial_equity=start,final_equity=final,return_pct=(final/start-1)*100,
         fills=len(fills),buys=sum(f['action']=='BUY' for f in fills),sells=len(sells),closed_trades=len(trades),wins=wins,losses=lost,
         realized_net_pnl=realized,unrealized_after_buy_fees=final-start-realized,
@@ -123,8 +142,12 @@ def audit(document):
         observed_snapshots=drawdown(all_samples),postmarket=drawdown(list(closes.values())),
         average_close_exposure_pct=sum((exposure(a) for a in closes.values()),D(0))/len(closes) if closes else None,
         models=[dict(model=k[0],reasoning=k[1],calls=v) for k,v in models.items()],model_call_types=dict(calls),token_usage=dict(usage),
+        fill_ids_complete=all(f['id'] and f['order_id'] for f in fills),
+        final_inventory={symbol:sum(l['shares'] for l in rows) for symbol,rows in lots.items() if sum(l['shares'] for l in rows)},
+        final_cash_and_settlements_reconstructed=D(full[0]['account']['cash'])-D(full[0]['account']['settlement_debits'])+D(full[0]['account']['settlement_credits'])+sum(((D(-1)*(f['price']*f['shares']+f['fee']) if f['action']=='BUY' else f['price']*f['shares']-f['fee']-f['tax']) for f in fills),D(0)) if complete_cash else None,
+        final_cash_and_settlements_reported=D(full[-1]['account']['cash'])-D(full[-1]['account']['settlement_debits'])+D(full[-1]['account']['settlement_credits']) if complete_cash else None,
         active_limits=full[0]['hard_limits'],limitations=[
-            'No full minute history, real odd-lot books, order/fill IDs or broker timestamps in export.',
+            'No full minute history or real odd-lot depth. Structured order/fill IDs, when present, are used and checked; broker network timestamps are unavailable.',
             'Virtual delay is simulation time, not network latency. Limit price is not a contemporaneous midquote.',
             'Snapshot drawdown is a lower bound on intraday MDD; open PnL excludes future liquidation costs.',
             'FIFO is exact for known lots; account snapshots are authoritative for total equity. Diagnostic month is not OOS.'])

@@ -1,3 +1,5 @@
+import {diagnoseClock,type ClockDiagnostic} from '../core/clock-diagnostics.js';
+let clockDiagnostic:ClockDiagnostic|undefined;
 import {buildIdentity} from '../core/build-identity.js';
 import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, dialog, powerSaveBlocker,
   safeStorage, shell, screen, type IpcMainInvokeEvent } from 'electron';
@@ -258,7 +260,7 @@ function trusted(event: IpcMainInvokeEvent): void {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
     throw new Error('無效的桌面 IPC 來源');
 }
-function desktopState():DesktopState { return ({status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
+function desktopState():DesktopState { return ({clock_diagnostic:clockDiagnostic,status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
     settings:JSON.stringify(service?.engine.settings ?? commonSettings.apply(SettingsSchema.parse({mode}),mode,nativeConnection.baseUrl),null,2),
     connected:connected(),workspace_mode:mode==='live'?'live':'paper',error:initialError||service?.engine.dataIssue||'',backtest:backtest.text(),backtest_running:backtest.progress.running,
     backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:codexLogin.status.message,
@@ -300,6 +302,7 @@ function registerIpc(): void {
   };
   handle('trader:state',desktopState);
   handle('trader:command',async value => {
+    if(value==='clock-check'){clockDiagnostic=await diagnoseClock();return clockDiagnostic.message;}
     if (typeof value !== 'string' || value.length > 2000 || !service) throw new Error('未知指令或程式尚未啟動');
     if (value.trim() === 'exit') { await exit(); return '結束程式'; }
     const command=value.trim();

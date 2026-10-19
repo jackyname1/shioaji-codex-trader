@@ -40,6 +40,7 @@ export const BacktestRequestSchema = z.strictObject({
   comparison_intervals:z.array(z.number().int().min(10).max(360)).max(5).refine(v=>new Set(v).size===v.length,'比較間隔不可重複').default([]),
   max_codex_calls:z.number().int().min(1).max(2000).default(100),
   execution_slippage_bps:z.number().int().min(0).max(100).default(0),
+  fill_assumption:z.enum(['legacy','optimistic','neutral','conservative']).default('legacy'),
   research:z.strictObject({portfolio:z.boolean().default(false),entry_quality:z.boolean().default(false),exit_mode:z.enum(['baseline','fixed','atr_trail']).default('baseline'),drawdown:z.enum(['0.03','0.04','0.05']).default('0.04'),cooldown:z.number().int().min(1).max(20).default(2),prompt_compaction:z.boolean().default(false)}).optional(),
   participation:z.string().regex(/^0\.\d+$/).refine(v=>d(v).gt(0)&&d(v).lte('.1')).default('0.01'),
 }).refine(x=>x.start<=x.end&&Date.parse(x.end)-Date.parse(x.start)<=366*86400000,'日期區間須為 1–367 天')
@@ -125,7 +126,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     codex_enabled:request.strategy==='codex'&&base.codex_enabled});
   const reportSettings=Object.fromEntries(['min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
     'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','plan_max_minutes','experience_enabled',
-    'watch_max_symbols','watch_min_amount','watch_remove_after_scans','entry_strategy_mode','adaptive_protection','dynamic_allocation',
+    'watch_max_symbols','watch_min_amount','watch_remove_after_scans','entry_strategy_mode','entry_policy','execution_sizing','adaptive_protection','dynamic_allocation',
     'risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes','portfolio_risk_enabled','portfolio_components','portfolio_drawdown_fraction','portfolio_cooldown_sessions','portfolio_loss_streak','entry_quality_enabled','research_exit_mode','max_portfolio_stop_fraction','prompt_compaction'].map(k=>[k,settings[k as keyof Settings]]));
   if(dataset.frequency==='DAILY'&&request.strategy_schedule==='fixed')throw new Error('回測日 K 無法還原固定時刻的盤中行情；請使用分鐘 K，或選間隔排程作開盤時點的近似測試');
   const store=new Store(':memory:'),calendar=new TradingCalendar(store,dataset.synthetic),id=randomUUID();
@@ -138,7 +139,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   for(let day=twDay(new Date(firstAt));day<=addDays(request.end,1);day=addDays(day,1))
     if(!store.session(day))sessions.push({day,open:observedDays.has(day),source:dataset.source,verified_at:new Date().toISOString()});
   if(sessions.length)store.saveSessions(sessions);
-  const market=new HistoricalMarket(dataset,request.participation,d(request.execution_slippage_bps).div(10000).toFixed()),broker=new PaperBroker(store,market,settings,calendar,true),engine=new Engine(store,broker,settings,calendar);
+  const market=new HistoricalMarket(dataset,request.participation,d(request.execution_slippage_bps).div(10000).toFixed(),request.fill_assumption),broker=new PaperBroker(store,market,settings,calendar,true),engine=new Engine(store,broker,settings,calendar);
   const displayQuotes=new Map<string,ReplayFrame['quotes'][number]>();
   const rememberQuotes=(now:Date):void=>{
     for(const q of engine.quotes.values())if(Date.parse(q.trade_at)<=now.getTime()){
@@ -342,7 +343,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     const sd=returns.length>1?Math.sqrt(returns.reduce((a,b)=>a+(b-mean)**2,0)/(returns.length-1)):0;
     const breachDays=daily.filter(row=>store.get('daily_loss_breached_'+row.day)).map(row=>row.day);
     return {version:'0.2.5',build:buildIdentity(),entry_diagnostics:entryDiagnostics.report(store.orders()),final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
-      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'compact-observations-v1':'active-entry-feedback-v7',
+      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'columnar-observations-v2':'active-entry-feedback-v7',
       settings:reportSettings,
       metrics:{initial_cash:request.initial_cash,final_cash:account.cash,settlement_credits:account.settlement_credits,stock_value:marketValue(account).toFixed(2),
         final_equity:final.toFixed(2),net_pnl:final.minus(request.initial_cash).toFixed(2),return_pct:final.div(request.initial_cash).minus(1).times(100).toFixed(4),
@@ -351,7 +352,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         cost_drag_pct:costs.div(request.initial_cash).times(100).toFixed(4),sell_orders:new Set(sales.map(f=>f.order_id)).size,max_drawdown_pct:drawdown.times(100).toFixed(4),
         filled_orders:new Set(fills.map(f=>f.order_id)).size,fill_count:fills.length,
         winning_sell_fill_pct:sales.length?d(sales.filter(f=>d(f.realized_pnl!).gt(0)).length).div(sales.length).times(100).toFixed(2):null,
-        trades:tradeStatistics(fills),exits:exitStatistics(store.orders()),daily_loss_breach_days:breachDays,
+        trades:tradeStatistics(fills,store.orders()),exits:exitStatistics(store.orders()),daily_loss_breach_days:breachDays,
         average_close_exposure_pct:daily.length?daily.reduce((sum,row)=>sum.plus(row.exposure_pct??0),d(0)).div(daily.length).toFixed(4):'0',
         daily_sharpe:sd>0?String(mean/sd*Math.sqrt(252)):null,
         skipped_idle_checks:skippedIdle,

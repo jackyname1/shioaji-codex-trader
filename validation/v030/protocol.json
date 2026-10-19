@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "baseline_commit": "db608ac3395c76da9e5170014d427a2acc1090ed",
+  "initial_cash": "100000",
+  "dataset": "validation/twse-daily.json.gz",
+  "policies": ["v029_legacy", "current_legacy", "trend", "pullback", "breakout"],
+  "fill_assumptions": ["optimistic", "neutral", "conservative"],
+  "periods": [
+    {"label": "earlier_time_split", "start": "2025-04-01", "end": "2025-06-30"},
+    {"label": "diagnostic_month_different_fixed_pool", "start": "2026-07-20", "end": "2026-08-19"},
+    {"label": "later_time_split", "start": "2026-08-20", "end": "2026-10-15"}
+  ],
+  "rules": [
+    "No parameter search, fitting or model calls. Each run starts with identical cash and empty inventory.",
+    "Full original engine versus current engine. Both use the SAME explicit fill transform, five-minute monitors and opening-event program analyses.",
+    "Fixed public ten-stock daily panel is NOT the uploaded Codex replay's dynamic universe or minute path.",
+    "Time splits are temporal validation, not pristine holdouts: this repository already used this panel in research.",
+    "Conservative daily scenario has zero inferred intraday depth. Cash preservation is not proof of alpha.",
+    "MA/breadth/ATR/volume use completed prior sessions; unknown industries are fully correlated with all sectors.",
+    "Cash and 75%-invested equal-weight buy-and-hold benchmarks use integer odd shares, scenario spread and minimum fees; terminal inventory is marked, not liquidated.",
+    "No annualized return for these short samples. No reliable odd-lot books, queue priority, corporate-action-adjusted total return or historical complete membership."
+  ]
+}
