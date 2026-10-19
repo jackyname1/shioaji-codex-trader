@@ -10,8 +10,15 @@ import {assumedQuote} from '../src/core/fill-assumptions.js';
 import {account,instrument,now,order,quote,rig,settings,snapshot} from './helpers.js';
 import {TradingCalendar} from '../src/core/calendar.js';
 import {Store} from '../src/core/store.js';
+import {analysisPrompt} from '../src/core/codex.js';
 import {HistoricalMarket,type HistoryDataset} from '../src/core/backtest-data.js';
 const features:Features={sufficient:true,sessions:80,ma5:30,ma20:29,ma60:28,ma20_previous:28.9,atr14:1,volume_ratio20:1.3,last_close:30,previous_resistance20:29.9};
+test('strategy instructions match the selected sizing authority and preserve valid HOLD protection',()=>{
+  const s=snapshot();s.hard_limits.execution_sizing='deterministic';
+  assert.match(analysisPrompt(s),/不會增加參考股數/);assert.doesNotMatch(analysisPrompt(s),/再呼叫 Codex 決定實際股數/);
+  assert.match(analysisPrompt(s),/smart=null 保留既有保護/);
+  s.hard_limits.execution_sizing='codex';assert.match(analysisPrompt(s),/再呼叫 Codex 決定實際股數/);
+});
 test('confirmed trend cannot buy below MA5, falling long trend or missing inputs; breakout uses preceding completed volume',()=>{
   assert.deepEqual(confirmationIssues('trend',features,quote()),[]);
   assert.match(confirmationIssues('trend',features,{...quote(),last:'29.5'}).join(),/MA5/);
