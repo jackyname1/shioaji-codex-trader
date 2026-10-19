@@ -9,6 +9,7 @@ import type { ChartData,ChartRequest } from '../core/chart.js';
 import type { BacktestRequest } from '../core/backtest.js';
 import type { AnalystEvent } from '../core/codex.js';
 import { simulationView,replayView,workspaceCutoff,workspaceRuntime,workspaceEvents } from './workspace.js';
+import {strategyItems} from './dashboard.js';
 import {entryDiagnosticText} from '../core/entry-diagnostics-text.js';
 declare global {interface Window {trader:TraderBridge}}
 const guardText=(decision:Decision):string=>(decision.conditions??[]).map(c=>`${c.left} ${{GT:'>',GTE:'≥',LT:'<',LTE:'≤'}[c.operator]} ${c.right==='VALUE'?c.value:c.right}`).join(' 且 ');
@@ -112,7 +113,7 @@ function schedulingFields(prefix:'s'|'bt'):void {
 function loadSettings(s:Settings):void {
   for(const [id,key] of Object.entries(guided)){const node=el<HTMLInputElement>(id),v=s[key];
     if(typeof v==='boolean')node.checked=v;else node.value=String(v);}
-  if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;el<HTMLTextAreaElement>('codex-instruction-control').value=s.codex_instruction;}
+  if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;}
   if(!replayPreferencesLoaded){replayPreferencesLoaded=true;
     for(const [id,v] of Object.entries({'bt-schedule':s.strategy_schedule,'bt-times':s.strategy_times.join(','),'bt-interval':s.decision_interval_minutes,
       'bt-monitor':5,'bt-watch':5,'bt-cash':s.demo_cash}))el<HTMLInputElement>(id).value=String(v);
@@ -137,6 +138,7 @@ function renderRuntime(state:DesktopState):void {
   text('experience',state.experience);text('codex-login-status',state.codex_login);
   if(!r||!s){text('headline',state.connection.busy?'連線中':state.connection.server_ready?'工作台尚未就緒':'請先登入 Shioaji');text('runtime-note',state.error||state.connection.status);
     for(const id of ['cash','equity','next-strategy','watch-count'])text(id,'—');text('cash-detail','等待帳戶資料');text('settlement-detail','等待交割資料');text('data-status','工作台尚未就緒');
+    el('strategy-stocks').replaceChildren();text('strategy-count','0 檔');text('strategy-stance','工作台尚未就緒');text('strategy-summary','等待連線與有效策略');text('strategy-expiry','');text('rule-summary','');
     for(const id of ['positions','orders','overview-watch','watchlist','watch-changes','decisions'])table(id,['狀態'],[],'工作台尚未完成連線');return;}
   const labels={demo:'介面測試資料',paper:'模擬 · 真實行情',readonly:'實盤監控',live:'實盤 · 真實帳戶'};
   text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
@@ -198,6 +200,7 @@ function renderRuntime(state:DesktopState):void {
   text('runtime-queue',r.execution_queue?.length?r.execution_queue.map(t=>`${t.symbol} ${action[t.action]} · ${action[t.state]??t.state}`).join('；'):'持倉持續監測出場；監測股票符合買進條件才觸發數量確認。');
   const stance={BUY_ALLOWED:'允許條件買進',HOLD_ONLY:'保留現金／觀望',REDUCE:'減碼優先'};
   text('strategy-stance',r.plan?stance[r.plan.analysis.stance]:'等待第一輪策略');text('strategy-summary',r.plan?.analysis.summary??'取得有效策略後，程式會依條件執行。');
+  renderStrategy(state);
   text('strategy-expiry',r.plan?`有效至 ${stamp(r.plan.analysis.expires_at)}${valid?'':' · 已到期'}`:'');
   const rule=r.plan?.analysis.screening?.entry;
   text('rule-summary',rule?`自動規則 ${rule.signal} · 每檔配置 ${pct(rule.allocation_fraction)} · 停損 ${pct(rule.stop_fraction)} · ${rule.trailing_fraction?'預估收益':'固定停利'} ${pct(rule.take_profit_fraction)} · 移動停損 ${rule.trailing_fraction?pct(rule.trailing_fraction):'關閉'}`:'依 Codex 個股決策執行；新加入股票等待授權條件');
@@ -205,6 +208,28 @@ function renderRuntime(state:DesktopState):void {
     triggerText(d)+(guardText(d)?' 且 '+guardText(d):''),d.reason]),'本輪無個股委託；可能使用規則選股或全部觀望');
   text('watch-policy',`上限 ${riskSettings!.watch_max_symbols} · 持倉必留`);el('watch-policy').title=`候選上限 ${riskSettings!.watch_max_symbols}；持倉與掛單持續監測；連續 ${riskSettings!.watch_remove_after_scans} 次不符才移除`;
   text('risk-summary',`現金保留 ${pct(riskSettings!.min_cash_fraction)} · 單筆 ${pct(riskSettings!.max_order_fraction)}（${riskSettings!.order_budget_basis==='EQUITY'?'淨資產':'扣除保留後'}） · 單檔 ${pct(riskSettings!.max_symbol_fraction)} · 日損失 ${pct(riskSettings!.daily_loss_fraction)} 停止新買進`);
+}
+function renderStrategy(state:DesktopState):void {
+  const r=workspaceRuntime(state),items=strategyItems(r,workspaceCutoff(state)),host=el('strategy-stocks');
+  text('strategy-count',items.length+' 檔');
+  const signature=JSON.stringify([items,r?.protections,r?.plan?.analysis.screening?.entry]);if(host.dataset.signature===signature)return;host.dataset.signature=signature;
+  const nodes:HTMLElement[]=items.map(item=>{
+    const card=document.createElement('article');card.className='stock-strategy';card.dataset.symbol=item.symbol;
+    const heading=document.createElement('div'),stock=document.createElement('button'),state=document.createElement('span');heading.className='stock-strategy-heading';
+    stock.textContent=item.symbol+' '+item.name+' · '+item.action;stock.className='quiet';stock.addEventListener('click',()=>void run(()=>showStock(item.symbol)));
+    state.textContent=item.state;state.className='chip';heading.append(stock,state);card.append(heading);
+    for(const [label,content] of [['觸發',item.trigger],['價格',item.price],['股數',item.size],['保護',item.protection],['理由',item.reason]] as const){
+      const row=document.createElement('p'),title=document.createElement('span'),value=document.createElement('span');title.textContent=label;value.textContent=content;row.append(title,value);card.append(row);
+    }
+    return card;
+  });
+  // A held stock remains protected even when the new plan has no decision for it.
+  for(const p of r?.protections??[]){if(items.some(d=>d.symbol===p.symbol))continue;
+    const card=document.createElement('article');card.className='stock-strategy';const stock=document.createElement('button');stock.className='quiet';stock.textContent=p.symbol+' · 持倉保護';stock.addEventListener('click',()=>void run(()=>showStock(p.symbol)));
+    const detail=document.createElement('p');detail.textContent=`停損 ${p.spec.stop_price} · ${p.spec.take_profit?'固定停利 '+p.spec.take_profit:'無固定停利'} · ${p.triggered||'持續追蹤'}`;card.append(stock,detail);nodes.push(card);
+  }
+  if(!nodes.length){const empty=document.createElement('p');empty.className='strategy-empty';empty.textContent=r?.plan?.analysis.screening?.entry?'本輪依上方自動選股規則持續篩選；個股觸發與股數確認結果會自動更新。':r?.plan?'本輪觀望，沒有新的個股買賣條件。':'等待程式產生第一輪股票策略。';nodes.push(empty);}
+  host.replaceChildren(...nodes);
 }
 function renderBacktest(state:DesktopState):void {
   const p=state.backtest_progress,r=state.backtest_result;renderReplay(state);
@@ -247,7 +272,6 @@ async function refresh():Promise<void>{if(polling)return;polling=true;
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-command]'))b.addEventListener('click',()=>void run(()=>workspaceCommand(b.dataset.command!)));
 el('workspace-retry').addEventListener('click',()=>void run(()=>window.trader.retryWorkspace()));
 el('diagnostic-export').addEventListener('click',()=>void run(()=>window.trader.exportDiagnostics()));
-el<HTMLFormElement>('command-form').addEventListener('submit',e=>{e.preventDefault();const command=value('command');el<HTMLInputElement>('command').value='';void run(()=>window.trader.command(command));});
 el('hide').addEventListener('click',()=>void run(()=>window.trader.minimize()));el('exit').addEventListener('click',()=>void run(()=>window.trader.exit()));
 const dirty=():void=>{settingsDirty=true;text('settings-state','尚未儲存');};
 el('settings-form').addEventListener('input',dirty);el('settings-form').addEventListener('change',dirty);el('settings').addEventListener('input',dirty);
@@ -553,10 +577,10 @@ el('replay-speed-number').addEventListener('change',()=>updateReplaySpeed());
 el('replay-mode').addEventListener('change',()=>updateReplaySpeed());
 updateReplaySpeed();
 el('bt-market').addEventListener('click',()=>void run(()=>window.trader.exportMarket()));
-for(const id of ['codex-model-control','codex-reasoning-control','codex-instruction-control'])el(id).addEventListener('input',()=>{codexDirty=true;});
+for(const id of ['codex-model-control','codex-reasoning-control'])el(id).addEventListener('input',()=>{codexDirty=true;});
 async function saveCodex():Promise<string>{
   if(!latestSettings)throw new Error('設定尚未載入');
-  const next:Settings={...latestSettings,codex_model:value('codex-model-control'),codex_reasoning:value('codex-reasoning-control') as Settings['codex_reasoning'],codex_instruction:value('codex-instruction-control'),codex_enabled:true};
+  const next:Settings={...latestSettings,codex_model:value('codex-model-control'),codex_reasoning:value('codex-reasoning-control') as Settings['codex_reasoning'],codex_enabled:true};
   const result=await window.trader.saveSettings(JSON.stringify(next));latestSettings=next;codexDirty=false;return result;
 }
 el('codex-save').addEventListener('click',()=>void run(saveCodex));
@@ -606,3 +630,10 @@ async function workspaceCommand(command:string):Promise<string>{
   if(command==='decide'||command==='start-auto')await saveCodex();
   return window.trader.command(command);
 }
+
+window.trader.onOpen(request=>{void (async()=>{
+  await refresh();for(const dialog of document.querySelectorAll<HTMLDialogElement>('dialog[open]'))dialog.close();
+  if(request.target==='settings'){el<HTMLDialogElement>('settings-dialog').showModal();await loadSavedConnection();}
+  else if(request.target==='diagnostics')el<HTMLDialogElement>('diagnostics-dialog').showModal();
+  else if(request.target==='strategy'){el('strategy-stocks').scrollTop=0;el('strategy-stocks').parentElement?.focus();if(request.symbol)await showStock(request.symbol);}
+})().catch(e=>message(e instanceof Error?e.message:'視窗尚未就緒',true));});

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { TraderBridge } from './shared.js';
 const bridge: TraderBridge = {
+  onOpen:listener=>{const callback=(_event:Electron.IpcRendererEvent,request:{target:string;symbol?:string})=>listener(request);ipcRenderer.on('trader:open',callback);return ()=>ipcRenderer.removeListener('trader:open',callback);},
   state: () => ipcRenderer.invoke('trader:state'),
   command: (input: string) => ipcRenderer.invoke('trader:command',input),
   saveSettings: (text: string) => ipcRenderer.invoke('trader:settings',text),
