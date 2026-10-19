@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {portfolioDecision,type PortfolioState,type PortfolioDecision} from './portfolio-risk.js';
+import {admissionIssues} from './entry-policy.js';
 import {candidateScore} from './entry-quality.js';
 import {Decimal} from 'decimal.js';
 import {authorizedRisk} from './risk-policy.js';
@@ -20,7 +21,7 @@ import { active, ageSeconds, d, equity, remaining, twDay, twClock, type Account,
   type Instrument, type Order, type Plan, type Quote, type Settings, type Snapshot, type SmartSpec } from './models.js';
 import { NoSubmissionError, type Broker } from '../broker/types.js';
 import { brokerIssue } from '../broker/health.js';
-import { ExecutionAdviceSchema, executionLot, executionSettingsKey, spendableCash,
+import { ExecutionAdviceSchema, deterministicAdvice, executionLot, executionSettingsKey, spendableCash,
   type ExecutionAdvice, type ExecutionRequest, type ExecutionTicket } from './execution.js';
 
 export interface Bundle { pool: Candidate[]; features: Record<string,Features>; metadata: Record<string,Instrument>;
@@ -150,7 +151,10 @@ export class Engine {
     return account;
   }
   private recordReconciledFill(o:Order,previous:number,now:Date):void {
-    if(o.filled<=previous||['paper','demo'].includes(this.settings.mode))return;
+    if(o.filled<=previous)return;
+    // Persist the time of observed sell fills, rather than resetting cooldown with each new plan.
+    if(o.action==='SELL')this.store.set(`last_sell:${o.symbol}`,now.toISOString());
+    if(['paper','demo'].includes(this.settings.mode))return;
     this.store.recordExperience({id:`${o.local_id}:${o.filled}`,at:now.toISOString(),mode:this.settings.mode,
       kind:'RECONCILED_FILL',symbol:o.symbol,action:o.action,shares:o.filled-previous,
       price:null,fee:null,tax:null,realized_pnl:null,note:`已核對 ${o.purpose} 成交股數；委託限價=${o.limit_price}，非實際成交價。實際成交價格與費用未提供，不推算損益`});
@@ -240,7 +244,7 @@ export class Engine {
       &&[q.trade_at,q.book_at].every(at=>ageSeconds(now,at)>=0&&ageSeconds(now,at)<=this.settings.quote_max_age));
     const limits = Object.fromEntries(['whole_lots','min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction',
       'max_exposure_fraction','max_daily_buy_fraction','max_daily_buy_orders','daily_loss_fraction',
-      'price_deviation_fraction','minimum_fee','fee_rate','sell_tax_rate','plan_max_minutes','watch_min_amount','watch_max_symbols','entry_strategy_mode','adaptive_protection','dynamic_allocation','risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes'].map(k => [k,this.settings[k as keyof Settings]]));
+      'price_deviation_fraction','minimum_fee','fee_rate','sell_tax_rate','plan_max_minutes','watch_min_amount','watch_max_symbols','entry_strategy_mode','entry_policy','execution_sizing','adaptive_protection','dynamic_allocation','risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd','entry_tracking_minutes'].map(k => [k,this.settings[k as keyof Settings]]));
     return {snapshot_id:randomUUID(),asof:now.toISOString(),synthetic:this.settings.mode === 'demo',review_only:review,
       account:{cash:a.cash,settlement_debits:a.settlement_debits,settlement_credits:a.settlement_credits,
         equity:equity(a).toFixed(),available_cash:cash.available,order_cash_reserved:cash.reserved,
@@ -424,12 +428,12 @@ export class Engine {
   private async requestExecution(order:Order,now:Date,source:ExecutionTicket['source'],condition?:import('./models.js').Decision,
     smart?:SmartSpec,trigger='',protectionSpec?:SmartSpec):Promise<boolean>{
     order.trigger_reason=(trigger||condition?.reason||'規則條件已成立').slice(0,3000);
-    if(this.settings.codex_enabled&&this.advisorIssue){
+    if(source!=='PROTECTION'&&this.settings.codex_enabled&&this.advisorIssue){
       this.decisionStates.set(order.symbol,{state:'WAIT',reason:this.advisorIssue+'；先測試連線或重新分析，未送單',source});return false;
     }
-    // Historical exits use only current sellable inventory; production sizing authority is unchanged.
-    if(!this.settings.codex_enabled||source==='PROTECTION'&&this.store.get('historical_replay')===true&&!this.broker.production
-      &&['demo','paper'].includes(this.settings.mode))return this.submit(order,now,source==='RULE'?smart:undefined,undefined,condition);
+    // Existing deterministic protection must survive model errors and never wait for a model quantity turn.
+    // submit still checks execution grants, fresh account/book, inventory, session and duplicate intents.
+    if(!this.settings.codex_enabled||source==='PROTECTION')return this.submit(order,now,smart,undefined,condition);
     const key=`${twDay(now)}:${order.plan_id}:${order.symbol}:${order.purpose}:${trigger}`;
     if(this.executionRetry[key]&&Date.parse(this.executionRetry[key]!)>now.getTime())return false;
     if([...this.pendingExecutions.values()].some(t=>t.order.symbol===order.symbol))return false;
@@ -438,6 +442,14 @@ export class Engine {
       allocation_fraction:source==='RULE'?this.plan?.analysis.screening?.entry?.allocation_fraction:undefined,
       settings_key:executionSettingsKey(this.settings),generation:this.broker.generation};
     this.pendingExecutions.set(ticket.id,ticket);
+    if(this.settings.execution_sizing==='deterministic'){
+      const request=await this.executionRequest(ticket.id,now);
+      if(!request)return false;
+      const advice=deterministicAdvice(request,this.settings);
+      this.store.set(`execution_audit:${ticket.id}`,{at:now.toISOString(),request,advice});
+      this.log('DETERMINISTIC_SIZING',`${order.symbol} ${order.action} 請求 ${ticket.id}；參考 ${order.shares} 股 → ${advice.shares} 股；完整數量快照已保存`);
+      return this.confirmExecution(ticket.id,advice,now);
+    }
     this.decisionStates.set(order.symbol,{state:'SIZING',reason:'條件已觸發，等待 Codex 按目前現金與可賣股數確認數量',source});
     this.log('TRIGGER',`${order.symbol} ${order.action} ${ticket.trigger}；等待 Codex 數量確認`);return false;
   }
@@ -520,7 +532,7 @@ export class Engine {
       lots,features:this.watchFeatures[ticket.order.symbol],instrument:structuredClone(m),
       capital:capitalSnapshot(a,this.settings),
       hard_limits:Object.fromEntries(['min_cash_fraction','max_order_fraction','order_budget_basis','target_exposure_fraction','min_entry_reward_risk','max_trade_risk_fraction','max_symbol_fraction','max_exposure_fraction','max_daily_buy_fraction',
-        'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','whole_lots','entry_strategy_mode','adaptive_protection','dynamic_allocation','risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd'].map(k=>[k,this.settings[k as keyof Settings]])),
+        'max_daily_buy_orders','daily_loss_fraction','fee_rate','minimum_fee','sell_tax_rate','whole_lots','entry_strategy_mode','entry_policy','execution_sizing','adaptive_protection','dynamic_allocation','risk_slippage_fraction','overnight_gap_fraction','max_gap_risk_fraction','min_net_profit_twd'].map(k=>[k,this.settings[k as keyof Settings]])),
       historical_replay:!!this.store.get('historical_replay')};
   }
   finishExecution(id:string,state:string,reason:string,now:Date):void {
@@ -557,7 +569,7 @@ export class Engine {
     }
     const order={...ticket.order,shares:advice.shares,lot:advice.lot,limit_price:advice.limit_price,created_at:now.toISOString()};
     this.log('SIZE_CONFIRMED',`${order.symbol} ${order.action} ${order.shares} 股（${order.lot==='COMMON'?order.shares/1000+' 張':'盤中零股'}）：${advice.reason}`);
-    const sent=await this.submit(order,now,ticket.source==='RULE'?ticket.smart:undefined,id);
+    const sent=await this.submit(order,now,ticket.smart,id,ticket.condition);
     const stored=this.store.order(order.local_id);
     if(sent){this.pendingExecutions.delete(id);this.decisionStates.set(order.symbol,{state:stored?.status??'SUBMITTED',
       reason:`Codex 確認 ${order.shares} 股 @ ${order.limit_price}；${advice.reason}`,source:ticket.source});}
@@ -571,10 +583,10 @@ export class Engine {
       status:'PREPARED',filled:0,created_at:now.toISOString(),plan_id:planId,purpose};
   }
   async submit(order: Order, suppliedNow: Date,smart?:SmartSpec,executionId?:string,condition?:import('./models.js').Decision): Promise<boolean> {
-    if (!this.canExecute()||this.settings.codex_enabled&&this.advisorIssue) return false;
+    if (!this.canExecute()||order.purpose!=='PROTECTION'&&this.settings.codex_enabled&&this.advisorIssue) return false;
     await this.reconcile(suppliedNow,true); const account = await this.refreshAccount(suppliedNow);
     const now = this.broker.production ? new Date() : suppliedNow;
-    if(!this.canExecute()||this.settings.codex_enabled&&this.advisorIssue)return false;
+    if(!this.canExecute()||order.purpose!=='PROTECTION'&&this.settings.codex_enabled&&this.advisorIssue)return false;
     for(const q of this.broker.quotes(now))this.quotes.set(`${q.symbol}:${q.odd}`,q);
     this.observeEntries(now);
     const quote=this.quotes.get(`${order.symbol}:${order.lot==='ODD'}`);
@@ -622,6 +634,10 @@ export class Engine {
       if(this.dailyLossBlocked(now,account))reasons.push('達到日損失限制，當日停止新增買進');
       const spec=smart??(executionId?this.pendingExecutions.get(executionId)?.smart:undefined)
         ??this.plan?.analysis.decisions.find(d=>d.symbol===order.symbol)?.smart??undefined;
+      const protections=this.store.protections();
+      const lastSell=this.store.get<string>(`last_sell:${order.symbol}`)??this.store.orders().filter(o=>o.symbol===order.symbol&&o.action==='SELL'&&o.filled>0).at(-1)?.created_at;
+      reasons.push(...admissionIssues(order,account,this.settings,spec,this.metadata,this.watchFeatures,quote,condition,this.calendar,now,lastSell,
+        Object.fromEntries(protections.map(p=>[p.symbol,p.protected_floor??p.spec.stop_price]))));
       reasons.push(...entryRiskIssues(order.shares,order.limit_price,spec,account,this.settings,order.symbol),
         ...entryQualityIssues(order.shares,order.limit_price,spec,this.settings));
       if(this.settings.entry_quality_enabled){

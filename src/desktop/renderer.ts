@@ -103,7 +103,7 @@ const guided:Record<string,keyof Settings>={
   's-order-basis':'order_budget_basis','s-target':'target_exposure_fraction','s-reward-risk':'min_entry_reward_risk','s-trade-risk':'max_trade_risk_fraction',
   's-quotes':'manage_quote_subscriptions','s-min-cash':'min_cash_fraction','s-order-limit':'max_order_fraction','s-symbol-limit':'max_symbol_fraction','s-loss-limit':'daily_loss_fraction',
   's-watch-auto':'auto_watchlist','s-whole':'whole_lots','s-awake':'keep_awake','s-minimized':'start_minimized',
-  's-entry-mode':'entry_strategy_mode','s-adaptive':'adaptive_protection','s-dynamic':'dynamic_allocation',
+  's-confirm-policy':'entry_policy','s-sizing-policy':'execution_sizing','s-entry-mode':'entry_strategy_mode','s-adaptive':'adaptive_protection','s-dynamic':'dynamic_allocation',
   's-slip':'risk_slippage_fraction','s-gap':'overnight_gap_fraction','s-gap-risk':'max_gap_risk_fraction',
   's-min-profit':'min_net_profit_twd','s-track-minutes':'entry_tracking_minutes',
 };
@@ -289,7 +289,7 @@ function request(compare=false):BacktestRequest {
     whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
     capital_profile:value('bt-capital-profile') as BacktestRequest['capital_profile'],entry_cadence:value('bt-entry-cadence') as BacktestRequest['entry_cadence'],start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:value('replay-mode')==='direct'?0:Number(value('replay-speed-number')),
     decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
-    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),execution_slippage_bps:Number(value('bt-execution-slip')),research:{portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
+    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),execution_slippage_bps:Number(value('bt-execution-slip')),fill_assumption:value('bt-fill') as BacktestRequest['fill_assumption'],research:{portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
 }
 el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>beginReplay());});
 el('bt-compare').addEventListener('click',()=>void run(()=>beginReplay(true)));

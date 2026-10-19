@@ -30,13 +30,13 @@ export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Ac
   // A completed recent breakout can continue near new highs. Its old range gives a fixed measured-move objective.
   if(recentBreakout)target=d(f.breakout_base20!).plus(f.breakout_range20!);
   // Priority: confirmed breakout, confirmed rebound, then continued trend. Only one proposal survives.
-  if(price.gt(resistance)&&price.lte(resistance.plus(atr.times('.75')))&&entry.lte(resistance.plus(atr))&&f.volume_ratio20>=1.2&&f.rsi14<=72){
+  if(['legacy','breakout'].includes(s.entry_policy)&&price.gt(resistance)&&price.lte(resistance.plus(atr.times('.75')))&&entry.lte(resistance.plus(atr))&&f.volume_ratio20>=1.2&&f.rsi14<=72){
     signal='BREAKOUT20';strength=.9;
     target=resistance.plus(resistance.minus(f.support20)); // Completed 20-day range projection, independent of the entry price.
     stop=Decimal.min(resistance.minus(atr.times('.75')),entry.minus(atr.times('1.5')));
-  }else if(track.armed&&entryReady(pullback,q.last,track)&&f.volume_ratio20>=.7&&f.rsi14>=35){
+  }else if(['legacy','pullback'].includes(s.entry_policy)&&track.armed&&entryReady(pullback,q.last,track)&&f.volume_ratio20>=.7&&f.rsi14>=35){
     signal='PULLBACK20';strength=.8;stop=Decimal.min(d(track.low_water).minus(atr.times('.75')),stop);
-  }else if(price.gte(f.ma5)&&price.gte(f.ma20)&&f.volume_ratio20>=.9&&f.rsi14>=45&&f.rsi14<=75&&(f.return20??-1)>=0){
+  }else if(['legacy','trend'].includes(s.entry_policy)&&price.gte(f.ma5)&&price.gte(f.ma20)&&f.volume_ratio20>=.9&&f.rsi14>=45&&f.rsi14<=75&&(f.return20??-1)>=0){
     signal='TREND';strength=.7;
     stop=Decimal.min(d(f.ma5).minus(atr.times('.5')),entry.minus(atr.times('1.5')));
   }else return {track,reason:track.status==='EXPIRED'?'買入觸發未達：回檔追蹤超時，等待新策略':track.status==='INVALID'?'買入觸發未達：支撐失效，等待新策略':

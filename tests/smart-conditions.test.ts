@@ -129,14 +129,15 @@ function heldStore():Store {
   const store=new Store(':memory:');store.set('paper_ledger',{cash:'100000',lots:[{symbol:'9001',shares:20,price:'30',acquired:'2026-10-07'}],
     orders:[],lastEvents:{},charges:{},fills:[],credits:[]});return store;
 }
-test('a fixed STOP supersedes a running trailing quantity turn; the late model response cannot sell twice',async()=>{
+test('protective trailing exits submit without a model turn and a late quantity reply cannot sell twice',async()=>{
   const r=await rig(heldStore());try{r.engine.setSettings({...r.s,codex_enabled:true});
-    r.market.marketPrice='34';await r.engine.tick(at(1));r.engine.clearExecutions('isolated entry proposal reset');
-    r.market.marketPrice='32';await r.engine.tick(at(2));const id=r.engine.nextExecutionId()!;assert.ok(id);
-    const input=await r.engine.executionRequest(id,at(2));assert.ok(input);assert.equal(input.trigger,'TRAILING');
-    r.market.marketPrice='28.5';await r.engine.tick(at(3));assert.equal(r.engine.pendingExecutions.has(id),false);
-    const stopId=r.engine.nextExecutionId()!;assert.ok(stopId);assert.equal(r.engine.pendingExecutions.get(stopId)!.trigger,'STOP');
-    assert.equal(await r.engine.confirmExecution(id,await testSize(input),at(3)),false);assert.equal(r.store.orders().length,0);
+    r.market.marketPrice='34';await r.engine.tick(at(1));r.engine.clearExecutions('isolated entry reset');
+    r.engine.setAdvisorIssue('model unavailable');r.market.marketPrice='32';await r.engine.tick(at(2));
+    assert.equal(r.engine.pendingExecutions.size,0);assert.equal(r.store.orders().length,1);
+    assert.equal(r.store.orders()[0]!.exit_trigger,'TRAILING');
+    await r.engine.tick(at(3));await r.engine.tick(at(4));
+    assert.equal(r.broker.fills().filter(f=>f.action==='SELL').reduce((n,f)=>n+f.shares,0),20);
+    assert.equal(r.store.orders().filter(o=>o.action==='SELL').length,1);
   }finally{await dispose(r);}
 });
 test('historical stop follows a fresh gap-down bid, keeps sellable and partial/cancel reconciliation, without a model sizing turn',async()=>{
@@ -151,24 +152,23 @@ test('historical stop follows a fresh gap-down bid, keeps sellable and partial/c
     assert.equal(r.broker.fills().filter(f=>f.action==='SELL').reduce((n,f)=>n+f.shares,0),20);
   }finally{await dispose(r);}
 });
-test('historical direct protection cannot bypass model failure halt, kill switch, or production sizing authority',async()=>{
-  for(const block of ['advisor','kill','production']){
+test('deterministic protection survives model failure and still obeys the kill switch',async()=>{
+  for(const block of ['advisor','kill']){
     const store=heldStore();store.set('historical_replay',true);const r=await rig(store);
     try{r.engine.setSettings({...r.s,codex_enabled:true});r.market.marketPrice='28.5';
       if(block==='advisor')r.engine.setAdvisorIssue('isolated model halt');
       if(block==='kill')r.engine.kill();
-      if(block==='production')Object.defineProperty(r.broker,'production',{value:true,configurable:true});
-      await r.engine.tick(at(1));assert.equal(r.store.orders().length,0);
-      assert.equal(r.engine.pendingExecutions.size,block==='production'?1:0);
+      await r.engine.tick(at(1));assert.equal(r.store.orders().length,block==='kill'?0:1);
+      assert.equal(r.engine.pendingExecutions.size,0);
     }finally{await dispose(r);}
   }
 });
-test('a model failure arriving in the final simulated account refresh blocks a direct protective intent',async()=>{
+test('a model failure arriving during the final account refresh cannot interrupt existing deterministic protection',async()=>{
   const store=heldStore();store.set('historical_replay',true);const r=await rig(store);
   try{r.engine.setSettings({...r.s,codex_enabled:true});r.market.marketPrice='28.5';
     const refresh=r.engine.refreshAccount.bind(r.engine);let reads=0;
     r.engine.refreshAccount=async date=>{const a=await refresh(date);if(++reads===3)r.engine.setAdvisorIssue('isolated halt during final refresh');return a;};
-    await r.engine.tick(at(1));assert.equal(r.engine.advisorIssue,'isolated halt during final refresh');assert.equal(r.store.orders().length,0);
+    await r.engine.tick(at(1));assert.equal(r.engine.advisorIssue,'isolated halt during final refresh');assert.equal(r.store.orders().length,1);
   }finally{await dispose(r);}
 });
 test('replay tracking panes never borrow current lows when displaying an old report or a legacy frame',()=>{

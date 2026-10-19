@@ -1,6 +1,7 @@
 /** Diagnostic output is an allowlist, never a copy of SDK stderr, URLs, paths or environment values. */
 export type CodexFailureKind='QUOTA'|'RATE_LIMIT'|'NETWORK'|'AUTH'|'ACCESS'|'MODEL'|'RUNTIME'|'TIMEOUT'|'CANCELLED'|'OTHER';
-export interface CodexFailureDetail {kind:CodexFailureKind;code:string;http_status?:number;exit_code?:number;exit_signal?:string;proxy_configured?:boolean;custom_ca_configured?:boolean}
+export interface CodexFailureDetail {kind:CodexFailureKind;code:string;http_status?:number;exit_code?:number;exit_signal?:string;proxy_configured?:boolean;custom_ca_configured?:boolean;
+  validation_phase?:'JSON'|'STRUCTURE'|'SEMANTIC';validation_issues?:{path:string;code:string}[]}
 const rawMessage=(error:unknown):string=>{
   const parts:string[]=[];let current=error;
   for(let n=0;n<4&&current instanceof Error;n++){parts.push(current.message);current=current.cause;}
@@ -8,7 +9,15 @@ const rawMessage=(error:unknown):string=>{
 };
 export function diagnoseCodexFailure(error:unknown):CodexFailureDetail {
   if(error instanceof CodexError)return {...error.diagnostic};
-  if(error instanceof SyntaxError||error instanceof Error&&error.name==='ZodError')return {kind:'OTHER',code:'INVALID_OUTPUT'};
+  if(error instanceof SyntaxError)return {kind:'OTHER',code:'INVALID_OUTPUT',validation_phase:'JSON'};
+  if(error instanceof Error&&error.name==='ZodError'){
+    // Zod messages and unrecognized_keys can contain private model text. Emit only known schema paths/codes.
+    const allowed=new Set(['decisions','smart','screening','entry','snapshot_id','expires_at','stance','candidates','summary','symbol','action','shares','limit_price','entry_when','trigger_price','reason','conditions','left','right','value','operator','stop_price','take_profit','reward_target','trailing_activate','trailing_fraction','rebound_fraction','request_id','lot']);
+    const rows=(error as Error&{issues?:{code:string;path:(string|number)[]}[]}).issues??[];
+    return {kind:'OTHER',code:'INVALID_OUTPUT',validation_phase:rows.some(i=>i.code==='custom')?'SEMANTIC':'STRUCTURE',
+      validation_issues:rows.slice(0,12).map(i=>({path:i.path.map(p=>typeof p==='number'?String(p):allowed.has(p)?p:'?').join('.'),
+        code:['custom','invalid_type','invalid_value','invalid_format','too_big','too_small','unrecognized_keys'].includes(i.code)?i.code:'SCHEMA'}))};
+  }
   const raw=rawMessage(error);
   if(/^Failed to parse item:/i.test(raw))return {kind:'RUNTIME',code:'STREAM_PROTOCOL'};
   if(/invalid output|未產生完整有效/.test(raw))return {kind:'OTHER',code:'INVALID_OUTPUT'};

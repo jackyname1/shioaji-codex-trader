@@ -36,6 +36,18 @@ export interface ExecutionRequest {
   historical_replay:boolean;
   capital?:import('./capital.js').CapitalSnapshot;
 }
+/** Select one legal lot, cap at the strategy's reference, and recheck costs at the actual quantity.
+ * Does not increase targets, round up to a whole lot, or treat max_shares as an allocation instruction. */
+export function deterministicAdvice(r:ExecutionRequest,s:Settings):ExecutionAdvice {
+  const desired=r.condition?.shares??(r.action==='SELL'?r.account.positions.find(p=>p.symbol===r.symbol)?.sellable??0:0);
+  for(const lot of [...r.lots].sort((a,b)=>(a.lot===(desired>=1000?'COMMON':'ODD')?-1:1)-(b.lot===(desired>=1000?'COMMON':'ODD')?-1:1))){
+    const shares=Math.floor(Math.min(desired,lot.max_shares)/lot.step)*lot.step;
+    if(!shares||shares<(lot.min_shares??lot.step))continue;
+    if(r.action==='BUY'&&entryQualityIssues(shares,lot.limit_price,r.protection,s).length)continue;
+    return {request_id:r.request_id,symbol:r.symbol,action:r.action,shares,lot:lot.lot,limit_price:lot.limit_price,reason:'程式確定性 sizing：股數不超過策略參考，成本與風控依送單前最新快照重驗'};
+  }
+  return {request_id:r.request_id,symbol:r.symbol,action:'HOLD',shares:0,lot:r.lots[0]?.lot??'ODD',limit_price:r.lots[0]?.limit_price??'0',reason:'參考股數範圍內無符合成本及風控的合法數量'};
+}
 export const executionSettingsKey=(s:Settings):string=>JSON.stringify(Object.entries(s)
   .filter(([key])=>!['start_minimized','keep_awake'].includes(key)).sort(([a],[b])=>a.localeCompare(b)));
 export function spendableCash(account:Account,s:Settings):{reserved:string;available:string}{

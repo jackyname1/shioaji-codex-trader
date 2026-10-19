@@ -41,4 +41,10 @@ class AuditTests(unittest.TestCase):
     x=document();t=event('2026-01-05T00:59:00Z','TRIGGER','9001 SELL：STOP');t['details']={'order':{'trigger_context':{'stop_price':'8','effective_stop':'8'}}};x['events'].insert(2,t)
     x['events'][3]['details']={'fill':{'id':'fill-id'},'order_id':'order-id'}
     r=module.audit(x);self.assertEqual(r['fills'][1]['stop_source'],'EXACT_TRIGGER_CONTEXT');self.assertEqual(r['fills'][1]['id'],'fill-id');self.assertEqual(r['fills'][1]['order_id'],'order-id')
+ def test_structured_fill_must_agree_with_display_message(self):
+    x=document();x['events'][1]['details']={'fill':{'id':'f','symbol':'9001','action':'BUY','shares':11,'price':'10','fee':'20','tax':'0'}}
+    with self.assertRaisesRegex(ValueError,'disagrees'):module.audit(x)
+ def test_duplicate_fill_identity_cannot_double_count_inventory(self):
+    x=document();e=x['events'][1];e['details']={'fill':{'id':'f'}};x['events'].insert(2,dict(e))
+    with self.assertRaisesRegex(ValueError,'Duplicate'):module.audit(x)
 if __name__=='__main__':unittest.main()

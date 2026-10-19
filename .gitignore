@@ -29,3 +29,5 @@ __pycache__/
 
 validation/**/*.case*.json
 validation/**/run-audits/
+validation/v030/case-*
+validation/v030/*.run.json.gz
