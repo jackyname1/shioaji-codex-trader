@@ -49,6 +49,16 @@ test('cost-invalid deterministic quantities never round up to meet minimum fee e
   const r={request_id:'r',symbol:'9001',action:'BUY',condition:{shares:30},protection:{stop_price:'29',take_profit:'30.1',reward_target:'30.1'},lots:[{lot:'ODD',step:1,min_shares:1,max_shares:32,limit_price:'30'}]} as unknown as Parameters<typeof deterministicAdvice>[0];
   assert.equal(deterministicAdvice(r,SettingsSchema.parse({...settings(),min_entry_reward_risk:'1.2'})).action,'HOLD');
 });
+test('a known invalid confirmation is rejected before creating any paid-model sizing request',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,codex_enabled:true,execution_sizing:'codex',entry_policy:'trend'});
+    r.engine.watchFeatures=Object.fromEntries(['9001','9002','9003','9004','9005'].map(s=>[s,{...features,ma5:31}]));
+    await r.engine.tick(now);
+    assert.equal(r.engine.pendingExecutions.size,0);assert.equal(r.store.orders().length,0);
+    assert.match(r.engine.decisionStates.get('9001')!.reason,/MA5/);
+    assert.ok(r.store.logs().some(l=>l.includes('未呼叫數量模型')));
+  }finally{await r.engine.close();r.store.close();}
+});
 test('confirmed rebound preserves its actual entry condition through deterministic sizing and final admission',async()=>{
   const r=await rig();try{
     r.engine.setSettings({...r.s,codex_enabled:true,execution_sizing:'deterministic',entry_policy:'pullback'});
