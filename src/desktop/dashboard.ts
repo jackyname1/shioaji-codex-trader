@@ -65,7 +65,7 @@ export function traySnapshot(state:DesktopState):TraySnapshot {
     watch:(r?.watch.entries??[]).map(w=>{const quote=r?.quotes.find(q=>q.symbol===w.symbol&&q.odd);
       const quoteFresh=quote&&Date.parse(cutoff)>=Date.parse(quote.trade_at)&&Date.parse(cutoff)-Date.parse(quote.trade_at)<=settings.quote_max_age*1000;
       return {symbol:w.symbol,name:w.name,price:quoteFresh?quote.last:'—',state:(actions[r?.decisions.find(d=>d.symbol===w.symbol)?.state??'']??w.reason)+' · 報價 '+dashboardTime(quote?.trade_at)+(quote&&!quoteFresh?'（已過期）':'')};}),
-    strategies:strategyItems(r,cutoff,settings.trade_direction),pending:orders.map(o=>({symbol:o.symbol,action:actions[o.action]??o.action,quantity:`${o.filled}／${o.shares} 股`,price:o.limit_price,status:actions[o.status]??o.status}))};
+    strategies:strategyItems(r,cutoff,replay?(state.backtest_progress.running?state.backtest_progress.effective_settings?.trade_direction:state.backtest_result?.settings.trade_direction) as Settings['trade_direction']??'auto':settings.trade_direction),pending:orders.map(o=>({symbol:o.symbol,action:actions[o.action]??o.action,quantity:`${o.filled}／${o.shares} 股`,price:o.limit_price,status:actions[o.status]??o.status}))};
 }
 
 export function panelBounds(anchor:{x:number;y:number;width:number;height:number},area:{x:number;y:number;width:number;height:number}){

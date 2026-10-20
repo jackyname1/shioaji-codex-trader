@@ -77,7 +77,7 @@ test('a reduce strategy sells only its explicit quantity once; remaining holding
   const r=await rig();try{
     r.market.depth=100;await r.engine.tick(now);await r.engine.tick(new Date(now.getTime()+3000));
     assert.equal(r.engine.account!.positions[0]!.shares,30);
-    const next=new Date('2026-10-12T10:00:00+08:00');await r.engine.syncAccount(next,true);
+    const next=new Date('2026-10-12T10:00:00+08:00');await r.engine.tick(next,false,false);
     r.engine.setSettings({...r.engine.settings,trade_direction:'reduce_only'});
     const snap=await r.engine.snapshot(next);
     const analysis:Analysis={snapshot_id:snap.snapshot_id,expires_at:new Date(next.getTime()+3600000).toISOString(),

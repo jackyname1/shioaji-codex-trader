@@ -152,7 +152,7 @@ function loadSettings(s:Settings):void {
 }
 function renderRuntime(state:DesktopState):void {
   const r=workspaceRuntime(state),s=latestSettings,paper=replayView(state);
-  const riskSettings=s&&paper?{...s,...(state.backtest_progress.running?state.backtest_progress.effective_settings:state.backtest_result?.settings)} as Settings:s;
+  const riskSettings=s&&paper?{...s,trade_direction:'auto',...(state.backtest_progress.running?state.backtest_progress.effective_settings:state.backtest_result?.settings)} as Settings:s;
   const accountOnly=state.connection.phase==='read_only';
   el('connection-dot').classList.toggle('connected',state.connected&&!accountOnly);el('connection-dot').classList.toggle('pending',accountOnly||!!state.connection.server_ready&&!state.connected||state.connection.busy);
   text('sidebar-connection',state.connection.busy?'連線中':accountOnly?'帳務可讀 · 委託暫停':state.connected?'Shioaji 已連線':state.connection.server_ready?'工作台待恢復':state.connection.phase==='failed'?'連線未完成':'尚未登入');
@@ -241,7 +241,7 @@ function renderRuntime(state:DesktopState):void {
   text('risk-summary',`現金保留 ${pct(riskSettings!.min_cash_fraction)} · 單筆 ${pct(riskSettings!.max_order_fraction)}（${riskSettings!.order_budget_basis==='EQUITY'?'淨資產':'扣除保留後'}） · 單檔 ${pct(riskSettings!.max_symbol_fraction)} · 日損失 ${pct(riskSettings!.daily_loss_fraction)} 停止新買進`);
 }
 function renderStrategy(state:DesktopState):void {
-  const r=workspaceRuntime(state),s=replayView(state)?{...latestSettings,...(state.backtest_progress.running?state.backtest_progress.effective_settings:state.backtest_result?.settings)}:latestSettings;
+  const r=workspaceRuntime(state),s=replayView(state)?{...latestSettings,trade_direction:'auto' as const,...(state.backtest_progress.running?state.backtest_progress.effective_settings:state.backtest_result?.settings)}:latestSettings;
   const direction=strategyDirection(r,{trade_direction:s?.trade_direction??'auto'},workspaceCutoff(state));
   text('strategy-direction-note',direction.detail);el('strategy-stance').title=direction.detail;
   el('strategy-stance').classList.toggle('restricted',direction.restricted);
