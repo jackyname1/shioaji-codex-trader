@@ -88,6 +88,9 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
   let units=0;
   if(!reasons.length){
     let lo=1,hi=q.odd?999:COMMON_MAX_SHARES/1000;
+    // An explicit reduction is an upper bound, even when a second model sizes it.
+    // Independent protective exits have no condition and retain their inventory-based bound.
+    if(ticket.order.action==='SELL'&&ticket.condition)hi=Math.min(hi,Math.floor(ticket.condition.shares/step));
     while(lo<=hi){const mid=Math.floor((lo+hi)/2);if(!test(mid*step).length){units=mid;lo=mid+1;}else hi=mid-1;}
   }
   let minimum=units?step:0;
@@ -116,6 +119,7 @@ capital.order_limit_twd 是程式已算好的單筆本金上限，不要另扣�
 cost_at_max_shares 是該上限數量按目前買價與停利目標估算的雙邊手續費、賣出稅與淨價差，不代表保證獲利；縮小數量時最低手續費未必同比減少。
 estimated_break_even_exit_price 是所選 lot 上限數量、今日漲停範圍內涵蓋費稅與估計滑價的最低合法報價；null 代表該範圍內找不到。它只是成本門檻，不能當成目標價、勝率或保證成交。不同股數須重算，不能為超過門檻捏造或提高原策略收益目標。
 BUY 必須再按你選定股數估算成本，不能只看價格百分比；若目標價差不足覆蓋成本或資料不足，應 HOLD 並說明。reward_target 是預估實際退場價（含回落的考量），不會觸發賣出；與固定 take_profit 同時存在時成本採較低者。兩者都 null 時不得編造預期獲利。
+SELL 若有 condition，condition.shares 是本輪明確減碼股數上限，不得增加；只能在該上限、合法交易單位與 lots.max_shares 內向下調整。獨立保護出場沒有 condition，沿用可賣庫存與風控界線。
 SELL 只能使用目前 sellable 的可賣庫存；今日新增零股不得當沖，不能借券、融資或賣空。
 SELL 的觸發可能是停損、停利、移動停損或定時策略減碼；清楚說明本次數量理由。
 禁止現金不足時改用槓桿、要求降低風控或把尚未可用的賣出交割款當現金。

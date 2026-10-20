@@ -1,12 +1,12 @@
 # Shioaji Codex Trader
 
-**[v0.1.1 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.1)** · Windows x64 免安裝
+**[v0.1.2 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.2)** · Windows x64 免安裝
 
 台灣股票桌面工作台。Shioaji 提供行情與帳務，Codex 設定股票策略，由程式逐筆核算股數、費稅、庫存及風控。提供即時模擬、歷史回測與實盤介面；啟動預設模擬模式，自動交易關閉。
 
 ## 下載與開始
 
-1. 下載 [Shioaji-Codex-Trader-0.1.1-Windows-x64.exe](https://github.com/jackyname1/shioaji-codex-trader/releases/download/v0.1.1/Shioaji-Codex-Trader-0.1.1-Windows-x64.exe)。先結束舊程式，再開新版；右下角可核對版本。
+1. 下載 [Shioaji-Codex-Trader-0.1.2-Windows-x64.exe](https://github.com/jackyname1/shioaji-codex-trader/releases/download/v0.1.2/Shioaji-Codex-Trader-0.1.2-Windows-x64.exe)。先結束舊程式，再開新版；右下角可核對版本。
 2. 開啟「帳戶與設定 → 帳戶連線」，輸入 API Key、Secret Key。實盤需要有效 CA 憑證及密碼；記住設定時使用系統加密保存。
 3. 在右側 Codex 控制台登入並測試連線。模型及推理強度可直接修改，儲存後於下一輪生效；留空使用帳戶預設模型。
 4. 先使用「模擬 → 即時模擬」或「歷史回放」。日常排程與回測用量各自設定、各自保存。回測預設每 5 個交易日分析一次，可調整為 1–20 個交易日。
@@ -18,12 +18,13 @@
 - 右上直接設定模型與推理強度，排程、連線狀態及測試連線集中在同區，實際模型與推理只顯示一次；下方顯示簡要 Codex 執行紀錄；完整紀錄可搜尋、匯出。
 - 右下獨立「股票策略總覽」以四欄分行顯示股票方向、觸發／限價、參考股數／保護及狀態，可放大查看九欄完整表格。
 - 單擊系統匣開啟速覽：**基本資料 → 持倉 → 策略 → 監測 → 委託**。支援顯示區塊、隱藏金額及點選股票。
+- 明確賣出股數是減碼上限；即使選用 Codex 額外確認，也只能在該上限與可賣庫存內調整，獨立停損保護另依庫存執行。
 - 「減碼優先」會禁止本輪新買進，依明確賣出條件及股數減少持倉；策略方向旁可開啟完整說明。交易風控另可保存「僅減碼」，持續禁止新買進；預設依有效策略決定。
 - 設定頁分成帳戶連線、日常排程、歷史回測、交易風控及進階與桌面。
 
-![v0.1.1 歷史回放工作台](docs/screenshots/workbench-v0.1.1.png)
+![v0.1.2 歷史回放工作台](docs/screenshots/workbench-v0.1.2.png)
 
-![v0.1.1 系統匣速覽](docs/screenshots/tray-v0.1.1.png)
+![v0.1.2 系統匣速覽](docs/screenshots/tray-v0.1.2.png)
 
 ## 兩組 Codex 設定
 
@@ -37,9 +38,9 @@
 
 啟動、手動分析、失敗嘗試與額外股數模型均計入對應策略上限。登入測試另外使用少量模型用量。行情更新、條件偵測及持倉保護不呼叫模型。回測以拉長分析間隔降低用量：休市不計，額外檢討也只在分析日執行；有效條件及持倉保護持續監測，策略過期不自動延長。若下一個必要模型步驟已無剩餘預算，會停止並標記 PARTIAL，不再模擬剩餘期間。回放倍速不增加模型頻率。執行中的回測固定使用啟動時設定，修改預設供後續測試使用。
 
-![v0.1.1 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.1.png)
+![v0.1.2 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.2.png)
 
-![v0.1.1 帳戶連線設定](docs/screenshots/connection-v0.1.1.png)
+![v0.1.2 帳戶連線設定](docs/screenshots/connection-v0.1.2.png)
 
 截圖均來自本版 Windows 隔離測試，使用合成資料。[截圖來源與雜湊](docs/screenshots/provenance.json)
 

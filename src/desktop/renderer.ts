@@ -265,9 +265,9 @@ function renderStrategy(state:DesktopState):void {
   for(const id of ['strategy-stocks','strategy-expanded']){
     if(id==='strategy-stocks')table(id,['股票／方向','觸發條件／限價','參考股數／保護','狀態'],rows.map(row=>[
       {...row[0] as {label:string;chartSymbol:string},label:(row[0] as {label:string}).label+'\n'+row[1]},
-      `${row[2]}\n限價 ${row[3]}`,`參考股數 ${row[4]}\n停損 ${row[5]}\n停利 ${row[6]}${row[7]==='—'?'':'\n移動 '+row[7]}`,row[8]!
+      `${row[2]}\n限價 ${row[3]}`,`${row[1]==='賣出'?'減碼上限':'參考股數'} ${row[4]}\n停損 ${row[5]}\n停利 ${row[6]}${row[7]==='—'?'':'\n移動 '+row[7]}`,row[8]!
     ]),'尚無股票策略；有效策略與持倉保護會列於此');
-    else table(id,['股票','方向','觸發條件','限價','參考股數','停損','停利','移動啟動／回落','狀態'],rows,'尚無股票策略');
+    else table(id,['股票','方向','觸發條件','限價','股數（賣出為上限）','停損','停利','移動啟動／回落','狀態'],rows,'尚無股票策略');
     for(const row of el(id).querySelectorAll<HTMLTableRowElement>('tbody tr[data-chart-symbol]')){
       row.title=items.find(d=>d.symbol===row.dataset.chartSymbol)?.reason??'持倉保護／程式選股規則';
     }

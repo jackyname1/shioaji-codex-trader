@@ -678,6 +678,7 @@ export class Engine {
         if(risk.gt(equity(account).times(this.settings.max_portfolio_stop_fraction)))reasons.push('同時觸停損的組合損失超過上限');
       }
     }
+    if(order.action==='SELL'&&condition&&order.shares>condition.shares)reasons.push('賣出股數超過本輪明確減碼上限');
     if (reasons.length) { this.decisionStates.set(order.symbol,{state:'BLOCKED',reason:reasons.join('；'),source:order.purpose});
       this.logOnce('RISK',`${order.symbol} ${order.action}：${reasons.join('；')}`);
       const refusal=createHash('sha256').update(`${twDay(now)}:${order.plan_id}:${order.symbol}:${order.action}:${reasons.join(';')}`).digest('hex');
