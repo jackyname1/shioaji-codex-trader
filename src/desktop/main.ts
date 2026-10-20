@@ -616,9 +616,10 @@ async function smokeTest(): Promise<void> {
       throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
     const strategyUi=await window.webContents.executeJavaScript(`(()=>{const table=document.querySelector('#strategy-stocks table'),pane=document.querySelector('.strategy-card').getBoundingClientRect(),codex=document.querySelector('.codex-panel').getBoundingClientRect();
       return {accent:getComputedStyle(document.querySelector('.strategy-card h2'),'::before').backgroundColor!== 'rgba(0, 0, 0, 0)',text:table?.textContent,below:pane.top>=codex.bottom,removed:!document.querySelector('#codex-instruction-control,#command-form,[data-command="clock-check"]'),
+        upperTools:!!document.querySelector('.codex-config #codex-test')&&!!document.querySelector('.codex-config #codex-login-status')&&!!document.querySelector('.codex-config .schedule-strip'),
         setting:document.querySelector('.codex-config #codex-model-control')!==null,
         first:document.querySelector('.market-column>section').classList.contains('positions-panel')};})()`);
-    if(!strategyUi.accent||!strategyUi.below||!strategyUi.removed||!strategyUi.setting||!strategyUi.first||!['參考股數','觸發條件','限價','停損','停利','狀態'].every(v=>strategyUi.text?.includes(v)))throw new Error('策略表、模型設定或持倉優先版面未通過');
+    if(!strategyUi.upperTools||!strategyUi.accent||!strategyUi.below||!strategyUi.removed||!strategyUi.setting||!strategyUi.first||!['參考股數','觸發條件','限價','停損','停利','狀態'].every(v=>strategyUi.text?.includes(v)))throw new Error('策略表、模型設定或持倉優先版面未通過');
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }
   smokeMark('TRAY_GUI');

@@ -45,7 +45,7 @@ test('a six-session replay analyses on sessions one and six only, including revi
   const calls:string[]=[];
   const r=await runBacktest({start:'2026-01-05',end:'2026-01-12',source:'sample',strategy:'codex',strategy_every_sessions:5,
     strategy_schedule:'fixed',strategy_times:['09:15'],postmarket_review_enabled:true},fixture(),
-    SettingsSchema.parse({codex_enabled:true,auto_watchlist:false}),async s=>{calls.push(s.asof);return hold(s);},new AbortController().signal);
+    SettingsSchema.parse({codex_enabled:true,auto_watchlist:false}),async s=>{assert.equal(s.hard_limits.replay_analysis_every_sessions,5);calls.push(s.asof);return hold(s);},new AbortController().signal);
   assert.equal(r.status,'COMPLETED');assert.equal(r.metrics.codex_calls,4);assert.equal(calls.length,4);
   assert.deepEqual(r.strategy_log.filter(x=>!x.review).map(x=>twDay(new Date(x.at))),['2026-01-05','2026-01-12']);
   assert.equal(r.reviews.length,2);assert.equal(r.daily_equity.length,6);assert.ok(r.daily_equity.every(d=>d.complete));

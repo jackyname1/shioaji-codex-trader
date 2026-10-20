@@ -224,7 +224,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     status=quality.successful_strategies?'PARTIAL':'FAILED';engine.entryBlocked=true;await cancelEntries(now);
     for(const id of [...engine.pendingExecutions.keys()])engine.finishExecution(id,'SIZE_FAILED','已達設定的 Codex 次數上限，未送單，回測停止',now);
     lastError='已達設定的 Codex 次數上限；回測停止於此刻，不繼續模擬剩餘期間';
-    limitations.push(lastError);
+    limitations.push(lastError,'呼叫上限包含選股、數量確認與檢討；未獲數量確認的觸發不會送單');
     activity(now.toISOString(),'HALTED',lastError);progress('PARTIAL',lastError);
   };
   const decision=async(now:Date,review=false):Promise<void>=>{
@@ -236,7 +236,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     try{progress('SNAPSHOT',`${twClock(now)} 建立當時帳戶、行情與已完成日 K 快照`);
       activity(now.toISOString(),'SNAPSHOT','建立當時帳戶、行情、觀測股與已完成日 K 快照');
       const snapshot=await engine.snapshot(now,review);snapshot.synthetic=dataset.synthetic;
-      snapshot.hard_limits={...snapshot.hard_limits,historical_replay:true,virtual_time:now.toISOString()};snapshot.data_limitations=[...new Set([...snapshot.data_limitations,...limitations])];
+      snapshot.hard_limits={...snapshot.hard_limits,historical_replay:true,replay_analysis_every_sessions:request.strategy_every_sessions,virtual_time:now.toISOString()};snapshot.data_limitations=[...new Set([...snapshot.data_limitations,...limitations])];
       let analysis:Analysis;
       stage=review?'REVIEW':'ANALYSIS';
       if(request.strategy==='codex'){calls++;progress(stage,`${twClock(now)} 等待 Codex ${review?'盤後檢討':'選股與設定條件'}完成；虛擬時間保持不動`);

@@ -135,3 +135,13 @@ tr[data-chart-symbol]{cursor:pointer}tr[data-chart-symbol]:hover{background:var(
 .research-column .strategy-stocks tbody tr:nth-child(even){background:#ffffff03}
 .research-column .strategy-stocks th{position:sticky;top:0;z-index:1;background:var(--panel)}
 @media(max-width:760px){.settings-dialog .form-grid.two{grid-template-columns:1fr}.settings-tabs button{min-width:85px;padding:7px}}
+
+/* Keep model, connection tools and cadence together above the activity log. */
+.codex-config .model-controls{grid-template-columns:minmax(0,1fr) 88px auto;align-items:end}
+.codex-config .model-controls>button{font-size:9px;min-height:28px;padding:4px 7px}
+.codex-config .schedule-strip{padding:5px 0 1px;margin-top:2px;background:transparent;flex-wrap:wrap;gap:5px 10px}
+.codex-config .schedule-strip>span{display:flex;align-items:baseline;gap:4px;white-space:nowrap}
+.codex-config .codex-auth{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;padding:3px 0;max-height:none;overflow:visible;background:transparent}
+.codex-config .codex-auth>p{flex:1 1 170px;min-width:0;margin:0;overflow-wrap:anywhere}
+.codex-config .codex-auth>.actions{margin-left:auto}
+.codex-config .codex-auth>strong{flex-basis:100%;order:3}
