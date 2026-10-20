@@ -84,7 +84,9 @@ test('the connection probe retains TLS diagnosis and clears its failed status on
   })()});
   try{await assert.rejects(auth.test(SettingsSchema.parse({})),error=>error instanceof CodexError&&error.diagnostic.code==='TLS_CERTIFICATE');
     assert.equal(auth.status.test_state,'failed');assert.match(auth.status.message,/TLS/);assert.ok(!auth.status.message.includes('PRIVATE_TOKEN'));
-    broken=false;await auth.test(SettingsSchema.parse({}));assert.equal(auth.status.test_state,'connected');
+    broken=false;const message=await auth.test(SettingsSchema.parse({codex_model:'gpt-6.1-sol',codex_reasoning:'low'}));
+    assert.equal(auth.status.test_state,'connected');assert.equal(message,'Codex 連線測試成功');assert.equal(auth.status.message,message);
+    assert.equal(auth.status.model,'gpt-6.1-sol');assert.equal(auth.status.reasoning,'low');
   }finally{auth.close();rmSync(root,{recursive:true,force:true});}
 });
 test('a sizing outage blocks automatic model calls while account reconciliation continues, then recovery still requires fresh sizing',async()=>{
