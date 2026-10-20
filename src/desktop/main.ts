@@ -543,10 +543,10 @@ async function smokeTest(): Promise<void> {
   await backtest.select(backtest.comparisons[0]!.id);await new Promise(resolve=>setTimeout(resolve,1500));
   const range=await window.webContents.executeJavaScript(`({start:document.querySelector('#chart-start').value,end:document.querySelector('#chart-end').value,schedule:document.querySelector('#schedule-strategy').textContent})`);
   if(range.start!==backtest.report.request.start||range.end!==backtest.report.request.end
-    ||range.schedule!==backtest.report.request.decision_interval_minutes+' 分鐘'||backtest.progress.total_runs!==undefined)throw new Error('切換歷史報表日期與排程未通過');
+    ||range.schedule!==`每${backtest.report.request.strategy_every_sessions??1}日 `+backtest.report.request.decision_interval_minutes+' 分鐘'||backtest.progress.total_runs!==undefined)throw new Error('切換歷史報表日期與排程未通過');
   smokeMark('REPLAY_GUI');window.webContents.debugger.attach('1.3');
   const artifacts=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(artifacts,{recursive:true});
-  for(const [width,height] of [[1600,960],[1366,768],[1920,1080]] as const){
+  for(const [width,height] of [[1600,960],[1366,768],[1100,740],[1920,1080]] as const){
     await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
     await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-start').value='2026-10-01';document.querySelector('#bt-end').value='2026-10-08';document.querySelector('#chart-symbol').value='9001';document.querySelector('#chart-start').value='2026-10-01';document.querySelector('#chart-end').value='2026-10-08';document.querySelector('#chart-form').requestSubmit();})()`);
     await new Promise(resolve=>setTimeout(resolve,1800));
@@ -616,10 +616,11 @@ async function smokeTest(): Promise<void> {
       throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
     const strategyUi=await window.webContents.executeJavaScript(`(()=>{const table=document.querySelector('#strategy-stocks table'),pane=document.querySelector('.strategy-card').getBoundingClientRect(),codex=document.querySelector('.codex-panel').getBoundingClientRect();
       return {accent:getComputedStyle(document.querySelector('.strategy-card h2'),'::before').backgroundColor!== 'rgba(0, 0, 0, 0)',text:table?.textContent,below:pane.top>=codex.bottom,removed:!document.querySelector('#codex-instruction-control,#command-form,[data-command="clock-check"]'),
+        direction:document.querySelector('#strategy-direction-note').textContent,columns:table?.querySelectorAll('thead th').length,help:!!document.querySelector('#direction-help-dialog'),
         upperTools:!!document.querySelector('.codex-config #codex-test')&&!!document.querySelector('.codex-config #codex-login-status')&&!!document.querySelector('.codex-config .schedule-strip'),
         setting:document.querySelector('.codex-config #codex-model-control')!==null,
         first:document.querySelector('.market-column>section').classList.contains('positions-panel')};})()`);
-    if(!strategyUi.upperTools||!strategyUi.accent||!strategyUi.below||!strategyUi.removed||!strategyUi.setting||!strategyUi.first||!['參考股數','觸發條件','限價','停損','停利','狀態'].every(v=>strategyUi.text?.includes(v)))throw new Error('策略表、模型設定或持倉優先版面未通過');
+    if(!strategyUi.help||!strategyUi.direction||strategyUi.columns!==4||!strategyUi.upperTools||!strategyUi.accent||!strategyUi.below||!strategyUi.removed||!strategyUi.setting||!strategyUi.first||!['參考股數','觸發條件','限價','停損','停利','狀態'].every(v=>strategyUi.text?.includes(v)))throw new Error('策略表、模型設定或持倉優先版面未通過');
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }
   smokeMark('TRAY_GUI');
@@ -705,6 +706,13 @@ async function smokeTest(): Promise<void> {
     ca:document.querySelector('#ca-path').value==='SYNTHETIC.pfx',password:document.querySelector('#ca-password').value==='SYNTHETIC_PASSWORD',masked:document.querySelector('#ca-password').type==='password'})`);
   if(!credentials.visible||credentials.key!=='password'||credentials.secret!=='password'||!credentials.ca||credentials.removed||!Object.values(prefilled).every(Boolean))throw new Error('帳戶設定與加密欄位自動填回未通過');
   await capture('SYNTHETIC-ui-connection.png',1600,960);
+  await window.webContents.executeJavaScript(`(()=>{document.querySelector('[data-settings-tab="risk"]').click();
+    const direction=document.querySelector('#s-direction');direction.value='reduce_only';direction.dispatchEvent(new Event('change',{bubbles:true}));
+    document.querySelector('#settings-form').requestSubmit();})()`);
+  await new Promise(resolve=>setTimeout(resolve,1200));
+  if(service.engine.settings.trade_direction!=='reduce_only'||!await window.webContents.executeJavaScript(`document.querySelector('#strategy-stance').textContent.includes('僅減碼')`))throw new Error('僅減碼設定與工作台方向未同步');
+  await service.saveSettings({...service.engine.settings,trade_direction:'auto'});await new Promise(resolve=>setTimeout(resolve,1200));
+  await window.webContents.executeJavaScript(`document.querySelector('[data-settings-tab="connection"]').click()`);
   const dailyBefore={times:[...service.engine.settings.strategy_times],limit:service.engine.settings.codex_daily_call_limit};
   const reportBefore=JSON.stringify(backtest.report?.settings);
   await window.webContents.executeJavaScript(`(()=>{document.querySelector('[data-settings-tab="replay"]').click();

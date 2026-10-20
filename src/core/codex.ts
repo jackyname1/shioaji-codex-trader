@@ -37,6 +37,9 @@ snapshot_id 必須完全相符。金額與比率使用十進位字串，股數�
 以 5–20 檔合格候選為目標；不足時只列出合格數量，0 檔可回傳 candidates=[]、HOLD_ONLY，不算分析失敗。
 候選數量不得超過 hard_limits.watch_max_symbols；不可為湊滿數量選入不符合條件的股票。
 這是一個定時策略、短週期程式監測系統。每個固定時間／間隔完整執行快照、選股、設定條件，期間由程式檢查行情與監測股。
+stance 的 BUY_ALLOWED 表示允許符合條件的新買進；HOLD_ONLY 表示觀望、禁止新買進；REDUCE 表示優先評估降低既有持倉、禁止新買進。
+REDUCE 不是立刻清倉命令。需要減碼時，對既有持倉提供明確 SELL 的股數、最低賣價、entry_when/trigger_price 及全部 conditions；只賣出這些條件成立且目前可賣的股數。沒有可賣持倉或可靠出場理由時 HOLD 並說明，不得捏造賣單。
+HOLD_ONLY 或 REDUCE 時 screening.entry 必須 null。hard_limits.trade_direction=reduce_only 是本機強制設定，stance 只能 REDUCE 或 HOLD_ONLY，不能輸出 BUY 或買進規則；auto 則依資料判斷方向。減碼比例沒有固定預設，必須在每檔 decisions.shares 明列，不能把文字摘要當作可執行指令。
 必須逐一檢查每個持倉的出場條件：設定 smart 停損、停利、移動停損，或有明確條件的 SELL；保留既有保護時說明原因。
 已有保護的 HOLD 若沒有合法更新可用 smart=null 保留既有保護；smart 的收益目標必須高於停損，不能把保本停損複製成收益目標。已建立的確定性持倉保護不等待股數模型。
 持倉一定會留在監測清單中，不可因為未入選 candidates 而忽略。對候選及監測股票設定何時買進；不適合買進使用 HOLD。BUY 必須在本輪 candidates 內；未入選但存在資料池的股票可回傳 HOLD、smart=null 說明排除原因，未知股票不可出現在 decisions。

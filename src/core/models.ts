@@ -140,6 +140,7 @@ export type EntryTrack=z.infer<typeof EntryTrackSchema>;
 export const SettingsSchema = z.strictObject({
   mode: z.enum(['demo', 'paper', 'readonly', 'live']).default('paper'),
   auto_execute: z.boolean().default(false), whole_lots: z.boolean().default(false),
+  trade_direction:z.enum(['auto','reduce_only']).default('auto'),
   base_url: z.string().url().default('http://127.0.0.1:8080'),
   manage_quote_subscriptions: z.boolean().default(true),
   stock_account_index: quantity.max(50).default(0),
