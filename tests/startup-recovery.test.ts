@@ -123,7 +123,8 @@ test('Codex verifies the selected model once after login and keeps a failed prob
     await login.check();assert.equal(calls,1);assert.equal(login.status.test_state,'failed');assert.match(login.status.message,/模型不可用/);
     reject=false;await login.test(settings);assert.equal(login.status.test_state,'connected');assert.equal(calls,2);
     settings.codex_model='another-isolated-model';await login.check();await until(()=>calls===3&&!login.status.testing);
-    assert.equal(login.status.test_state,'connected');assert.match(login.status.message,/another-isolated-model/);
+    assert.equal(login.status.test_state,'connected');assert.equal(login.status.message,'Codex 連線測試成功');
+    assert.equal(login.status.model,'another-isolated-model');assert.equal(login.status.reasoning,settings.codex_reasoning);
   }finally{login.close();rmSync(root,{recursive:true,force:true});}
 });
 test('data failure before model invocation is identified beside Codex instead of being reported as an unexplained strategy failure',async()=>{
