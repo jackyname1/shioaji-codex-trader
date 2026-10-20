@@ -56,7 +56,7 @@ test('chart zoom anchors the mouse, drag and slider share a viewport, updates pr
 test('paused slow Codex selection freezes virtual time; single step completes activation, risk, submission and reconciliation',async()=>{
   const clock=new ReplayClock(),abort=new AbortController(),frames:ReplayFrame[]=[],activities:ReplayActivity[]=[],progress:BacktestProgress[]=[];
   let release!:()=>void,entered!:()=>void,calls=0;const gate=new Promise<void>(resolve=>{release=resolve;}),began=new Promise<void>(resolve=>{entered=resolve;});
-  const running=runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{
+  const running=runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360,postmarket_review_enabled:true},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{
     if(++calls===1){entered();await gate;}return rules(s);
   },abort.signal,p=>progress.push(structuredClone(p)),clock,f=>frames.push(f),e=>activities.push(e),testSize);
   await began;const frozen=frames.at(-1)!.at;clock.setSpeed(60);clock.command('pause');await nextTurn();

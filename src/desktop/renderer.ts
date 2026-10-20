@@ -140,7 +140,7 @@ function renderRuntime(state:DesktopState):void {
   text('experience',state.experience);text('codex-login-status',state.codex_login);
   if(!r||!s){text('headline',state.connection.busy?'連線中':state.connection.server_ready?'工作台尚未就緒':'請先登入 Shioaji');text('runtime-note',state.error||state.connection.status);
     for(const id of ['cash','equity','next-strategy','watch-count'])text(id,'—');text('cash-detail','等待帳戶資料');text('settlement-detail','等待交割資料');text('data-status','工作台尚未就緒');
-    el('strategy-stocks').replaceChildren();text('strategy-count','0 檔');text('strategy-stance','工作台尚未就緒');text('strategy-summary','等待連線與有效策略');text('strategy-expiry','');text('rule-summary','');
+    renderStrategy(state);text('strategy-count','0 檔');text('strategy-stance','工作台尚未就緒');text('strategy-summary','等待連線與有效策略');text('strategy-expiry','');text('rule-summary','');
     for(const id of ['positions','orders','overview-watch','watchlist','watch-changes','decisions'])table(id,['狀態'],[],'工作台尚未完成連線');return;}
   const labels={demo:'介面測試資料',paper:'模擬 · 真實行情',readonly:'實盤監控',live:'實盤 · 真實帳戶'};
   text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
