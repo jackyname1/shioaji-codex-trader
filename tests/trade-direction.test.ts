@@ -100,3 +100,23 @@ test('replay records its direction and a reduce-only program run cannot buy',asy
   assert.equal(report.settings.trade_direction,'reduce_only');
   assert.ok(!report.orders.some(o=>o.action==='BUY'));assert.equal(report.status,'COMPLETED');
 });
+
+test('Codex quantity confirmation cannot enlarge an explicit reduction, while a quantity within the bound can submit',async()=>{
+  for(const shares of [20,10]){
+    const r=await rig();try{
+      r.market.depth=100;await r.engine.tick(now);await r.engine.tick(new Date(now.getTime()+3000));
+      const next=new Date('2026-10-12T10:00:00+08:00');await r.engine.tick(next,false,false);
+      r.engine.setSettings({...r.engine.settings,codex_enabled:true,execution_sizing:'codex',trade_direction:'reduce_only'});
+      const snap=await r.engine.snapshot(next);
+      const analysis:Analysis={snapshot_id:snap.snapshot_id,expires_at:new Date(next.getTime()+3600000).toISOString(),
+        stance:'REDUCE',candidates:[],screening:null,summary:'合成資料：減碼上限 10 股',decisions:[{
+          symbol:'9001',action:'SELL',shares:10,limit_price:'29.9',entry_when:'IMMEDIATE',trigger_price:'0',smart:null,reason:'合成資料減碼'}]};
+      await r.engine.activate(analysis,snap,next);await r.engine.tick(next);
+      const id=r.engine.nextExecutionId();assert.ok(id);
+      const input=await r.engine.executionRequest(id,next);assert.ok(input);
+      assert.ok(input.lots.every(l=>l.max_shares<=10));
+      assert.equal(await r.engine.confirmExecution(id,{...await testSize(input),shares},next),shares===10);
+      assert.equal(r.store.orders().filter(o=>o.purpose==='EXIT').length,shares===10?1:0);
+    }finally{await r.engine.close();r.store.close();}
+  }
+});
