@@ -1,15 +1,15 @@
 # Shioaji Codex Trader
 
-**[v0.1.0 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.0)** · Windows x64 免安裝
+**[v0.1.1 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.1)** · Windows x64 免安裝
 
 台灣股票桌面工作台。Shioaji 提供行情與帳務，Codex 設定股票策略，由程式逐筆核算股數、費稅、庫存及風控。提供即時模擬、歷史回測與實盤介面；啟動預設模擬模式，自動交易關閉。
 
 ## 下載與開始
 
-1. 下載 [Shioaji-Codex-Trader-0.1.0-Windows-x64.exe](https://github.com/jackyname1/shioaji-codex-trader/releases/download/v0.1.0/Shioaji-Codex-Trader-0.1.0-Windows-x64.exe)。先結束舊程式，再開新版；右下角可核對版本。
+1. 下載 [Shioaji-Codex-Trader-0.1.1-Windows-x64.exe](https://github.com/jackyname1/shioaji-codex-trader/releases/download/v0.1.1/Shioaji-Codex-Trader-0.1.1-Windows-x64.exe)。先結束舊程式，再開新版；右下角可核對版本。
 2. 開啟「帳戶與設定 → 帳戶連線」，輸入 API Key、Secret Key。實盤需要有效 CA 憑證及密碼；記住設定時使用系統加密保存。
 3. 在右側 Codex 控制台登入並測試連線。模型及推理強度可直接修改，儲存後於下一輪生效；留空使用帳戶預設模型。
-4. 先使用「模擬 → 即時模擬」或「歷史回放」。日常排程與回測用量各自設定、各自保存。
+4. 先使用「模擬 → 即時模擬」或「歷史回放」。日常排程與回測用量各自設定、各自保存。回測預設每 5 個交易日分析一次，可調整為 1–20 個交易日。
 5. 切換實盤後核對帳戶，再按「開始自動交易」啟動。重啟與故障恢復不會自動解除停止狀態。
 
 ## 工作台
@@ -20,27 +20,29 @@
 - 單擊系統匣開啟速覽：**基本資料 → 持倉 → 策略 → 監測 → 委託**。支援顯示區塊、隱藏金額及點選股票。
 - 設定頁分成帳戶連線、日常排程、歷史回測、交易風控及進階與桌面。
 
-![v0.1.0 歷史回放工作台](docs/screenshots/workbench-v0.1.0.png)
+![v0.1.1 歷史回放工作台](docs/screenshots/workbench-v0.1.1.png)
 
-![v0.1.0 系統匣速覽](docs/screenshots/tray-v0.1.0.png)
+![v0.1.1 系統匣速覽](docs/screenshots/tray-v0.1.1.png)
 
 ## 兩組 Codex 設定
 
 | 設定 | 日常交易 | 歷史回測 |
 |---|---|---|
-| 預設排程 | 每日 09:15、11:45 | 每個回測交易日 09:15 |
+| 預設排程 | 每日 09:15、11:45 | 每 5 個交易日 09:15 |
 | 用量上限 | 每日 2 次 | 整次／整批比較合計 20 次 |
 | 股數核算 | 程式計算 | 程式計算 |
 | 額外盤後檢討 | 關閉 | 關閉 |
 | 修改入口 | 帳戶與設定 → 日常排程 | 帳戶與設定 → 歷史回測，或回測工具列 ⚙ |
 
-啟動、手動分析、失敗嘗試與額外股數模型均計入對應策略上限。登入測試另外使用少量模型用量。行情更新、條件偵測及持倉保護不呼叫模型；到上限後不新增策略，持倉保護持續。回放倍速不增加模型頻率。執行中的回測固定使用啟動時設定，修改預設供後續測試使用。
+啟動、手動分析、失敗嘗試與額外股數模型均計入對應策略上限。登入測試另外使用少量模型用量。行情更新、條件偵測及持倉保護不呼叫模型。回測以拉長分析間隔降低用量：休市不計，額外檢討也只在分析日執行；有效條件及持倉保護持續監測，策略過期不自動延長。若下一個必要模型步驟已無剩餘預算，會停止並標記 PARTIAL，不再模擬剩餘期間。回放倍速不增加模型頻率。執行中的回測固定使用啟動時設定，修改預設供後續測試使用。
 
-![v0.1.0 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.0.png)
+![v0.1.1 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.1.png)
 
-![v0.1.0 帳戶連線設定](docs/screenshots/connection-v0.1.0.png)
+![v0.1.1 帳戶連線設定](docs/screenshots/connection-v0.1.1.png)
 
 截圖均來自本版 Windows 隔離測試，使用合成資料。[截圖來源與雜湊](docs/screenshots/provenance.json)
+
+預設每 5 個交易日分析，約 20–22 個交易日的一個月需 4–5 次、60–65 個交易日的三個月需 12–13 次策略分析；額外檢討與股數模型另計。這是呼叫次數估算，實際方案用量取決於輸入、輸出及推理強度。次數上限只作預算保護。舊 API 請求未提供跨日欄位時保留每日行為。
 
 ## 資金與保護
 
@@ -75,6 +77,6 @@ npm start
 npm run pack:win
 ```
 
-需要 Node.js 24 以上，內建官方 Shioaji。發行前執行 Linux／Windows 測試、Windows 來源與封裝 GUI 驗證，核對發布資產及 SHA-256。使用者資料、金鑰、憑證及帳務不進入版本庫。版本重新編為 0.1.0 不會清除本機資料。
+需要 Node.js 24 以上，內建官方 Shioaji。發行前執行 Linux／Windows 測試、Windows 來源與封裝 GUI 驗證，核對發布資產及 SHA-256。使用者資料、金鑰、憑證及帳務不進入版本庫。更新不會清除本機資料。
 
 [設定參數](docs/SETTINGS.md) · [操作說明](docs/OPERATIONS.md) · [版本說明](docs/RELEASE_NOTES.md) · [Windows 簽章](docs/WINDOWS_SIGNING.md) · [Shioaji 官方文件](https://sinotrade.github.io/)

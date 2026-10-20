@@ -707,14 +707,14 @@ async function smokeTest(): Promise<void> {
   const dailyBefore={times:[...service.engine.settings.strategy_times],limit:service.engine.settings.codex_daily_call_limit};
   const reportBefore=JSON.stringify(backtest.report?.settings);
   await window.webContents.executeJavaScript(`(()=>{document.querySelector('[data-settings-tab="replay"]').click();
-    for(const [id,value]of Object.entries({'s-replay-schedule':'interval','s-replay-interval':'240','s-replay-times':'09:30','s-replay-calls':'7','s-replay-sizing':'deterministic'})){
+    for(const [id,value]of Object.entries({'s-replay-days':'3','s-replay-schedule':'interval','s-replay-interval':'240','s-replay-times':'09:30','s-replay-calls':'7','s-replay-sizing':'deterministic'})){
       const input=document.getElementById(id);input.value=value;input.dispatchEvent(new Event('change',{bubbles:true}));}
     document.querySelector('#s-replay-review').checked=true;document.querySelector('#settings-form').requestSubmit();})()`);
   await new Promise(resolve=>setTimeout(resolve,1500));
-  const profile=await window.webContents.executeJavaScript(`({interval:document.querySelector('#bt-interval').value,limit:document.querySelector('#bt-calls').value,
+  const profile=await window.webContents.executeJavaScript(`({days:document.querySelector('#bt-days').value,interval:document.querySelector('#bt-interval').value,limit:document.querySelector('#bt-calls').value,
     schedule:document.querySelector('#bt-schedule').value,times:document.querySelector('#bt-times').value,sizing:document.querySelector('#bt-sizing').value,
     review:document.querySelector('#bt-review-enabled').checked,selected:document.querySelector('[data-settings-tab="replay"]').getAttribute('aria-selected')})`);
-  if(profile.interval!=='240'||profile.limit!=='7'||profile.schedule!=='interval'||profile.times!=='09:30'||profile.sizing!=='deterministic'||!profile.review||profile.selected!=='true'
+  if(profile.days!=='3'||service.engine.settings.replay_every_sessions!==3||profile.interval!=='240'||profile.limit!=='7'||profile.schedule!=='interval'||profile.times!=='09:30'||profile.sizing!=='deterministic'||!profile.review||profile.selected!=='true'
     ||service.engine.settings.replay_max_codex_calls!==7||service.engine.settings.replay_strategy_times[0]!=='09:30'
     ||JSON.stringify(service.engine.settings.strategy_times)!==JSON.stringify(dailyBefore.times)||service.engine.settings.codex_daily_call_limit!==dailyBefore.limit
     ||JSON.stringify(backtest.report?.settings)!==reportBefore)throw new Error('回測獨立設定未保存同步，或改寫日常設定／既有報表');
@@ -722,7 +722,7 @@ async function smokeTest(): Promise<void> {
   await window.webContents.executeJavaScript(`document.querySelector('#bt-calls').value='8'`);
   await service.saveSettings({...service.engine.settings,keep_awake:!service.engine.settings.keep_awake});await new Promise(resolve=>setTimeout(resolve,1200));
   if(!await window.webContents.executeJavaScript(`document.querySelector('#bt-calls').value==='8'`))throw new Error('一般設定更新覆蓋尚未開始的回測草稿');
-  await service.saveSettings({...service.engine.settings,replay_strategy_schedule:'fixed',replay_strategy_times:['09:15'],replay_interval_minutes:360,replay_max_codex_calls:20,replay_review_enabled:false});
+  await service.saveSettings({...service.engine.settings,replay_every_sessions:5,replay_strategy_schedule:'fixed',replay_strategy_times:['09:15'],replay_interval_minutes:360,replay_max_codex_calls:20,replay_review_enabled:false});
   await new Promise(resolve=>setTimeout(resolve,1200));
   await capture('SYNTHETIC-ui-replay-settings.png',1600,960);
   await window.webContents.executeJavaScript(`document.querySelector('[data-settings-tab="connection"]').click()`);

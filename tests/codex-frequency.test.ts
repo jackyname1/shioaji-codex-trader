@@ -24,10 +24,10 @@ test('upgrade applies the low-usage policy once and preserves later user edits a
 });
 test('live preferences and replay preferences persist independently across a desktop restart',()=>{
   const root=mkdtempSync(join(tmpdir(),'frequency-'));
-  try{const prefs=new DesktopSettings(root),s=SettingsSchema.parse({strategy_times:['09:15','11:45'],replay_strategy_times:['10:10'],replay_max_codex_calls:7});
+  try{const prefs=new DesktopSettings(root),s=SettingsSchema.parse({strategy_times:['09:15','11:45'],replay_strategy_times:['10:10'],replay_max_codex_calls:7,replay_every_sessions:3});
     prefs.save(s);const restored=new DesktopSettings(root).apply(s,'paper',s.base_url);
     assert.deepEqual(restored.strategy_times,['09:15','11:45']);assert.deepEqual(restored.replay_strategy_times,['10:10']);
-    assert.equal(restored.replay_max_codex_calls,7);assert.equal(restored.codex_daily_call_limit,2);
+    assert.equal(restored.replay_max_codex_calls,7);assert.equal(restored.replay_every_sessions,3);assert.equal(restored.codex_daily_call_limit,2);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
 test('two daily analysis attempts include failures, survive restarts, and reset by Taipei day',async()=>{
@@ -53,6 +53,6 @@ test('replay preset consumes one analysis per day with no review or quantity-mod
     strategy_times:s.replay_strategy_times,max_codex_calls:1,execution_sizing:s.replay_execution_sizing};
   const report=await runBacktest(request,data,s,async snap=>{calls++;return demoAnalysis(snap,{...s,mode:'demo'},new Date(snap.asof));},new AbortController().signal);
   assert.equal(calls,1);assert.equal(report.metrics.codex_calls,1);assert.equal(report.settings.execution_sizing,'deterministic');
-  assert.equal(report.reviews.length,0);assert.equal(report.status,'PARTIAL');assert.ok(report.quality.skipped_strategies>0);
+  assert.equal(report.reviews.length,0);assert.equal(report.status,'PARTIAL');assert.ok(report.quality.skipped_strategies>0);assert.equal(report.quality.halt_reason,'CODEX_BUDGET');
   assert.equal(BacktestRequestSchema.parse({start:day,end:day}).max_codex_calls,20);
 });

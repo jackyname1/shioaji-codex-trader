@@ -109,7 +109,7 @@ for(const [index,tab] of settingsTabs.entries()){
 }
 selectSettingsTab('connection');
 const guided:Record<string,keyof Settings>={
-  's-replay-schedule':'replay_strategy_schedule','s-replay-interval':'replay_interval_minutes','s-replay-calls':'replay_max_codex_calls',
+  's-replay-days':'replay_every_sessions','s-replay-schedule':'replay_strategy_schedule','s-replay-interval':'replay_interval_minutes','s-replay-calls':'replay_max_codex_calls',
   's-replay-sizing':'replay_execution_sizing','s-replay-review':'replay_review_enabled',
   's-catchup':'schedule_catch_up_minutes','s-timeout':'codex_timeout_seconds','s-pool':'candidate_pool_size','s-plan':'plan_max_minutes',
   's-exposure':'max_exposure_fraction','s-daily-buy':'max_daily_buy_fraction','s-daily-orders':'max_daily_buy_orders',
@@ -135,10 +135,10 @@ function loadSettings(s:Settings):void {
   for(const [id,key] of Object.entries(guided)){const node=el<HTMLInputElement>(id),v=s[key];
     if(typeof v==='boolean')node.checked=v;else node.value=String(v);}
   if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;}
-  const replayProfile=JSON.stringify([s.replay_strategy_schedule,s.replay_strategy_times,s.replay_interval_minutes,s.replay_max_codex_calls,
+  const replayProfile=JSON.stringify([s.replay_every_sessions,s.replay_strategy_schedule,s.replay_strategy_times,s.replay_interval_minutes,s.replay_max_codex_calls,
     s.replay_execution_sizing,s.replay_review_enabled,s.demo_cash,s.whole_lots]);
   if(loadedReplayProfile!==replayProfile&&!latestState?.backtest_progress.running){loadedReplayProfile=replayProfile;
-    for(const [id,v] of Object.entries({'bt-schedule':s.replay_strategy_schedule,'bt-times':s.replay_strategy_times.join(','),'bt-interval':s.replay_interval_minutes,
+    for(const [id,v] of Object.entries({'bt-days':s.replay_every_sessions,'bt-schedule':s.replay_strategy_schedule,'bt-times':s.replay_strategy_times.join(','),'bt-interval':s.replay_interval_minutes,
       'bt-calls':s.replay_max_codex_calls,'bt-sizing':s.replay_execution_sizing,
       'bt-monitor':5,'bt-watch':5,'bt-cash':s.demo_cash}))el<HTMLInputElement>(id).value=String(v);
     el<HTMLInputElement>('bt-review-enabled').checked=s.replay_review_enabled;el<HTMLInputElement>('bt-whole').checked=s.whole_lots;schedulingFields('bt');
@@ -188,7 +188,9 @@ function renderRuntime(state:DesktopState):void {
   text('next-label',paper?'模擬時間':'下一輪 Codex');text('next-strategy',paper?time(workspaceCutoff(state)):time(r.next_strategy_at));text('next-detail',paper?stamp(workspaceCutoff(state)):r.next_strategy_at?`${stamp(r.next_strategy_at)} · 台北`:'等待已驗證交易日');
   const replaySettings=paper&&!state.backtest_progress.running?state.backtest_result?.request:undefined;
   const marketCadence=paper&&(state.backtest_progress.running?value('bt-entry-cadence')==='market':replaySettings?.entry_cadence==='market');
-  text('schedule-strategy',paper?(replaySettings?(replaySettings.strategy_schedule==='fixed'?replaySettings.strategy_times.join(' / '):replaySettings.decision_interval_minutes+' 分鐘'):
+  const replayCadence=state.backtest_progress.running?Number(state.backtest_progress.effective_settings?.replay_every_sessions??value('bt-days')):replaySettings?replaySettings.strategy_every_sessions??1:Number(value('bt-days'));
+  el('schedule-strategy').title=paper?`每 ${replayCadence} 個交易日分析；休市不計，未分析日持續監測`:'日常交易排程';
+  text('schedule-strategy',paper?`每${replayCadence}日 `+(replaySettings?(replaySettings.strategy_schedule==='fixed'?replaySettings.strategy_times.join(' / '):replaySettings.decision_interval_minutes+' 分鐘'):
     value('bt-schedule')==='fixed'?value('bt-times'):value('bt-interval')+' 分鐘'):s.strategy_schedule==='fixed'?s.strategy_times.join(' / '):s.decision_interval_minutes+' 分鐘');text('analysis-status',paper?phase[state.backtest_progress.phase]??state.backtest_progress.phase:r.sizing?'確認股數':r.analyzing?'條件分析中':valid?'監測中':'等待策略');
   text('schedule-monitor',marketCadence?'進場／智慧逐筆':paper&&['0.2.3','0.2.2','0.2.1'].includes(state.backtest_result?.version??'')?'300 秒／智慧逐筆':(paper?replaySettings?.monitor_interval_seconds??300:s.monitor_interval_seconds)+' 秒');text('monitor-status',`最近偵測 ${stamp(r.last_monitor_at)}`);
   text('schedule-watch',(paper?replaySettings?.watch_refresh_minutes??value('bt-watch'):s.watch_refresh_minutes)+' 分鐘');text('scan-status',r.scanning?'正在更新觀測':`最近更新 ${stamp(r.watch.asof)}`);
@@ -287,7 +289,7 @@ function renderBacktest(state:DesktopState):void {
   table('bt-fills',['台北時間','股票','方向','股數','價格','手續費 / 稅','已實現損益'],r.fills.slice().reverse().map(f=>[stamp(f.at),f.symbol,action[f.action]??f.action,f.shares,fmt(f.price),`${fmt(f.fee)} / ${fmt(f.tax)}`,f.realized_pnl===null?'—':fmt(f.realized_pnl)]),'本次無成交；請核對策略、資料與風控紀錄');
   table('bt-daily',['日期','淨值','現金','待收交割'],r.daily_equity.map(d=>[d.day,fmt(d.equity),fmt(d.cash),fmt(d.settlement_credits)]));
   text('bt-strategy-log',r.strategy_log.map(s=>`${stamp(s.at)} ${s.review?'檢討':'策略'} ${s.stance}\n${s.summary}`).join('\n\n'));
-  text('bt-limitations',[`實際處理截止：${stamp(r.asof)}${r.quality.halt_reason?' · Codex 故障停止，並非完整期間結果':''}`,
+  text('bt-limitations',[`實際處理截止：${stamp(r.asof)}${r.quality.halt_reason==='CODEX_BUDGET'?' · 已達設定的次數上限，回測停止':r.quality.halt_reason?' · Codex 故障停止，並非完整期間結果':''}`,
     `已處理交易日：${r.quality.processed_sessions??r.daily_equity.length}；賣出委託：${m.sell_orders??'舊報表未統計'}`,
     `暖機不足股票：${r.quality.insufficient_symbols.join('、')||'無'}`,`缺行情交易日：${r.quality.missing_sessions.join('、')||'無'}`,...r.limitations].join('\n'));
   table('bt-workflow',['台北時間','步驟','股票','條件與結果'],(r.workflow??[]).slice(-400).map(e=>[stamp(e.at),phase[e.stage]??e.stage,e.symbols?.join('、')??'—',e.message+
@@ -319,7 +321,7 @@ el('reset').addEventListener('click',()=>{settingsDirty=false;void refresh();});
 el('s-schedule').addEventListener('change',()=>schedulingFields('s'));el('s-replay-schedule').addEventListener('change',()=>schedulingFields('s-replay'));el('bt-schedule').addEventListener('change',()=>schedulingFields('bt'));
 function request(compare=false):BacktestRequest {
   return {start:value('bt-start'),end:value('bt-end'),initial_cash:value('bt-cash'),source:value('bt-source') as BacktestRequest['source'],strategy:value('bt-strategy') as BacktestRequest['strategy'],
-    whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
+    whole_lots:checked('bt-whole'),strategy_every_sessions:Number(value('bt-days')),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
     capital_profile:value('bt-capital-profile') as BacktestRequest['capital_profile'],entry_cadence:value('bt-entry-cadence') as BacktestRequest['entry_cadence'],start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:value('replay-mode')==='direct'?0:Number(value('replay-speed-number')),
     decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
     comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),postmarket_review_enabled:checked('bt-review-enabled'),execution_sizing:value('bt-sizing') as BacktestRequest['execution_sizing'],execution_slippage_bps:Number(value('bt-execution-slip')),fill_assumption:value('bt-fill') as BacktestRequest['fill_assumption'],research:{portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
@@ -644,7 +646,7 @@ el('connect-saved').addEventListener('click',()=>void run(async()=>{const result
 async function beginReplay(compare=false):Promise<string>{
   const form=el<HTMLFormElement>('backtest-form');if(!form.reportValidity())throw new Error('請核對模擬日期、本金與排程');
   if(!latestSettings)throw new Error('設定尚未載入');
-  const replaySettings:Settings={...latestSettings,replay_strategy_schedule:value('bt-schedule') as Settings['replay_strategy_schedule'],
+  const replaySettings:Settings={...latestSettings,replay_every_sessions:Number(value('bt-days')),replay_strategy_schedule:value('bt-schedule') as Settings['replay_strategy_schedule'],
     replay_strategy_times:times(value('bt-times')),replay_interval_minutes:Number(value('bt-interval')),replay_max_codex_calls:Number(value('bt-calls')),
     replay_review_enabled:checked('bt-review-enabled'),replay_execution_sizing:value('bt-sizing') as Settings['replay_execution_sizing']};
   await window.trader.saveSettings(JSON.stringify(replaySettings));latestSettings=replaySettings;
