@@ -105,7 +105,7 @@ test('a paused quantity turn releases the service queue for reconciliation and e
   let at=new Date(now);const service=new TradingService(':memory:','demo',()=>new ControlledMarket(),{now:()=>at,
     executionAdvisor:async request=>{entered();await gate;return testSize(request);}});
   try{
-    await service.start(false);service.engine.setSettings({...service.engine.settings,codex_enabled:true,auto_execute:true,watch_min_amount:'0'});
+    await service.start(false);service.engine.setSettings({...service.engine.settings,execution_sizing:'codex',codex_enabled:true,auto_execute:true,watch_min_amount:'0'});
     const snap=await service.engine.snapshot(at);await service.engine.activate(demoAnalysis(snap,service.engine.settings,at),snap,at);
     await service.engine.tick(at);const task=service.processExecutions();await began;
     assert.equal(service.sizing,true);at=new Date(now.getTime()+3000);
@@ -127,7 +127,7 @@ test('a slow trigger-time Codex turn freezes replay time and completes confirmat
   const day='2026-01-05',data=syntheticDataset(day,day);for(const p of data.points){p.open=p.high=p.low=p.close='30';p.volume_shares=1000000;}
   const clock=new ReplayClock(),frames:ReplayFrame[]=[];let release!:()=>void,entered!:()=>void,quantities=0;
   const gate=new Promise<void>(resolve=>{release=resolve;}),began=new Promise<void>(resolve=>{entered=resolve;});
-  const running=runBacktest({start:day,end:day,source:'sample',strategy:'codex',end_time:'09:31'},data,SettingsSchema.parse({codex_enabled:true}),
+  const running=runBacktest({start:day,end:day,source:'sample',strategy:'codex',end_time:'09:31'},data,SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),
     async s=>{const a=demoAnalysis(s,SettingsSchema.parse({mode:'demo'}),new Date(s.asof));a.decisions[0]!.limit_price='30.3';a.screening!.entry=null;return a;},new AbortController().signal,undefined,clock,f=>frames.push(f),undefined,
     async input=>{if(++quantities===1){entered();await gate;}return testSize(input);});
   await began;const at=frames.at(-1)!.at;clock.command('pause');await new Promise<void>(resolve=>setImmediate(resolve));
@@ -142,7 +142,7 @@ test('Codex replay cannot silently bypass a missing quantity advisor or its shar
   const analyze=async(s:ReturnType<typeof snapshot>)=>demoAnalysis(s,SettingsSchema.parse({mode:'demo'}),new Date(s.asof));
   for(const budget of [1,10]){
     const report=await runBacktest({start:day,end:day,source:'sample',strategy:'codex',end_time:'09:12',max_codex_calls:budget},data,
-      SettingsSchema.parse({codex_enabled:true}),analyze,new AbortController().signal);
+      SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),analyze,new AbortController().signal);
     assert.equal(report.status,'PARTIAL');assert.equal(report.orders.length,0);assert.equal(report.fills.length,0);
     assert.ok(report.metrics.codex_calls<=budget);
     assert.ok(budget===1?report.limitations.some(x=>x.includes('呼叫上限包含')):report.failures!.some(f=>f.stage==='SIZING'&&f.issue.includes('禁止跳過')));
