@@ -88,3 +88,30 @@ tr[data-chart-symbol]{cursor:pointer}tr[data-chart-symbol]:hover{background:var(
 /* The strategy occupies the space formerly used by the command composer. */
 .codex-panel>.codex-config{padding:7px 10px;gap:4px}.codex-actions>.effective-model{flex:1;margin:0}.codex-panel>.strategy-card{display:flex;flex-direction:column;flex:1.65 1 230px;min-height:130px;padding:9px 10px;overflow:hidden}.strategy-card>.section-heading{justify-content:space-between;flex-shrink:0}.strategy-overview{flex-shrink:0}.strategy-overview>strong{display:block;font-size:11px;color:var(--mint);margin-top:7px}.strategy-overview>small{display:block;font-size:9px;margin:4px 0}.strategy-overview>p{max-height:52px;overflow:auto}.strategy-stocks{min-height:40px;overflow:auto;flex:1;scrollbar-gutter:stable}.stock-strategy{padding:7px 8px;background:var(--field);border:1px solid var(--line);border-left:2px solid var(--sky);border-radius:4px;margin:6px 0}.stock-strategy-heading{display:flex;align-items:center;justify-content:space-between;gap:3px}.stock-strategy-heading>button{font-size:11px;color:var(--sky);padding:2px 0;min-height:21px;text-align:left;white-space:normal}.stock-strategy-heading>.chip{font-size:8px;padding:2px 4px;flex-shrink:0}.stock-strategy p{display:flex;gap:6px;line-height:1.5;max-height:none;margin:4px 0;font-size:10px;overflow:visible}.stock-strategy p>span:first-child{color:var(--muted);flex:0 0 24px}.stock-strategy p>span:last-child{overflow-wrap:anywhere;white-space:pre-wrap}.strategy-empty{padding:8px 0;color:var(--muted)}.codex-panel>.analyst-stream{flex:1 1 90px;min-height:50px}.strategy-card>details{flex-shrink:0;max-height:120px;overflow:auto}.strategy-card:focus{outline:none}.strategy-card:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 @media(max-height:800px){.codex-panel>.strategy-card{flex-basis:180px;min-height:100px;padding:6px 8px}.strategy-overview>p{max-height:36px}.stock-strategy p{font-size:9px}.stock-strategy{padding:5px 6px}.strategy-card>details{max-height:85px}}
+/* Trading desk: holdings first, model and short history above a separate strategy grid. */
+.terminal-grid{grid-template-columns:clamp(205px,17vw,270px) minmax(420px,1fr) clamp(390px,32vw,620px)}
+.market-column{grid-template-rows:minmax(135px,.8fr) minmax(145px,1fr) minmax(174px,.9fr)}
+.research-column{display:grid;grid-template-rows:minmax(360px,.95fr) minmax(190px,1.05fr);gap:7px;min-width:0;min-height:0}
+.research-column>.strategy-card{padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.research-column>.strategy-card>.section-heading{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.research-column>.strategy-card>.section-heading strong{margin-right:auto}
+.research-column .strategy-overview{padding:0 10px;display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;border-bottom:1px solid var(--line)}
+.research-column .strategy-overview>strong,.research-column .strategy-overview>small{margin:5px 0}
+.research-column .strategy-overview>details{font-size:9px;color:var(--muted);width:100%}
+.research-column .strategy-stocks{flex:1;min-height:75px;overflow:auto}
+.research-column .strategy-stocks table{table-layout:fixed;min-width:0;width:100%;font-size:10px}
+.research-column .strategy-stocks th,.research-column .strategy-stocks td{padding:7px 6px}
+.research-column .strategy-stocks td:nth-child(3){max-width:190px;min-width:85px;white-space:normal}
+.research-column .strategy-card>details{padding:5px 10px;border-top:1px solid var(--line);max-height:100px;overflow:auto}
+.model-controls{grid-template-columns:minmax(0,1fr) 105px;gap:7px}
+.model-controls input{width:100%;min-width:0}.model-controls label{min-width:0}
+.codex-config .form-footer{margin:0;padding:0;gap:5px}.codex-config .form-footer p{font-size:9px;margin:0}
+.compact-event{display:grid;gap:3px;padding:6px 0;border-bottom:1px solid var(--line);line-height:1.45;color:var(--subtext)}
+.compact-event small{font-size:9px;color:var(--muted)}.compact-event span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact-event.failed span{color:var(--up)}
+@media(max-width:1400px){.terminal-grid{grid-template-columns:205px minmax(420px,1fr) 390px}}
+@media(max-height:800px){.research-column{grid-template-rows:360px minmax(150px,1fr)}.market-column{grid-template-rows:125px minmax(140px,1fr) 174px}.research-column .strategy-overview>details{display:none}}
+
+.research-column .strategy-stocks th{font-size:9px;white-space:normal}.research-column .strategy-stocks th:nth-child(1){width:17%}.research-column .strategy-stocks th:nth-child(2){width:9%}.research-column .strategy-stocks th:nth-child(3){width:22%}.research-column .strategy-stocks th:nth-child(4){width:10%}.research-column .strategy-stocks th:nth-child(5){width:10%}.research-column .strategy-stocks th:nth-child(6){width:20%}.research-column .strategy-stocks th:nth-child(7){width:12%}
+.research-column .strategy-stocks td{white-space:pre-line;overflow-wrap:anywhere;vertical-align:top}.research-column .strategy-stocks td button{white-space:normal;padding:0;text-align:left}.research-column .strategy-stocks td:nth-child(3){min-width:0}
+
+.research-column .codex-panel{overflow:auto}.research-column .analyst-stream{min-height:35px}.research-column .codex-config{flex-shrink:0}.research-column .codex-details{display:none}

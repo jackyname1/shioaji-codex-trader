@@ -13,7 +13,7 @@ export function strategySlots(day:string,settings:Settings,calendar:TradingCalen
     for(let m=start;m<810;m+=settings.decision_interval_minutes)times.push(minuteClock(m));
   }
   return [...new Set(times)].sort().map(time=>({key:`${day}:${time}:strategy`,at:`${day}T${time}:00+08:00`,review:false}))
-    .concat({key:`${day}:${settings.postmarket_time}:review`,at:`${day}T${settings.postmarket_time}:00+08:00`,review:true});
+    .concat(settings.postmarket_review_enabled?[{key:`${day}:${settings.postmarket_time}:review`,at:`${day}T${settings.postmarket_time}:00+08:00`,review:true}]:[]);
 }
 export function dueStrategy(now:Date,settings:Settings,calendar:TradingCalendar,handled:(key:string)=>boolean):StrategySlot|undefined {
   return strategySlots(twDay(now),settings,calendar).filter(s=>{

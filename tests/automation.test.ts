@@ -25,7 +25,7 @@ const bundle=():WatchBundle=>({pool:snapshot().universe.map(c=>({...c,amount:'50
 function flat(start='2026-01-05',end='2026-01-09'):HistoryDataset{const data=syntheticDataset(start,end);for(const p of data.points)p.open=p.high=p.low=p.close='30';return data;}
 test('fixed strategy times use Taipei sessions and persist one claim per slot, including restart and catch-up boundaries',()=>{
   const st=new Store(':memory:'),calendar=new TradingCalendar(st),s=SettingsSchema.parse({});try{
-    assert.deepEqual(strategySlots('2026-10-08',s,calendar).map(x=>twClock(new Date(x.at))),['09:15','11:45','14:00']);
+    assert.deepEqual(strategySlots('2026-10-08',s,calendar).map(x=>twClock(new Date(x.at))),['09:15','11:45']);
     assert.equal(strategySlots('2026-10-09',s,calendar).length,0);
     const clock=new Date('2026-10-08T09:20:00+08:00'),slot=dueStrategy(clock,s,calendar,()=>false)!;
     assert.equal(twClock(new Date(slot.at)),'09:15');st.set('schedule_'+slot.key,{started:true});
@@ -37,7 +37,7 @@ test('fixed strategy times use Taipei sessions and persist one claim per slot, i
 });
 test('interval schedules are independent of fast monitoring, have no pre-open odd-lot slot and apply the future opening change',()=>{
   const st=new Store(':memory:'),c=new TradingCalendar(st),s=SettingsSchema.parse({strategy_schedule:'interval',decision_interval_minutes:180});try{
-    assert.deepEqual(strategySlots('2026-10-08',s,c).map(x=>twClock(new Date(x.at))),['09:10','12:10','14:00']);
+    assert.deepEqual(strategySlots('2026-10-08',s,c).map(x=>twClock(new Date(x.at))),['09:10','12:10']);
     assert.equal(twClock(new Date(strategySlots('2026-12-08',s,c)[0]!.at)),'09:00');
     assert.equal(nextMonitorTime(new Date('2026-10-08T09:10:01+08:00'),3).toISOString(),'2026-10-08T01:10:03.000Z');
     assert.throws(()=>SettingsSchema.parse({strategy_times:['09:15','09:15']}));assert.throws(()=>SettingsSchema.parse({strategy_times:['13:30']}));

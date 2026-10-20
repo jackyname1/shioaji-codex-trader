@@ -45,7 +45,7 @@ test('explicit proxy and custom CA settings survive the Codex environment filter
 test('an SDK error emits one safe diagnostic and preserves its type across the analyst boundary',async()=>{
   const events:AnalystEvent[]=[];
   const runner:Runner=async()=>({events:(async function*(){yield {type:'turn.failed',error:{message:'ECONNREFUSED http://private-host?token=PRIVATE_TOKEN'}} as ThreadEvent;})()});
-  const analyst=new CodexAnalyst(SettingsSchema.parse({codex_enabled:true}),'/unused',runner,undefined,event=>events.push(event));
+  const analyst=new CodexAnalyst(SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),'/unused',runner,undefined,event=>events.push(event));
   await assert.rejects(analyst.analyze(snapshot()),error=>error instanceof CodexError&&error.kind==='NETWORK'&&error.diagnostic.code==='CONNECTION_REFUSED');
   const failures=events.filter(e=>e.stage==='FAILED');assert.equal(failures.length,1);
   assert.deepEqual(failures[0]!.details,{kind:'NETWORK',code:'CONNECTION_REFUSED',...codexNetworkContext(process.env)});
@@ -67,7 +67,7 @@ test('a real analyst timeout is distinct from a caller cancellation',async t=>{
     const runner:Runner=async(_prompt,{signal})=>{entered();await new Promise<void>((_resolve,reject)=>{
       signal.addEventListener('abort',()=>reject(new Error('AbortError PRIVATE_TOKEN')),{once:true});
     });throw new Error('unreachable');};
-    const events:AnalystEvent[]=[],controller=new AbortController(),analyst=new CodexAnalyst(SettingsSchema.parse({codex_enabled:true,codex_timeout_seconds:30}),'/unused',runner,undefined,e=>events.push(e));
+    const events:AnalystEvent[]=[],controller=new AbortController(),analyst=new CodexAnalyst(SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true,codex_timeout_seconds:30}),'/unused',runner,undefined,e=>events.push(e));
     const pending=analyst.analyze(snapshot(),controller.signal);await began;
     if(cancelled)controller.abort();else t.mock.timers.tick(30000);
     await assert.rejects(pending,error=>error instanceof CodexError&&error.kind===(cancelled?'CANCELLED':'TIMEOUT')&&shouldHaltCodex(error)===!cancelled);
@@ -91,7 +91,7 @@ test('a sizing outage blocks automatic model calls while account reconciliation 
   let at=new Date(now),calls=0;const service=new TradingService(':memory:','demo',()=>new ControlledMarket(),{now:()=>at,
     executionAdvisor:async request=>{if(++calls===1)throw new Error('ECONNRESET PRIVATE_TOKEN');return testSize(request);}});
   try{
-    await service.start(false);service.engine.setSettings({...service.engine.settings,codex_enabled:true,auto_execute:true,watch_min_amount:'0'});
+    await service.start(false);service.engine.setSettings({...service.engine.settings,execution_sizing:'codex',codex_enabled:true,auto_execute:true,watch_min_amount:'0'});
     const snap=await service.engine.snapshot(at);await service.engine.activate(demoAnalysis(snap,service.engine.settings,at),snap,at);
     await service.engine.tick(at);await service.processExecutions();assert.equal(calls,1);assert.match(service.engine.advisorIssue,/連線被重設/);
     assert.equal(service.engine.pendingExecutions.size,0);assert.equal(service.store.orders().length,0);
@@ -118,7 +118,7 @@ test('transport, authentication and timeout failures end historical replay at th
   const day='2026-01-05';
   for(const error of [new Error('ENOTFOUND PRIVATE_TOKEN'),new Error('401 Unauthorized PRIVATE_TOKEN'),new CodexError('Codex 回應逾時','TIMEOUT')]){
     const data=syntheticDataset(day,'2026-01-06'),frames:ReplayFrame[]=[];let calls=0;
-    const report=await runBacktest({start:day,end:'2026-01-06',source:'sample',strategy:'codex'},data,SettingsSchema.parse({codex_enabled:true}),
+    const report=await runBacktest({start:day,end:'2026-01-06',source:'sample',strategy:'codex'},data,SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),
       async()=>{calls++;throw error;},new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,testSize);
     assert.equal(calls,1);assert.equal(report.status,'PARTIAL');assert.equal(report.quality.halt_reason,'CODEX_'+diagnoseCodexFailure(error).kind);
     assert.equal(report.asof,report.quality.halted_at);assert.equal(report.daily_equity.at(-1)!.complete,false);
@@ -127,7 +127,7 @@ test('transport, authentication and timeout failures end historical replay at th
   }
 });
 test('a sizing transport failure never skips confirmation or proceeds to another historical model request',async()=>{
-  const day='2026-01-05',data=syntheticDataset(day,'2026-01-06'),config=SettingsSchema.parse({codex_enabled:true});let sizes=0;
+  const day='2026-01-05',data=syntheticDataset(day,'2026-01-06'),config=SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true});let sizes=0;
   for(const p of data.points){p.open=p.high=p.low=p.close='30';p.volume_shares=1000000;}
   const report=await runBacktest({start:day,end:'2026-01-06',source:'sample',strategy:'codex'},data,config,
     async s=>demoAnalysis(s,config,new Date(s.asof)),new AbortController().signal,undefined,undefined,undefined,undefined,

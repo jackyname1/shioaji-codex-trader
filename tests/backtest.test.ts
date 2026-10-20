@@ -74,7 +74,7 @@ test('daily CSV reveals open at the simulated start and close only at 13:30, usi
   assert.equal((await market.history('9001',new Date(start+'T12:00:00+08:00'))).at(-1)!.close,29);
 });
 test('backtest reuses the trading engine, accounts for costs and reconciles realized plus unrealized PnL',async()=>{
-  const r=await runBacktest(options(),flatDataset(),SettingsSchema.parse({}),undefined,new AbortController().signal);
+  const r=await runBacktest({...options(),postmarket_review_enabled:true},flatDataset(),SettingsSchema.parse({}),undefined,new AbortController().signal);
   assert.equal(r.status,'COMPLETED');assert.equal(r.metrics.codex_calls,0);assert.ok(r.metrics.filled_orders>0);
   assert.ok(d(r.metrics.fees).gt(0));assert.ok(d(r.metrics.net_pnl).eq(d(r.metrics.realized_pnl).plus(r.metrics.unrealized_pnl)));
   assert.ok(d(r.metrics.final_equity).eq(d(r.metrics.initial_cash).plus(r.metrics.net_pnl)));

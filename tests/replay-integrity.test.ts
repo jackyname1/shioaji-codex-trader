@@ -112,7 +112,7 @@ test('past-date scanner cache avoids repeated API traffic; date-mismatched respo
 });
 test('quota or rate limit halts at the failed strategy, writes a partial checkpoint and makes no further model requests',async()=>{
   for(const kind of ['QUOTA','RATE_LIMIT'] as const){let calls=0;const frames:ReplayFrame[]=[];
-    const r=await runBacktest({start:day,end:'2026-01-06',source:'sample',strategy:'codex'},flat(),SettingsSchema.parse({codex_enabled:true}),async()=>{
+    const r=await runBacktest({start:day,end:'2026-01-06',source:'sample',strategy:'codex'},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async()=>{
       calls++;throw new CodexError(kind==='QUOTA'?'Codex 額度不足':'Codex 限流',kind);
     },new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,testSize);
     assert.equal(calls,1);assert.equal(r.status,'PARTIAL');assert.equal(r.quality.halted_at,r.asof);
@@ -123,7 +123,7 @@ test('quota or rate limit halts at the failed strategy, writes a partial checkpo
   assert.equal(codexFailureKind(new Error('insufficient_quota')),'QUOTA');assert.equal(codexFailureKind(new Error('429 Too many requests')),'RATE_LIMIT');
 });
 test('quota during quantity confirmation never bypasses the second turn or retries subsequent symbols',async()=>{
-  let sizes=0;const config=SettingsSchema.parse({codex_enabled:true});
+  let sizes=0;const config=SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true});
   const r=await runBacktest({start:day,end:'2026-01-06',source:'sample',strategy:'codex'},flat(),config,async s=>demoAnalysis(s,config,new Date(s.asof)),new AbortController().signal,
     undefined,undefined,undefined,undefined,async()=>{sizes++;throw new CodexError('Codex 額度不足');});
   assert.equal(sizes,1);assert.equal(r.status,'PARTIAL');assert.equal(r.orders.length,0);assert.equal(r.fills.length,0);

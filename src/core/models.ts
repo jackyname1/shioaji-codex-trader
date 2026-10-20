@@ -158,7 +158,7 @@ export const SettingsSchema = z.strictObject({
   entry_strategy_mode:z.enum(['legacy','multi']).default('legacy'),
   // Explicit alternatives for controlled comparisons; never inferred from model prose.
   entry_policy:z.enum(['legacy','trend','pullback','breakout']).default('legacy'),
-  execution_sizing:z.enum(['codex','deterministic']).default('codex'),
+  execution_sizing:z.enum(['codex','deterministic']).default('deterministic'),
   adaptive_protection:z.boolean().default(true), dynamic_allocation:z.boolean().default(false),
   risk_slippage_fraction:fraction.refine(v=>d(v).lte('0.05')).default('0.001'),
   overnight_gap_fraction:fraction.default('0.05'), max_gap_risk_fraction:fraction.default('0.02'),
@@ -182,6 +182,16 @@ export const SettingsSchema = z.strictObject({
   codex_reasoning: z.enum(['default', 'low', 'medium', 'high', 'xhigh']).default('default'),
   codex_timeout_seconds: quantity.min(30).max(1800).default(300),
   premarket_time: clock.default('08:40'), postmarket_time: clock.default('14:00'),
+  codex_frequency_version:z.literal(1).default(1),
+  codex_daily_call_limit:quantity.min(1).max(50).default(2),
+  postmarket_review_enabled:z.boolean().default(false),
+  replay_strategy_schedule:z.enum(['fixed','interval']).default('fixed'),
+  replay_strategy_times:z.array(clock.refine(v=>v>='08:00'&&v<'13:30')).min(1).max(6)
+    .refine(v=>new Set(v).size===v.length,'回測策略時間不可重複').default(['09:15']),
+  replay_interval_minutes:quantity.min(10).max(360).default(360),
+  replay_max_codex_calls:quantity.min(1).max(2000).default(20),
+  replay_review_enabled:z.boolean().default(false),
+  replay_execution_sizing:z.enum(['codex','deterministic']).default('deterministic'),
   strategy_schedule: z.enum(['fixed','interval']).default('fixed'),
   strategy_times: z.array(clock.refine(v => v >= '08:00' && v < '13:30')).min(1).max(6)
     .refine(v => new Set(v).size === v.length, '策略時間不可重複').default(['09:15','11:45']),
@@ -203,6 +213,11 @@ export function storedSettings(raw: unknown): Settings {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return SettingsSchema.parse({});
   const value = { ...raw } as Record<string, unknown>;
   delete value.fee_verified; delete value.settlement_debit_sign;
+  // Apply the requested low-usage preset once; future edits remain user-controlled.
+  if(value.codex_frequency_version===undefined)Object.assign(value,{
+    codex_frequency_version:1,strategy_schedule:'fixed',strategy_times:['09:15','11:45'],
+    codex_daily_call_limit:2,postmarket_review_enabled:false,execution_sizing:'deterministic',
+  });
   // Preserve the effective limit of pre-0.2 saved profiles; the replay preset is separate.
   if(value.order_budget_basis===undefined)value.order_budget_basis='AFTER_RESERVE';
   return SettingsSchema.parse(value);

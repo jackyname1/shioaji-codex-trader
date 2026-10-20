@@ -29,7 +29,7 @@ function rows(id:string,items:{symbol:string;title:string;detail:string;right:st
   if(!nodes.length){const p=document.createElement('p');p.className='empty';p.textContent=empty;host.replaceChildren(p);}else host.replaceChildren(...nodes);
 }
 function render(s:TraySnapshot){const money=(v:string)=>privateMoney?'••••':v;
-  for(const [id,v] of Object.entries({clock:s.clock,workspace:s.workspace,activity:s.activity,updated:s.updated,connection:s.connection,codex:s.codex,issue:s.issue,cash:money(s.cash),equity:money(s.equity),settlement:privateMoney?'交割金額已隱藏':s.settlement,'account-at':'帳務截至 '+s.accountAt,next:s.next,monitor:s.monitor,'order-count':String(s.orders),summary:s.strategy,expiry:s.expiry}))text(id,v);
+  for(const [id,v] of Object.entries({workspace:s.workspace,activity:s.activity,updated:s.updated,connection:s.connection,codex:s.codex,issue:s.issue,cash:money(s.cash),equity:money(s.equity),settlement:privateMoney?'交割金額已隱藏':s.settlement,'account-at':'帳務截至 '+s.accountAt,next:s.next,monitor:s.monitor,'order-count':String(s.orders),expiry:s.expiry}))text(id,v);
   el('issue').hidden=!s.issue;
   rows('positions',s.positions.map(p=>({symbol:p.symbol,title:p.symbol+' '+p.name,detail:privateMoney?'股數已隱藏':p.shares,right:money(p.pnl)})),'目前無持倉，或持倉資料尚未就緒');
   rows('watch',s.watch.map(w=>({symbol:w.symbol,title:w.symbol+' '+w.name,detail:w.state,right:w.price})),'尚無監測股票');

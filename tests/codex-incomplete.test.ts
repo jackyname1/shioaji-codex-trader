@@ -13,7 +13,7 @@ import {runBacktest} from '../src/core/backtest.js';
 import {syntheticDataset} from '../src/core/backtest-data.js';
 import {ControlledMarket,now,snapshot} from './helpers.js';
 
-const settings=SettingsSchema.parse({codex_enabled:true});
+const settings=SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true});
 const secret='PRIVATE_TOKEN https://private.invalid/?token=PRIVATE_TOKEN C:\\private\\auth.json';
 const stream=(events:ThreadEvent[]):Runner=>async()=>({events:(async function*(){yield* events;})()});
 const completed={type:'turn.completed',usage:{input_tokens:1,cached_input_tokens:0,cache_write_input_tokens:0,output_tokens:1,reasoning_output_tokens:0}} as ThreadEvent;
@@ -108,7 +108,7 @@ test('a native runtime fault blocks repeated realtime sizing calls while account
     calls++;throw new Error(`Codex Exec exited with code 1: unexpected native failure ${secret}`);
   }});
   try{
-    await service.start(false);service.engine.setSettings({...service.engine.settings,codex_enabled:true,auto_execute:true,watch_min_amount:'0'});
+    await service.start(false);service.engine.setSettings({...service.engine.settings,execution_sizing:'codex',codex_enabled:true,auto_execute:true,watch_min_amount:'0'});
     const snap=await service.engine.snapshot(at);await service.engine.activate(demoAnalysis(snap,service.engine.settings,at),snap,at);
     await service.engine.tick(at);await service.processExecutions();
     assert.equal(calls,1);assert.equal(service.store.orders().length,0);assert.ok(service.engine.advisorIssue);

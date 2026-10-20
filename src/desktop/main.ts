@@ -1,5 +1,3 @@
-import {diagnoseClock,type ClockDiagnostic} from '../core/clock-diagnostics.js';
-let clockDiagnostic:ClockDiagnostic|undefined;
 import {buildIdentity} from '../core/build-identity.js';
 import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, dialog, powerSaveBlocker,
   safeStorage, shell, screen, type IpcMainInvokeEvent } from 'electron';
@@ -260,7 +258,7 @@ function trusted(event: IpcMainInvokeEvent): void {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame)
     throw new Error('無效的桌面 IPC 來源');
 }
-function desktopState():DesktopState { return ({clock_diagnostic:clockDiagnostic,status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
+function desktopState():DesktopState { return ({status:service?.engine.status(new Date()) ?? '',logs:service?.store.logs() ?? [],
     settings:JSON.stringify(service?.engine.settings ?? commonSettings.apply(SettingsSchema.parse({mode}),mode,nativeConnection.baseUrl),null,2),
     connected:connected(),workspace_mode:mode==='live'?'live':'paper',error:initialError||service?.engine.dataIssue||'',backtest:backtest.text(),backtest_running:backtest.progress.running,
     backtest_report:!!backtest.report,experience:service?experienceStatus(service.store,service.engine.settings,new Date().toISOString()):'',codex_login:codexLogin.status.message,
@@ -302,7 +300,6 @@ function registerIpc(): void {
   };
   handle('trader:state',desktopState);
   handle('trader:command',async value => {
-    if(value==='clock-check'){clockDiagnostic=await diagnoseClock();return clockDiagnostic.message;}
     if (typeof value !== 'string' || value.length > 2000 || !service) throw new Error('未知指令或程式尚未啟動');
     if (value.trim() === 'exit') { await exit(); return '結束程式'; }
     const command=value.trim();
@@ -589,7 +586,7 @@ async function smokeTest(): Promise<void> {
       model:document.querySelector('#codex-effective-model').textContent,summary:document.querySelector('#analyst-stream').textContent,
       compact:state.analyst_events.filter(e=>e.context==='live').every(e=>e.details===undefined)};})()`);
     const expectedCash=Number(spendableCash(service.engine.account!,service.engine.settings).available);
-    if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('不截斷')||!realtime.summary.includes('資料就緒')||!realtime.summary.includes('歷史已就緒 18 檔')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源、資料就緒與完整摘要未通過');
+    if(Math.abs(realtime.cash-expectedCash)>.01||realtime.runtimeCash===realtime.replayCash||realtime.source!=='live'||!realtime.model.includes('isolated-smoke-model')||!realtime.summary.includes('資料就緒')||!realtime.summary.includes('歷史已就緒 18 檔')||!realtime.compact)throw new Error('即時模擬帳戶、圖表來源、資料就緒與完整摘要未通過');
     await capture(`SYNTHETIC-ui-realtime-${width}.png`,width,height);
   }
   smokeMark('SMART_GUI');
@@ -617,10 +614,11 @@ async function smokeTest(): Promise<void> {
       open:document.querySelector('.conditions-details').open,overflow:document.documentElement.scrollWidth>innerWidth};})()`);
     if(!smartUi.open||smartUi.overflow||height>=900&&!smartUi.allVisible||!['低點','高點','已啟動','收益目標（不觸發）','優先停損'].every(v=>smartUi.text.includes(v)))
       throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
-    const strategyUi=await window.webContents.executeJavaScript(`(()=>{const card=document.querySelector('#strategy-stocks .stock-strategy'),box=document.querySelector('.strategy-card').getBoundingClientRect();
-      return {text:card?.textContent,width:card?.getBoundingClientRect().right<=box.right,removed:!document.querySelector('#codex-instruction-control,#command-form'),
-        setting:document.querySelector('#settings-dialog #codex-model-control')!==null};})()`);
-    if(!strategyUi.width||!strategyUi.removed||!strategyUi.setting||!['參考','觸發','價格','保護','理由'].every(v=>strategyUi.text?.includes(v)))throw new Error('個股策略視窗與模型設定位置未通過');
+    const strategyUi=await window.webContents.executeJavaScript(`(()=>{const table=document.querySelector('#strategy-stocks table'),pane=document.querySelector('.strategy-card').getBoundingClientRect(),codex=document.querySelector('.codex-panel').getBoundingClientRect();
+      return {text:table?.textContent,below:pane.top>=codex.bottom,removed:!document.querySelector('#codex-instruction-control,#command-form,[data-command="clock-check"]'),
+        setting:document.querySelector('.codex-config #codex-model-control')!==null,
+        first:document.querySelector('.market-column>section').classList.contains('positions-panel')};})()`);
+    if(!strategyUi.below||!strategyUi.removed||!strategyUi.setting||!strategyUi.first||!['參考股數','觸發條件','限價','停損','停利','狀態'].every(v=>strategyUi.text?.includes(v)))throw new Error('策略表、模型設定或持倉優先版面未通過');
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }
   smokeMark('TRAY_GUI');
@@ -636,7 +634,7 @@ async function smokeTest(): Promise<void> {
     ||!trayState.data.strategies.some((d:{symbol:string})=>d.symbol===smartSymbol))
     throw new Error('系統匣資訊或隔離橋接未通過');
   // The tray must be unable to read the main window's saved credential endpoint or submit commands.
-  if(!await overview.webContents.executeJavaScript(`window.overview.state().then(s=>!('settings' in s)&&!('live' in s)&&!('logs' in s))`))throw new Error('速覽不得取得完整桌面設定');
+  if(!await overview.webContents.executeJavaScript(`window.overview.state().then(s=>!('settings' in s)&&!('live' in s)&&!('logs' in s)&&!('clock' in s))`))throw new Error('速覽不得取得完整桌面設定');
   await overview.webContents.executeJavaScript(`document.querySelector('#customize').click();const input=document.querySelector('[data-section="watch"]');input.click();document.querySelector('#privacy').click()`);
   if(!await overview.webContents.executeJavaScript(`document.querySelector('[data-panel="watch"]').hidden&&document.querySelector('#cash').textContent==='••••'`))throw new Error('速覽顯示設定或金額遮罩失敗');
   await overview.webContents.executeJavaScript(`document.querySelector('[data-section="watch"]').click();document.querySelector('#privacy').click();document.querySelector('#customize').click()`);
@@ -664,10 +662,9 @@ async function smokeTest(): Promise<void> {
     if(saved.version!==app.getVersion()||!saved.diagnostics.endpoints.length||/SYNTHETIC_KEY|SYNTHETIC_SECRET|SYNTHETIC_PASSWORD|account_id|ca_password/.test(JSON.stringify(saved)))throw new Error('診斷匯出包含敏感資料或版本未通過');
   }finally{dialog.showSaveDialog=originalSave;}
   await capture('SYNTHETIC-ui-diagnostics.png',1920,1080);await window.webContents.executeJavaScript(`document.querySelector('#diagnostics-dialog').close()`);
-  await window.webContents.executeJavaScript(`document.querySelector('#analyst-stream [data-event-id="smoke-event-257"] details').open=true`);await new Promise(resolve=>setTimeout(resolve,400));
   const tail=service.store.analystEvent('smoke-event-259')!;service.store.recordAnalystEvent({...tail,message:tail.message+' · 串流持續更新'});service.analystEvents=service.store.analystEvents();
   await new Promise(resolve=>setTimeout(resolve,1300));
-  if(!await window.webContents.executeJavaScript(`(()=>{const detail=document.querySelector('#analyst-stream [data-event-id="smoke-event-257"] details');return detail.open&&detail.textContent.includes('COMPLETE_SNAPSHOT')})()`))throw new Error('Codex 串流更新收起正在檢視的完整快照');
+  if(!await window.webContents.executeJavaScript(`document.querySelectorAll('#analyst-stream .compact-event').length<=12 && !document.querySelector('#analyst-stream pre,#analyst-stream details')`))throw new Error('簡要 Codex 紀錄未保持精簡');
   await window.webContents.executeJavaScript(`document.querySelector('#analyst-history-open').click()`);await new Promise(resolve=>setTimeout(resolve,500));
   const journal=await window.webContents.executeJavaScript(`(async()=>{const full=await window.trader.analystHistory('runtime'),detail=await window.trader.analystDetail('runtime','smoke-event-257');
     const view=document.querySelector('#analyst-history-records');return {open:document.querySelector('#analyst-history-dialog').open,count:view.querySelectorAll('.analyst-event').length,
