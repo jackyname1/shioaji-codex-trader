@@ -2,100 +2,100 @@
   "app_version": "0.1.1",
   "platform": "Windows x64",
   "fixture": "isolated synthetic GUI smoke test; no user credentials or brokerage orders",
-  "source_commit": "9e900855fd1e623f94893a21ec3e079069938dab",
-  "source_tree": "0a222e1aceae14cf4f58c07a7e2b1456669ebbbb",
-  "workflow_run_id": 39477743970,
+  "source_commit": "183d12833364ecfa7b8016ca6e7cda1ecb22a81c",
+  "source_tree": "2a8bfe5c6832cf0e2ebf28c1c62a58dd19fbbd2f",
+  "workflow_run_id": 39479808536,
   "images": [
     {
       "source_file": "SYNTHETIC-ui-paper-1600.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-paper-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 253130,
-      "sha256": "a5e699377074cf60ed9e81df300ccf6ab22062a1d396f2d2978454564d3761b6",
-      "git_blob_sha": "1706eaba12173cf3c83be0b71c0a493e239bd6e5"
+      "size_bytes": 253984,
+      "sha256": "51c00373e770d82defc6236b9e835b5e63cf3b00a4da52540d2b7ad693d37d13",
+      "git_blob_sha": "91090d64df81875268c127d15efeb94e1fc16f29"
     },
     {
       "source_file": "SYNTHETIC-ui-capital-profile.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-capital-profile.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 251844,
-      "sha256": "43d33492ff0a50d4ab53d0d3b0888ed9c6289b9a638e7daf61af9036558e1d12",
-      "git_blob_sha": "70a38bef13da0895f21c184186ed1d8638a4bac2"
+      "size_bytes": 252472,
+      "sha256": "970eaa91c88aee66d4d053ecafa793c9d13187f19e862dd429eba8da904d693c",
+      "git_blob_sha": "969fc309b396da9b587bc1f91295612a2849f7d9"
     },
     {
       "source_file": "SYNTHETIC-ui-smart-conditions-1600.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-smart-conditions-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 199560,
-      "sha256": "cc86515071adf894ee748efd0d3b17f57e9c3d2c6af5efd59692a8b5816de7a9",
-      "git_blob_sha": "37ce1a5198173cc125f6014c31e9771237449022"
+      "size_bytes": 198713,
+      "sha256": "2b0a0140ec62b8ab0d938c5f412e4b2b8b29419ef583e4c8618985aa733109c3",
+      "git_blob_sha": "b3ccac70ca3ac493c42da068052b00e394c366d2"
     },
     {
       "source_file": "SYNTHETIC-ui-realtime-1600.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-realtime-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 247873,
-      "sha256": "770e6a40e5b13feabe4f0a33b01256154cc1011dc549f13559a4024e282abb36",
-      "git_blob_sha": "e69822830c71b3b4f069b52b02b9ac0d864ea3c5"
+      "size_bytes": 248444,
+      "sha256": "299689fa3961818cef301a9fd2eecb4dc5700750b3317d9f0bfcf7e9d903a47f",
+      "git_blob_sha": "59079d761768a40dc917dbdd02513ba33b76efc1"
     },
     {
       "source_file": "SYNTHETIC-ui-live.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-live.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 240983,
-      "sha256": "461934fb7e7320f7ae95dd81d9bddd26a5a8cc8d48b542c6261b96befb636b18",
-      "git_blob_sha": "519030b7398281ffcb749da38addc90a1f0ca16f"
+      "size_bytes": 241104,
+      "sha256": "ce8897b07e064a7f1a39a08d322f02e8543a3a0e44401160d086adbf5e2b76ca",
+      "git_blob_sha": "ba3a1224f6869c37ba096aa313641e463ff89088"
     },
     {
       "source_file": "SYNTHETIC-ui-connection.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-connection.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 212817,
-      "sha256": "9c6f1f8f7335d4fe1369c58292c52f21c9186106f7bb250682b303983e80f61e",
-      "git_blob_sha": "41947f1a20220a13f69675d305f7cd50db60f369"
+      "size_bytes": 212709,
+      "sha256": "dfc51f50b333155c937b1ccf774044ffa19cc3264323def34a22782166efc928",
+      "git_blob_sha": "d7179cec51d4179b494dff0a863b326dc48607c1"
     },
     {
       "source_file": "SYNTHETIC-ui-codex-history.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-codex-history.png",
       "width": 1920,
       "height": 1080,
-      "size_bytes": 275487,
-      "sha256": "1e9f816c9f334380e3d2bea1ef624995e6c7e2b3df8928a0cd36923da8043454",
-      "git_blob_sha": "96a73b916f04bb21cecf6c4d1f1e4dfe708a1125"
+      "size_bytes": 269746,
+      "sha256": "e3143eee4a1721661c8c7bfa995786a2abb06e97f535c5c3a7afa5c0d7800311",
+      "git_blob_sha": "2dffbc2180d7fa0c6776dee665456dc91efd959e"
     },
     {
       "source_file": "SYNTHETIC-ui-native-login-failure.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-native-login-failure.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 179129,
-      "sha256": "e96bf46df51219e9519f7d6ec8e1764f6dcb057bb5dd064f6c46d83b9025b1e8",
-      "git_blob_sha": "c8e58141d01c7ca0873658a7ce0f3ff6bbece3ad"
+      "size_bytes": 178139,
+      "sha256": "65eb1e503e5db446c2c6e9bbe7c9a6c19062cae7c5fbf527a492b225313c68fc",
+      "git_blob_sha": "52c61f138ce8a62c69e930d0f90a0c39ce39537e"
     },
     {
       "source_file": "SYNTHETIC-ui-tray.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-tray.png",
       "width": 440,
       "height": 690,
-      "size_bytes": 39231,
-      "sha256": "f3743b2fa724805fec79ed71b20fe67b9c0c21e60174ed6c4a0ce0c20019296c",
-      "git_blob_sha": "1f7dcf9e0fe55c8a3fe8f8c02f44d16ee3ce86a0"
+      "size_bytes": 39340,
+      "sha256": "a0e5b4e9c51a33e6f2a39fa025c7915ec173b916f5807e9bc81fa7cc758a82c8",
+      "git_blob_sha": "6c8420bca1a7fa68f7c3fbd84325ae903e1dae78"
     },
     {
       "source_file": "SYNTHETIC-ui-replay-settings.png",
       "path": "docs/capture-bundles/v0.1.1/SYNTHETIC-ui-replay-settings.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 200468,
-      "sha256": "43d8753cd8738ff03d92b399f99828b6104b90a4be7e18dff7f4f7ed91154ad2",
-      "git_blob_sha": "d82be43fb5a440b1d5c555466032bb6eb345f541"
+      "size_bytes": 200334,
+      "sha256": "c7e8a74ccb81f4c411ff1d9c750395fb48c2d091013e0b1ce65bb7945eb5ad04",
+      "git_blob_sha": "25c1ae1a1355428b3d96029ae6f4f50bf3bd3376"
     }
   ],
-  "bundle_sha256": "d6adaca3f73f2c80b26f6ce81f68208d817815b87d2fb390986f1476056618b0"
+  "bundle_sha256": "cf45d0ed50cf39cf5bfeb74eceb106af8097748bc9c864ca21325cdc926d9f1d"
 }
