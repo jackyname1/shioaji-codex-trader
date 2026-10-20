@@ -94,7 +94,7 @@ tr[data-chart-symbol]{cursor:pointer}tr[data-chart-symbol]:hover{background:var(
 .research-column{display:grid;grid-template-rows:minmax(360px,.95fr) minmax(190px,1.05fr);gap:7px;min-width:0;min-height:0}
 .research-column>.strategy-card{padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .research-column>.strategy-card>.section-heading{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
-.research-column>.strategy-card>.section-heading strong{margin-right:auto}
+.research-column>.strategy-card>.section-heading h2{margin-right:auto}
 .research-column .strategy-overview{padding:0 10px;display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;border-bottom:1px solid var(--line)}
 .research-column .strategy-overview>strong,.research-column .strategy-overview>small{margin:5px 0}
 .research-column .strategy-overview>details{font-size:9px;color:var(--muted);width:100%}
@@ -115,3 +115,23 @@ tr[data-chart-symbol]{cursor:pointer}tr[data-chart-symbol]:hover{background:var(
 .research-column .strategy-stocks td{white-space:pre-line;overflow-wrap:anywhere;vertical-align:top}.research-column .strategy-stocks td button{white-space:normal;padding:0;text-align:left}.research-column .strategy-stocks td:nth-child(3){min-width:0}
 
 .research-column .codex-panel{overflow:auto}.research-column .analyst-stream{min-height:35px}.research-column .codex-config{flex-shrink:0}.research-column .codex-details{display:none}
+
+/* Settings use separate daily and replay profiles with a shared, visible save action. */
+.settings-dialog{width:min(960px,calc(100vw - 48px));padding:20px}
+.settings-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.settings-tabs button{flex:1;min-width:115px;color:var(--muted);background:var(--field);border:1px solid var(--line);padding:9px 14px}
+.settings-tabs button[aria-selected=true]{color:var(--sky);border-color:var(--sky-line);background:var(--sky-bg)}
+[data-settings-panel][hidden]{display:none!important}
+[data-settings-panel]>.card{padding:16px 18px}
+[data-settings-panel] .card>h2{font-size:13px;border-left:3px solid var(--sky);padding-left:8px}
+[data-settings-panel] .card>.subtle{margin:0 0 15px;line-height:1.7;font-size:11px}
+[data-settings-panel] .form-grid{gap:14px 20px;margin-bottom:14px}
+[data-settings-panel] label{font-size:11px;line-height:1.6}
+[data-settings-panel] input,[data-settings-panel] select{min-height:34px;font-size:12px}
+[data-settings-panel] input[type=checkbox]{min-height:0}
+.settings-save{position:sticky;bottom:-20px;z-index:1;background:#151d29;padding:13px 0;margin:0;border-top:1px solid var(--line)}
+.strategy-card{--section-accent:var(--sky)}
+.research-column>.strategy-card>.panel-heading{padding:8px 10px;min-height:37px}
+.research-column .strategy-stocks tbody tr:nth-child(even){background:#ffffff03}
+.research-column .strategy-stocks th{position:sticky;top:0;z-index:1;background:var(--panel)}
+@media(max-width:760px){.settings-dialog .form-grid.two{grid-template-columns:1fr}.settings-tabs button{min-width:85px;padding:7px}}

@@ -615,10 +615,10 @@ async function smokeTest(): Promise<void> {
     if(!smartUi.open||smartUi.overflow||height>=900&&!smartUi.allVisible||!['低點','高點','已啟動','收益目標（不觸發）','優先停損'].every(v=>smartUi.text.includes(v)))
       throw new Error('反彈低點、移動高點、優先停損與成本目標介面未通過');
     const strategyUi=await window.webContents.executeJavaScript(`(()=>{const table=document.querySelector('#strategy-stocks table'),pane=document.querySelector('.strategy-card').getBoundingClientRect(),codex=document.querySelector('.codex-panel').getBoundingClientRect();
-      return {text:table?.textContent,below:pane.top>=codex.bottom,removed:!document.querySelector('#codex-instruction-control,#command-form,[data-command="clock-check"]'),
+      return {accent:getComputedStyle(document.querySelector('.strategy-card h2'),'::before').backgroundColor!== 'rgba(0, 0, 0, 0)',text:table?.textContent,below:pane.top>=codex.bottom,removed:!document.querySelector('#codex-instruction-control,#command-form,[data-command="clock-check"]'),
         setting:document.querySelector('.codex-config #codex-model-control')!==null,
         first:document.querySelector('.market-column>section').classList.contains('positions-panel')};})()`);
-    if(!strategyUi.below||!strategyUi.removed||!strategyUi.setting||!strategyUi.first||!['參考股數','觸發條件','限價','停損','停利','狀態'].every(v=>strategyUi.text?.includes(v)))throw new Error('策略表、模型設定或持倉優先版面未通過');
+    if(!strategyUi.accent||!strategyUi.below||!strategyUi.removed||!strategyUi.setting||!strategyUi.first||!['參考股數','觸發條件','限價','停損','停利','狀態'].every(v=>strategyUi.text?.includes(v)))throw new Error('策略表、模型設定或持倉優先版面未通過');
     await capture(`SYNTHETIC-ui-smart-conditions-${width}.png`,width,height);
   }
   smokeMark('TRAY_GUI');
@@ -628,9 +628,10 @@ async function smokeTest(): Promise<void> {
   await new Promise(resolve=>setTimeout(resolve,1100));
   const overview=trayWindow!;
   const trayState=await overview.webContents.executeJavaScript(`(async()=>({bridge:typeof window.overview?.state==='function',main:typeof window.trader,node:typeof window.require,
+    ordered:document.querySelector('.tray-schedule').compareDocumentPosition(document.querySelector('[data-panel=positions]'))===Node.DOCUMENT_POSITION_FOLLOWING&&document.querySelector('[data-panel=positions]').compareDocumentPosition(document.querySelector('[data-panel=strategy]'))===Node.DOCUMENT_POSITION_FOLLOWING,
     data:await window.overview.state(),text:document.body.textContent,panels:document.querySelectorAll('[data-panel]').length,
     overflow:document.documentElement.scrollWidth>innerWidth,blocked:await import('electron').then(()=>false,()=>true)}))()`);
-  if(!trayState.bridge||trayState.main!=='undefined'||trayState.node!=='undefined'||!trayState.blocked||trayState.panels!==4||trayState.overflow
+  if(!trayState.ordered||!trayState.bridge||trayState.main!=='undefined'||trayState.node!=='undefined'||!trayState.blocked||trayState.panels!==4||trayState.overflow
     ||!trayState.data.strategies.some((d:{symbol:string})=>d.symbol===smartSymbol))
     throw new Error('系統匣資訊或隔離橋接未通過');
   // The tray must be unable to read the main window's saved credential endpoint or submit commands.
@@ -703,6 +704,29 @@ async function smokeTest(): Promise<void> {
     ca:document.querySelector('#ca-path').value==='SYNTHETIC.pfx',password:document.querySelector('#ca-password').value==='SYNTHETIC_PASSWORD',masked:document.querySelector('#ca-password').type==='password'})`);
   if(!credentials.visible||credentials.key!=='password'||credentials.secret!=='password'||!credentials.ca||credentials.removed||!Object.values(prefilled).every(Boolean))throw new Error('帳戶設定與加密欄位自動填回未通過');
   await capture('SYNTHETIC-ui-connection.png',1600,960);
+  const dailyBefore={times:[...service.engine.settings.strategy_times],limit:service.engine.settings.codex_daily_call_limit};
+  const reportBefore=JSON.stringify(backtest.report?.settings);
+  await window.webContents.executeJavaScript(`(()=>{document.querySelector('[data-settings-tab="replay"]').click();
+    for(const [id,value]of Object.entries({'s-replay-schedule':'interval','s-replay-interval':'240','s-replay-times':'09:30','s-replay-calls':'7','s-replay-sizing':'deterministic'})){
+      const input=document.getElementById(id);input.value=value;input.dispatchEvent(new Event('change',{bubbles:true}));}
+    document.querySelector('#s-replay-review').checked=true;document.querySelector('#settings-form').requestSubmit();})()`);
+  await new Promise(resolve=>setTimeout(resolve,1500));
+  const profile=await window.webContents.executeJavaScript(`({interval:document.querySelector('#bt-interval').value,limit:document.querySelector('#bt-calls').value,
+    schedule:document.querySelector('#bt-schedule').value,times:document.querySelector('#bt-times').value,sizing:document.querySelector('#bt-sizing').value,
+    review:document.querySelector('#bt-review-enabled').checked,selected:document.querySelector('[data-settings-tab="replay"]').getAttribute('aria-selected')})`);
+  if(profile.interval!=='240'||profile.limit!=='7'||profile.schedule!=='interval'||profile.times!=='09:30'||profile.sizing!=='deterministic'||!profile.review||profile.selected!=='true'
+    ||service.engine.settings.replay_max_codex_calls!==7||service.engine.settings.replay_strategy_times[0]!=='09:30'
+    ||JSON.stringify(service.engine.settings.strategy_times)!==JSON.stringify(dailyBefore.times)||service.engine.settings.codex_daily_call_limit!==dailyBefore.limit
+    ||JSON.stringify(backtest.report?.settings)!==reportBefore)throw new Error('回測獨立設定未保存同步，或改寫日常設定／既有報表');
+  // An unrelated settings save must preserve a draft of the next replay.
+  await window.webContents.executeJavaScript(`document.querySelector('#bt-calls').value='8'`);
+  await service.saveSettings({...service.engine.settings,keep_awake:!service.engine.settings.keep_awake});await new Promise(resolve=>setTimeout(resolve,1200));
+  if(!await window.webContents.executeJavaScript(`document.querySelector('#bt-calls').value==='8'`))throw new Error('一般設定更新覆蓋尚未開始的回測草稿');
+  await service.saveSettings({...service.engine.settings,replay_strategy_schedule:'fixed',replay_strategy_times:['09:15'],replay_interval_minutes:360,replay_max_codex_calls:20,replay_review_enabled:false});
+  await new Promise(resolve=>setTimeout(resolve,1200));
+  await capture('SYNTHETIC-ui-replay-settings.png',1600,960);
+  await window.webContents.executeJavaScript(`document.querySelector('[data-settings-tab="connection"]').click()`);
+
   await window.webContents.executeJavaScript(`(()=>{const input=document.querySelector('#api-key');input.value='SYNTHETIC_UNSAVED';input.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#settings-dialog').close();document.querySelector('#open-settings').click();})()`);
   await new Promise(resolve=>setTimeout(resolve,250));
   if(!await window.webContents.executeJavaScript(`document.querySelector('#api-key').value==='SYNTHETIC_UNSAVED'`))throw new Error('重新開啟設定覆蓋未儲存金鑰');

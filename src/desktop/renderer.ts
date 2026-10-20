@@ -65,7 +65,7 @@ async function run(operation:()=>Promise<unknown>):Promise<void>{message('正在
   finally{try{await refresh();}catch{message('工作台資料尚未載入，請查看連線診斷',true);}}}
 let codexDirty=false;let latestState:DesktopState|undefined;
 let settingsDirty=false,polling=false,latestSettings:Settings|undefined,renderedReport='';
-let replayPreferencesLoaded=false;
+let loadedReplayProfile='';
 let currentWorkspace='';
 function updateWorkspace(state:DesktopState):void {
   const mode=simulationView(state)?'paper':'live';document.body.dataset.workspace=mode;
@@ -90,12 +90,32 @@ for(const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]'))
   const result=await window.trader.configure(button.dataset.mode!);settingsDirty=false;return result;
 }));
 for(const button of document.querySelectorAll<HTMLButtonElement>('[data-dialog]'))button.addEventListener('click',()=>{
-  el<HTMLDialogElement>(button.dataset.dialog!).showModal();if(button.dataset.dialog==='settings-dialog')void loadSavedConnection().catch(()=>undefined);
+  el<HTMLDialogElement>(button.dataset.dialog!).showModal();if(button.dataset.dialog==='settings-dialog'){selectSettingsTab(button.dataset.settingsTarget??'connection');void loadSavedConnection().catch(()=>undefined);}
 });
 for(const button of document.querySelectorAll<HTMLButtonElement>('[data-close]'))button.addEventListener('click',()=>button.closest('dialog')?.close());
 for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('click',event=>{if(event.target===dialog){const box=dialog.getBoundingClientRect();const e=event as MouseEvent;
   if(e.clientX<box.left||e.clientX>box.right||e.clientY<box.top||e.clientY>box.bottom)dialog.close();}});
+function selectSettingsTab(key:string):void {
+  for(const panel of document.querySelectorAll<HTMLElement>('[data-settings-panel]'))panel.hidden=panel.dataset.settingsPanel!==key;
+  for(const tab of document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]')){const active=tab.dataset.settingsTab===key;
+    tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
+}
+const settingsTabs=[...document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]')];
+for(const [index,tab] of settingsTabs.entries()){
+  tab.addEventListener('click',()=>selectSettingsTab(tab.dataset.settingsTab!));
+  tab.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?settingsTabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+settingsTabs.length)%settingsTabs.length;
+    selectSettingsTab(settingsTabs[next]!.dataset.settingsTab!);settingsTabs[next]!.focus();});
+}
+selectSettingsTab('connection');
 const guided:Record<string,keyof Settings>={
+  's-replay-schedule':'replay_strategy_schedule','s-replay-interval':'replay_interval_minutes','s-replay-calls':'replay_max_codex_calls',
+  's-replay-sizing':'replay_execution_sizing','s-replay-review':'replay_review_enabled',
+  's-catchup':'schedule_catch_up_minutes','s-timeout':'codex_timeout_seconds','s-pool':'candidate_pool_size','s-plan':'plan_max_minutes',
+  's-exposure':'max_exposure_fraction','s-daily-buy':'max_daily_buy_fraction','s-daily-orders':'max_daily_buy_orders',
+  's-tax':'sell_tax_rate','s-deviation':'price_deviation_fraction','s-spread':'max_spread_fraction','s-quote-age':'quote_max_age',
+  's-account-age':'account_max_age','s-cooldown':'cooldown_seconds','s-experience':'experience_enabled','s-experience-limit':'experience_limit',
+  's-facts':'official_facts_enabled','s-attention':'allow_attention',
   's-call-limit':'codex_daily_call_limit','s-review-enabled':'postmarket_review_enabled',
   's-schedule':'strategy_schedule','s-interval':'decision_interval_minutes','s-monitor':'monitor_interval_seconds','s-watch':'watch_refresh_minutes',
   's-review':'postmarket_time','s-count':'watch_max_symbols','s-misses':'watch_remove_after_scans','s-amount':'watch_min_amount',
@@ -108,19 +128,22 @@ const guided:Record<string,keyof Settings>={
   's-slip':'risk_slippage_fraction','s-gap':'overnight_gap_fraction','s-gap-risk':'max_gap_risk_fraction',
   's-min-profit':'min_net_profit_twd','s-track-minutes':'entry_tracking_minutes',
 };
-function schedulingFields(prefix:'s'|'bt'):void {
+function schedulingFields(prefix:'s'|'s-replay'|'bt'):void {
   const fixed=value(prefix+'-schedule')==='fixed';el<HTMLInputElement>(prefix+'-times').disabled=!fixed;el<HTMLInputElement>(prefix+'-interval').disabled=fixed;
 }
 function loadSettings(s:Settings):void {
   for(const [id,key] of Object.entries(guided)){const node=el<HTMLInputElement>(id),v=s[key];
     if(typeof v==='boolean')node.checked=v;else node.value=String(v);}
   if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;}
-  if(!replayPreferencesLoaded){replayPreferencesLoaded=true;
+  const replayProfile=JSON.stringify([s.replay_strategy_schedule,s.replay_strategy_times,s.replay_interval_minutes,s.replay_max_codex_calls,
+    s.replay_execution_sizing,s.replay_review_enabled,s.demo_cash,s.whole_lots]);
+  if(loadedReplayProfile!==replayProfile&&!latestState?.backtest_progress.running){loadedReplayProfile=replayProfile;
     for(const [id,v] of Object.entries({'bt-schedule':s.replay_strategy_schedule,'bt-times':s.replay_strategy_times.join(','),'bt-interval':s.replay_interval_minutes,
       'bt-calls':s.replay_max_codex_calls,'bt-sizing':s.replay_execution_sizing,
       'bt-monitor':5,'bt-watch':5,'bt-cash':s.demo_cash}))el<HTMLInputElement>(id).value=String(v);
     el<HTMLInputElement>('bt-review-enabled').checked=s.replay_review_enabled;el<HTMLInputElement>('bt-whole').checked=s.whole_lots;schedulingFields('bt');
   }
+  el<HTMLInputElement>('s-replay-times').value=s.replay_strategy_times.join(',');schedulingFields('s-replay');
   el<HTMLInputElement>('s-times').value=s.strategy_times.join(',');el<HTMLSelectElement>('mode').value=s.mode==='live'?'live':'paper';
   el<HTMLTextAreaElement>('settings').value=JSON.stringify(s,null,2);text('settings-state','已儲存');schedulingFields('s');
 }
@@ -224,11 +247,11 @@ function renderStrategy(state:DesktopState):void {
   for(const item of items){const d=r!.plan!.analysis.decisions.find(d=>d.symbol===item.symbol)!;
     add(item.symbol,item.name,item.action,item.trigger,d.action==='HOLD'?'—':d.limit_price,d.action==='HOLD'?'—':fmt(d.shares),item.state);}
   for(const p of r?.protections??[]){if(items.some(d=>d.symbol===p.symbol))continue;
-    add(p.symbol,r?.metadata[p.symbol]?.name??'','持倉保護','停損／移動退場','—','依可賣量',p.triggered||'監測中');}
+    add(p.symbol,r?.metadata[p.symbol]?.name??'','保護','停損／移動退場','—','依可賣量',p.triggered||'監測中');}
   const rule=r?.plan?.analysis.screening?.entry;
   if(rule)for(const w of r!.watch.entries){if(rows.some(row=>(row[0] as {chartSymbol:string}).chartSymbol===w.symbol))continue;
     const active=Date.parse(r!.plan!.analysis.expires_at)>Date.parse(workspaceCutoff(state));
-    add(w.symbol,w.name,'規則候選',rule.signal,'待觸發','待核算',!active?'策略已到期':r!.decisions.find(d=>d.symbol===w.symbol)?.state? action[r!.decisions.find(d=>d.symbol===w.symbol)!.state]??'等待條件':w.eligible?'等待條件':'觀測中');}
+    add(w.symbol,w.name,'候選',({TREND:'趨勢',PULLBACK:'回檔',BREAKOUT:'突破',REBOUND:'反彈'} as Record<string,string>)[rule.signal]??rule.signal,'待觸發','待核算',!active?'策略已到期':r!.decisions.find(d=>d.symbol===w.symbol)?.state? action[r!.decisions.find(d=>d.symbol===w.symbol)!.state]??'等待條件':w.eligible?'等待條件':'觀測中');}
   text('strategy-count',rows.length+' 檔');
   for(const id of ['strategy-stocks','strategy-expanded']){
     if(id==='strategy-stocks')table(id,['股票','方向','觸發條件','限價','參考股數','停損／停利','狀態'],rows.map(row=>[...row.slice(0,5),`停損 ${row[5]}\n停利 ${row[6]}${row[7]==='—'?'':'\n移動 '+row[7]}`,row[8]!]),'尚無股票策略');
@@ -283,14 +306,17 @@ el('hide').addEventListener('click',()=>void run(()=>window.trader.minimize()));
 const dirty=():void=>{settingsDirty=true;text('settings-state','尚未儲存');};
 el('settings-form').addEventListener('input',dirty);el('settings-form').addEventListener('change',dirty);el('settings').addEventListener('input',dirty);
 const times=(v:string):string[]=>v.split(/[,，、\s]+/).map(x=>x.trim()).filter(Boolean);
-el<HTMLFormElement>('settings-form').addEventListener('submit',e=>{e.preventDefault();void run(async()=>{
+el<HTMLFormElement>('settings-form').addEventListener('submit',e=>{e.preventDefault();
+  const invalid=[...el<HTMLFormElement>('settings-form').querySelectorAll<HTMLInputElement|HTMLSelectElement>('input,select')].find(node=>!node.disabled&&!node.checkValidity());
+  if(invalid){selectSettingsTab(invalid.closest<HTMLElement>('[data-settings-panel]')?.dataset.settingsPanel??'daily');invalid.reportValidity();return;}
+  void run(async()=>{
   if(!latestSettings)throw new Error('設定尚未載入');const next={...latestSettings} as Record<string,unknown>;
   for(const [id,key] of Object.entries(guided)){const original=latestSettings[key];next[key]=typeof original==='boolean'?checked(id):typeof original==='number'?Number(value(id)):value(id);}
-  next.strategy_times=times(value('s-times'));const result=await window.trader.saveSettings(JSON.stringify(next));settingsDirty=false;return result;
+  next.replay_strategy_times=times(value('s-replay-times'));next.strategy_times=times(value('s-times'));const result=await window.trader.saveSettings(JSON.stringify(next));settingsDirty=false;return result;
 });});
 el('save').addEventListener('click',()=>void run(async()=>{const result=await window.trader.saveSettings(value('settings'));settingsDirty=false;return result;}));
 el('reset').addEventListener('click',()=>{settingsDirty=false;void refresh();});
-el('s-schedule').addEventListener('change',()=>schedulingFields('s'));el('bt-schedule').addEventListener('change',()=>schedulingFields('bt'));
+el('s-schedule').addEventListener('change',()=>schedulingFields('s'));el('s-replay-schedule').addEventListener('change',()=>schedulingFields('s-replay'));el('bt-schedule').addEventListener('change',()=>schedulingFields('bt'));
 function request(compare=false):BacktestRequest {
   return {start:value('bt-start'),end:value('bt-end'),initial_cash:value('bt-cash'),source:value('bt-source') as BacktestRequest['source'],strategy:value('bt-strategy') as BacktestRequest['strategy'],
     whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
@@ -647,7 +673,7 @@ async function workspaceCommand(command:string):Promise<string>{
 
 window.trader.onOpen(request=>{void (async()=>{
   await refresh();for(const dialog of document.querySelectorAll<HTMLDialogElement>('dialog[open]'))dialog.close();
-  if(request.target==='settings'){el<HTMLDialogElement>('settings-dialog').showModal();await loadSavedConnection();}
+  if(request.target==='settings'){el<HTMLDialogElement>('settings-dialog').showModal();selectSettingsTab('connection');await loadSavedConnection();}
   else if(request.target==='diagnostics')el<HTMLDialogElement>('diagnostics-dialog').showModal();
   else if(request.target==='strategy'){el('strategy-stocks').scrollTop=0;el('strategy-stocks').parentElement?.focus();if(request.symbol)await showStock(request.symbol);}
 })().catch(e=>message(e instanceof Error?e.message:'視窗尚未就緒',true));});
