@@ -31,7 +31,7 @@ export function strategyItems(r:RuntimeView|null,cutoff:string,tradeDirection:Se
     const state=d.action==='BUY'&&(tradeDirection==='reduce_only'||r.plan?.analysis.stance!=='BUY_ALLOWED')?'方向禁止新買進':queue?actions[queue.state]??queue.state:!valid?'策略已到期／尚未生效':d.action==='HOLD'?'觀望':!r.connected?'等待連線':r.killed?'已停止新委託':r.paused&&d.action==='BUY'?'暫停新增買進':!r.auto?'等待啟動':r.blocked&&d.action==='BUY'?'新買進受阻':decision?actions[decision.state]??decision.state:'等待條件';
     return {symbol:d.symbol,name:r.metadata[d.symbol]?.name??r.watch.entries.find(w=>w.symbol===d.symbol)?.name??'',action:actions[d.action]!,state,trigger,
       price:d.action==='HOLD'?'—':`${d.action==='BUY'?'買價上限':'賣價下限'} ${d.limit_price}`,
-      size:d.action==='HOLD'?'無新委託':`參考 ${dashboardNumber(d.shares)} 股 · 觸發後另核股數`,
+      size:d.action==='HOLD'?'無新委託':`${d.action==='SELL'?'減碼上限':'參考'} ${dashboardNumber(d.shares)} 股 · 觸發後另核股數`,
       protection:spec?`停損 ${spec.stop_price} · ${spec.take_profit?'固定停利 '+spec.take_profit:'無固定停利'}${spec.trailing_activate?' · 移動啟動 '+spec.trailing_activate+'／回落 '+Number(spec.trailing_fraction)*100+'%':''}`:'本輪未設定新保護',
       reason:decision?.reason?d.reason+'；執行狀態：'+decision.reason:d.reason};
   });
