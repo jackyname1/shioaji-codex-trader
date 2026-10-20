@@ -140,6 +140,7 @@ export type EntryTrack=z.infer<typeof EntryTrackSchema>;
 export const SettingsSchema = z.strictObject({
   mode: z.enum(['demo', 'paper', 'readonly', 'live']).default('paper'),
   auto_execute: z.boolean().default(false), whole_lots: z.boolean().default(false),
+  trade_direction:z.enum(['auto','reduce_only']).default('auto'),
   base_url: z.string().url().default('http://127.0.0.1:8080'),
   manage_quote_subscriptions: z.boolean().default(true),
   stock_account_index: quantity.max(50).default(0),
@@ -185,6 +186,7 @@ export const SettingsSchema = z.strictObject({
   codex_frequency_version:z.literal(1).default(1),
   codex_daily_call_limit:quantity.min(1).max(50).default(2),
   postmarket_review_enabled:z.boolean().default(false),
+  replay_every_sessions:quantity.min(1).max(20).default(5),
   replay_strategy_schedule:z.enum(['fixed','interval']).default('fixed'),
   replay_strategy_times:z.array(clock.refine(v=>v>='08:00'&&v<'13:30')).min(1).max(6)
     .refine(v=>new Set(v).size===v.length,'回測策略時間不可重複').default(['09:15']),

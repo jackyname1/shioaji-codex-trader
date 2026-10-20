@@ -132,7 +132,7 @@ export class CodexLogin {
       if(!complete)throw new CodexError(codexFailureMessage({kind:'NETWORK',code:'STREAM_INTERRUPTED'}),'NETWORK',{kind:'NETWORK',code:'STREAM_INTERRUPTED'});
       if(!response)throw new CodexError(codexFailureMessage({kind:'RUNTIME',code:'EMPTY_OUTPUT'}),'RUNTIME',{kind:'RUNTIME',code:'EMPTY_OUTPUT'});
       if(JSON.parse(response)?.ok!==true)throw new Error('invalid output');
-      this.status.test_state='connected';this.status.message='Codex 連線測試成功 · '+selection.model+' · '+selection.reasoning;return this.status.message;
+      this.status.test_state='connected';this.status.message='Codex 連線測試成功';return this.status.message;
     }catch(error){
       const diagnostic=diagnoseCodexFailure(error);
       if(diagnostic.kind==='OTHER'&&diagnostic.code==='OTHER'){diagnostic.kind='RUNTIME';diagnostic.code='SDK_FAILURE';}

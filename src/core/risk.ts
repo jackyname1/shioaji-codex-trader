@@ -26,6 +26,7 @@ export class Risk {
     now: Date, baseline?: string, paused = false, lastTrade?: string): string[] {
     const s = this.settings, reasons: string[] = [];
     if (paused) reasons.push('已暫停新增委託');
+    if(order.action==='BUY'&&s.trade_direction==='reduce_only')reasons.push('僅減碼設定已啟用，禁止新增買進');
     if (!account.complete) reasons.push('帳戶資料不完整');
     const age = ageSeconds(now, account.asof);
     if (!(age >= 0 && age <= s.account_max_age)) reasons.push('帳戶資料過期或時間異常');

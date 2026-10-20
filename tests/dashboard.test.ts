@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {strategyItems,traySnapshot,panelBounds} from '../src/desktop/dashboard.js';
+import {strategyItems,strategyDirection,traySnapshot,panelBounds} from '../src/desktop/dashboard.js';
 import {SettingsSchema,type Decision} from '../src/core/models.js';
 import type {DesktopState,RuntimeView} from '../src/desktop/shared.js';
 const now=new Date().toISOString();
@@ -57,4 +57,17 @@ test('tray placement stays inside small and offset monitor work areas for every 
       const box=panelBounds({...point,width:20,height:20},area);assert.ok(box.x>=area.x&&box.y>=area.y);assert.ok(box.x+box.width<=area.x+area.width&&box.y+box.height<=area.y+area.height);
     }
   }
+});
+
+test('direction explains explicit reduction, no immediate sale, expired plans and the persisted override',()=>{
+  const r=fixture().runtime!,s=SettingsSchema.parse({});
+  r.plan!.analysis.stance='REDUCE';r.plan!.analysis.decisions=[{...decision,action:'HOLD',smart:null,shares:0,entry_when:'IMMEDIATE',rebound_fraction:null}];
+  let view=strategyDirection(r,s,now);assert.match(view.label,/減碼優先/);assert.match(view.detail,/沒有明確減碼賣單/);
+  assert.match(view.detail,/不會立即賣出或清倉/);assert.equal(view.restricted,true);
+  r.plan!.analysis.decisions=[{...decision,action:'SELL',shares:7,entry_when:'IMMEDIATE',rebound_fraction:null}];
+  view=strategyDirection(r,s,now);assert.match(view.detail,/1 檔/);
+  view=strategyDirection(r,{trade_direction:'reduce_only'},now);assert.match(view.label,/僅減碼/);assert.match(view.detail,/待撤單確認前仍可能成交/);
+  r.plan!.analysis.stance='BUY_ALLOWED';r.plan!.analysis.decisions=[decision];
+  assert.equal(strategyItems(r,now,'reduce_only')[0]!.state,'方向禁止新買進');
+  r.plan!.analysis.expires_at=now;assert.match(strategyDirection(r,s,now).label,/已到期/);
 });

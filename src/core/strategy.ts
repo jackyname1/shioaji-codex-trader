@@ -32,6 +32,11 @@ export function indicators(bars: Bar[]): Features {
 }
 export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, settings: Settings): Plan {
   const a = AnalysisSchema.parse(raw);
+  if(settings.trade_direction==='reduce_only'&&!snapshot.review_only&&
+    (a.stance==='BUY_ALLOWED'||a.decisions.some(d=>d.action==='BUY')||a.screening?.entry))
+    throw new Error('策略違反僅減碼設定；須使用 REDUCE 或 HOLD_ONLY，且停用買進決策與進場規則');
+  // A non-buying stance never grants rule-entry authority, including older saved outputs.
+  if(a.stance!=='BUY_ALLOWED'&&a.screening)a.screening.entry=null;
   if (a.snapshot_id !== snapshot.snapshot_id) throw new Error('Codex 使用的快照不符');
   const age = ageSeconds(now, snapshot.asof);
   if (!(age >= 0 && age <= settings.codex_timeout_seconds + 30)) throw new Error('Codex 決策資料已過期');
@@ -70,15 +75,15 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
 export function demoAnalysis(snapshot: Snapshot, settings: Settings, now: Date): Analysis {
   if (!snapshot.synthetic) throw new Error('範例策略只能使用虛構行情');
   const candidates = snapshot.universe.slice(0,5).map(x => x.symbol), first = snapshot.universe[0];
-  const price = first ? d(first.last) : d(1);
+  const price = first ? d(first.last) : d(1),reduceOnly=settings.trade_direction==='reduce_only';
   return AnalysisSchema.parse({ snapshot_id: snapshot.snapshot_id,
     expires_at: new Date(now.getTime() + settings.plan_max_minutes * 60000).toISOString(),
-    stance: 'BUY_ALLOWED', candidates, decisions: first && !snapshot.review_only ? [{
+    stance: reduceOnly?'REDUCE':'BUY_ALLOWED', candidates, decisions: first && !snapshot.review_only && !reduceOnly ? [{
       symbol: first.symbol, action: 'BUY', shares: 10, limit_price: price.plus(tickSize(price)).toFixed(),
       entry_when: 'IMMEDIATE', trigger_price: '0', smart: { stop_price: roundPrice(price.times('.95')),
         take_profit: roundPrice(price.times('1.10')), trailing_activate: roundPrice(price.times('1.08')), trailing_fraction: '.03'.replace(/^\./, '0.') },
       conditions:[],reason: '虛構行情流程展示，不是投資策略或真實股票建議' }] : [],
-    screening:snapshot.review_only?null:{min_amount:settings.watch_min_amount,min_volume_ratio:'0',rsi_min:0,rsi_max:100,return20_min:'-0.50',
+    screening:snapshot.review_only||reduceOnly?null:{min_amount:settings.watch_min_amount,min_volume_ratio:'0',rsi_min:0,rsi_max:100,return20_min:'-0.50',
       entry:{signal:'TREND',allocation_fraction:'0.02',max_ma20_distance:'0.10',stop_fraction:'0.05',take_profit_fraction:'0.10',trailing_fraction:'0.03'}},
     summary: 'DEMO：虛構股票，驗證動態觀測、規則進場、部分成交與跨日保護；不是有效獲利策略' });
 }
