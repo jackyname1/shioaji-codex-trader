@@ -193,11 +193,12 @@ function renderRuntime(state:DesktopState):void {
   markSelectedStock();
   const displayedOrders=simulationView(state)&&!paper?(a?.orders??[]).slice(-30).reverse():r.orders;
   table('orders',['股票 / 方向','成交 / 股數','限價','狀態',''],displayedOrders.map(o=>[`${o.symbol} ${action[o.action]}`,`${o.filled} / ${o.shares}`,o.limit_price,action[o.status]??o.status,
-    ['FILLED','CANCELLED','REJECTED'].includes(o.status)?'已核對':o.purpose==='EXTERNAL'?'外部委託':{label:'撤單核對',command:'cancel '+o.local_id}]),simulationView(state)?'尚無即時模擬委託；條件觸發後會由 Codex 確認股數':'目前無未完成委託');
+    ['FILLED','CANCELLED','REJECTED'].includes(o.status)?'已核對':o.purpose==='EXTERNAL'?'外部委託':{label:'撤單核對',command:'cancel '+o.local_id}]),simulationView(state)?'尚無即時模擬委託；條件觸發後核算股數與風控':'目前無未完成委託');
   text('runtime-workspace-name',simulationView(state)?'即時模擬 · 虛擬資金':'正式交易 · 真實帳戶');
   text('runtime-orders-title',simulationView(state)?'模擬委託與成交':'未完成委託');
   text('runtime-schedule-note',s.strategy_schedule==='fixed'?'每日 '+s.strategy_times.join(' / '):'盤中每 '+s.decision_interval_minutes+' 分鐘');
   text('runtime-strategy-step',r.analyzing?'Codex 分析中':r.next_strategy_at?'下一輪 '+time(r.next_strategy_at):'等待交易日');
+  text('runtime-sizing-flow',s.execution_sizing==='deterministic'?'監測 › 程式核算股數 › 風控 › 送單／核對':'監測 › Codex 確認股數 › 風控 › 送單／核對');
   text('runtime-execution-step',`每 ${s.monitor_interval_seconds} 秒 · ${r.sizing?'Codex 股數確認中':'最近 '+time(r.last_monitor_at)}`);
   text('runtime-queue',r.execution_queue?.length?r.execution_queue.map(t=>`${t.symbol} ${action[t.action]} · ${action[t.state]??t.state}`).join('；'):'持倉持續監測出場；監測股票符合買進條件才觸發數量確認。');
   const stance={BUY_ALLOWED:'允許條件買進',HOLD_ONLY:'保留現金／觀望',REDUCE:'減碼優先'};
@@ -387,7 +388,7 @@ function renderStockDetails():void {
   const state=(replay?frame?.decisions:r?.decisions)?.find(x=>x.symbol===selectedSymbol);
   if(state)conditions.push(['目前狀態',action[state.state]??state.state],['執行／等待原因',state.reason]);
   if(position&&!position.sellable)conditions.push(['可賣限制','今日新增股數不可當日賣出']);
-  conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後，再由 Codex 按目前現金確認股數，送單前重新核對風控。':'等待 Codex 分析或模擬策略'));
+  conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後核算股數，送單前重新確認現金與風控。':'等待 Codex 分析或模擬策略'));
 }
 function conditionList(id:string,rows:[string,string][],note=''):void {
   const host=el(id);host.replaceChildren();for(const [label,v] of rows){const row=document.createElement('div');row.className='condition-item';const l=document.createElement('span'),n=document.createElement('strong');l.textContent=label;n.textContent=v;row.append(l,n);host.append(row);}if(note){const p=document.createElement('p');p.textContent=note;host.append(p);}
