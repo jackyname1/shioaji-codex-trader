@@ -9,9 +9,15 @@ export async function resetRelease({api,gh,config,commit,tag,tagObject,releases,
     ||!config.remove_releases.every(r=>Number.isSafeInteger(r.id)&&/^v\d+\.\d+\.\d+$/.test(r.tag)))
     throw new Error('Release reset configuration is invalid.');
   const permitted=new Map(config.remove_releases.map(r=>[r.id,r.tag]));
-  const stageTag=`reset-${tag}-${commit.slice(0,12)}`;
+  const resume=config.resume_staging_release;
+  if(resume&&(!Number.isSafeInteger(resume.id)||!/^[a-f0-9]{40}$/.test(resume.source_commit??'')
+    ||resume.tag!==`reset-${tag}-${resume.source_commit.slice(0,12)}`))throw new Error('Staging resume configuration is invalid.');
   let replacement=releases.find(r=>r.tag_name===tag&&r.id!==config.remove_releases.find(x=>x.tag===tag)?.id);
-  const staged=releases.find(r=>r.tag_name===stageTag);
+  const resumed=resume&&releases.find(r=>r.id===resume.id&&r.id!==replacement?.id);
+  if(resumed&&(resumed.tag_name!==resume.tag||!resumed.draft||resumed.immutable||resumed.target_commitish!==resume.source_commit))
+    throw new Error('The reviewed staging draft changed; no release was removed.');
+  const stageTag=resumed?.tag_name??`reset-${tag}-${commit.slice(0,12)}`;
+  const staged=resumed??releases.find(r=>r.tag_name===stageTag);
   for(const release of releases){
     if(permitted.has(release.id)){
       if(permitted.get(release.id)!==release.tag_name||release.immutable)throw new Error('An old release changed or is immutable; no release was removed.');

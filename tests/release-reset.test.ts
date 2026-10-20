@@ -7,14 +7,18 @@ import {pathToFileURL} from 'node:url';
 
 // Execute the actual reset policy with an in-memory GitHub API; never contact or mutate GitHub.
 const {resetRelease}=await import(pathToFileURL(resolve('scripts/reset-release.mjs')).href) as {resetRelease:(context:Record<string,unknown>)=>Promise<void>};
-function fixture(options:{badAssets?:boolean;immutable?:boolean;movedMain?:boolean;changedTag?:boolean;alreadyPublished?:boolean}={}){
+function fixture(options:{badAssets?:boolean;immutable?:boolean;movedMain?:boolean;changedTag?:boolean;alreadyPublished?:boolean;staged?:boolean;invalidStage?:string}={}){
   const root=mkdtempSync(join(tmpdir(),'release-reset-')),commit='a'.repeat(40),oldCommit='b'.repeat(40),events:string[]=[];
   writeFileSync(join(root,'RELEASE_NOTES.md'),'Isolated verified build');
   let tagObject={type:'commit',sha:options.changedTag?'c'.repeat(40):options.alreadyPublished?commit:oldCommit};
   let releases:any[]=[{id:11,tag_name:'v0.1.0',draft:false,immutable:!!options.immutable,assets:[]},
     {id:12,tag_name:'v0.2.0',draft:false,assets:[]},{id:13,tag_name:'v0.2.3',draft:false,assets:[]}];
   if(options.alreadyPublished)releases=[{id:20,tag_name:'v0.1.0',draft:false,assets:[{digest:'valid'}]},...releases.slice(1)];
-  const stageTag=`reset-v0.1.0-${commit.slice(0,12)}`;
+  const stageCommit=options.staged?'e'.repeat(40):commit;
+  const stageTag=`reset-v0.1.0-${stageCommit.slice(0,12)}`;
+  if(options.staged)releases.push({id:20,tag_name:options.invalidStage==='tag'?'unexpected':stageTag,
+    target_commitish:options.invalidStage==='commit'?'f'.repeat(40):stageCommit,draft:options.invalidStage!=='published',
+    immutable:options.invalidStage==='immutable',assets:[{digest:'valid'}]});
   const api=(path:string,...args:string[]):any=>{
     if(path==='releases?per_page=100')return structuredClone(releases);
     if(path==='git/ref/heads/main')return {object:{type:'commit',sha:options.movedMain?'d'.repeat(40):commit}};
@@ -38,7 +42,7 @@ function fixture(options:{badAssets?:boolean;immutable?:boolean;movedMain?:boole
   };
   const verifyAssets=async(r:any)=>{events.push('verify:'+r.id);assert.ok(r.assets.length&&r.assets[0].digest==='valid','Replacement asset verification failed');};
   const context={api,gh,commit,tag:'v0.1.0',tagObject,releases:structuredClone(releases),names:['verified.exe'],directory:root,verifyAssets,
-    config:{version:'0.1.0',expected_tag_commit:oldCommit,remove_releases:[{id:11,tag:'v0.1.0'},{id:12,tag:'v0.2.0'},{id:13,tag:'v0.2.3'}]}};
+    config:{version:'0.1.0',expected_tag_commit:oldCommit,...(options.staged?{resume_staging_release:{id:20,tag:stageTag,source_commit:stageCommit}}:{}),remove_releases:[{id:11,tag:'v0.1.0'},{id:12,tag:'v0.2.0'},{id:13,tag:'v0.2.3'}]}};
   return {context,events,root,state:()=>({releases,tagObject})};
 }
 for(const options of [{badAssets:true},{immutable:true},{movedMain:true},{changedTag:true}]){
@@ -62,4 +66,16 @@ test('an interrupted cleanup resumes from the verified published replacement wit
     assert.equal(f.events.some(e=>['stage','upload','retag','publish'].includes(e)),false);
     assert.equal(f.state().releases.length,1);assert.equal(f.state().releases[0].id,20);
   }finally{rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('a reviewed draft from the previous verified commit is reuploaded and verified before any old release deletion',async()=>{
+  const f=fixture({staged:true});try{await resetRelease(f.context);
+    assert.equal(f.events.includes('stage'),false);assert.ok(f.events.includes('upload'));
+    assert.ok(f.events.indexOf('verify:20')<f.events.indexOf('delete:11'));
+    assert.equal(f.state().releases.length,1);assert.equal(f.state().releases[0].target_commitish,'a'.repeat(40));
+  }finally{rmSync(f.root,{recursive:true,force:true});}
+});
+for(const invalidStage of ['tag','commit','published','immutable'])test('a changed staging '+invalidStage+' blocks resume before uploads or deletion',async()=>{
+  const f=fixture({staged:true,invalidStage});try{await assert.rejects(()=>resetRelease(f.context));assert.deepEqual(f.events,[]);}
+  finally{rmSync(f.root,{recursive:true,force:true});}
 });

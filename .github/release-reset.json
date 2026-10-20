@@ -58,5 +58,10 @@
       "id": 411697726,
       "tag": "v0.1.0"
     }
-  ]
+  ],
+  "resume_staging_release": {
+    "id": 418641263,
+    "tag": "reset-v0.1.0-dadfdb81d339",
+    "source_commit": "dadfdb81d3390ddf6c7fa308e8f75ffcc327fcaa"
+  }
 }

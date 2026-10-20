@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import {captureCommand} from './command-output.mjs';
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -8,7 +8,7 @@ import {verifyPublishedRelease} from './verify-published-release.mjs';
 
 const repository = 'jackyname1/shioaji-codex-trader';
 const commit = process.env.RELEASE_COMMIT;
-const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const gh = (...args) => captureCommand('gh',args);
 const api = (path, ...args) => {const response=gh('api', `repos/${repository}/${path}`, ...args);return response.trim()?JSON.parse(response):null;};
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 if (process.env.GH_REPO !== repository || process.env.GITHUB_REF !== 'refs/heads/main' || !/^[a-f0-9]{40}$/.test(commit ?? '')) {
