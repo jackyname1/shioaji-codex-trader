@@ -80,18 +80,18 @@
   <label>數量確認<select id="s-sizing-policy"><option value="codex">Codex 第二次確認（舊設定）</option><option value="deterministic">程式計算（不超過策略參考股數）</option></select></label>
   <label>盤後檢討時間<input id="s-review" type="time" min="13:40" max="17:00" required></label>
   <label class="check"><input id="s-review-enabled" type="checkbox">額外盤後檢討</label>
-  </div><label>錯過排程補跑 · 分鐘<input id="s-catchup" type="number" min="1" max="60" step="1" required></label>
-  <label>Codex 等待上限 · 秒<input id="s-timeout" type="number" min="30" max="1800" step="1" required></label>
+  </div><div class="form-grid two"><label>錯過排程補跑 · 分鐘<input id="s-catchup" type="number" min="1" max="60" step="1" required></label>
+  <label>Codex 等待上限 · 秒<input id="s-timeout" type="number" min="30" max="1800" step="1" required></label></div>
   </article>
   <article class="card"><h2>行情與監測</h2><p class="subtle">策略分析與短週期監測分開運作。股票池取樣數與實際監測檔數各有上限。</p><div class="form-grid two"><label>條件偵測 · 秒<input id="s-monitor" type="number" min="1" max="300" required></label>
   <label>觀測更新 · 分鐘<input id="s-watch" type="number" min="1" max="60" required></label>
   <label>最多監測股票<input id="s-count" type="number" min="5" max="20" required></label>
   <label>移除前不符次數<input id="s-misses" type="number" min="1" max="12" required></label>
-  <label>最低成交金額<input id="s-amount" type="number" min="0" required></label>
+  <label>最低成交金額<input id="s-amount" type="number" min="0" step="any" required></label>
   <label class="check"><input id="s-watch-auto" type="checkbox">自動更新觀測清單</label>
   <label class="check"><input id="s-quotes" type="checkbox">管理此程式的行情訂閱</label>
-  </div><label>候選股票池 · 檔<input id="s-pool" type="number" min="20" max="100" step="1" required></label>
-  <label>策略有效期上限 · 分鐘<input id="s-plan" type="number" min="10" max="1440" step="1" required></label>
+  </div><div class="form-grid two"><label>候選股票池 · 檔<input id="s-pool" type="number" min="20" max="100" step="1" required></label>
+  <label>策略有效期上限 · 分鐘<input id="s-plan" type="number" min="10" max="1440" step="1" required></label></div>
   </article>
   </section>
   <section data-settings-panel="replay" id="settings-panel-replay" role="tabpanel" aria-labelledby="settings-tab-replay" hidden><article class="card"><h2>歷史回測 · 獨立模型用量</h2><p class="subtle">這組預設只用於歷史回測，不影響日常交易。預設每日 09:15 一次、整次或整批最多 20 次；倍速不會提高呼叫頻率。</p><div class="form-grid two"><label>策略排程<select id="s-replay-schedule"><option value="fixed">每日固定時間</option><option value="interval">時間間隔</option></select></label>
@@ -133,7 +133,7 @@
   <label>預估退出滑價 · 比率<input id="s-slip" type="number" min="0" max="0.05" step="any" required></label>
   <label>隔夜跳空壓測 · 比率<input id="s-gap" type="number" min="0" max="1" step="any" required></label>
   <label>跳空壓測虧損上限 · 比率<input id="s-gap-risk" type="number" min="0" max="1" step="any" required></label>
-  <label>最低預期淨利 · 元<input id="s-min-profit" type="number" min="0" required></label>
+  <label>最低預期淨利 · 元<input id="s-min-profit" type="number" min="0" step="any" required></label>
   <label>回檔追蹤期限 · 分鐘<input id="s-track-minutes" type="number" min="5" max="360" required></label>
   <label class="check"><input id="s-adaptive" type="checkbox">ATR 移動保護與費稅保本</label>
   <label class="check"><input id="s-dynamic" type="checkbox">動態配置（研究選項）</label>
