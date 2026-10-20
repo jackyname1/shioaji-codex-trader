@@ -105,7 +105,7 @@ export class TradingService {
   private schedule(now: Date): void {
     if (!this.calendar.isOpen(twDay(now))) return;
     const s = this.engine.settings;
-    if(!s.auto_execute)return;
+    if(!s.auto_execute||this.dailyBudgetExhausted(now))return;
     if(s.codex_enabled&&this.engine.advisorIssue)return;
     if (!s.codex_enabled && s.mode !== 'demo') return;
     if(this.decisionTask)return;
@@ -117,7 +117,8 @@ export class TradingService {
       if(this.stopping)return;run.finished_at=this.now().toISOString();this.store.set('schedule_'+slot.key,run);this.store.set('last_schedule_run',run);
     });
   }
-  nextStrategyAt(now=this.now()):string|null{return nextStrategy(now,this.engine.settings,this.calendar,key=>!!this.store.get('schedule_'+key))?.at??null;}
+  private dailyBudgetExhausted(now:Date):boolean{return this.engine.settings.mode!=='demo'&&this.engine.settings.codex_enabled&&(this.store.get<number>('codex_calls_'+twDay(now))??0)>=this.engine.settings.codex_daily_call_limit;}
+  nextStrategyAt(now=this.now()):string|null{return nextStrategy(now,this.engine.settings,this.calendar,key=>!!this.store.get('schedule_'+key)||key.startsWith(twDay(now)+':')&&this.dailyBudgetExhausted(now))?.at??null;}
   private analystEvent=(event:AnalystEvent):void=>{
     this.store.recordAnalystEvent(event);appendAnalystEvent(this.analystEvents,event);
     this.analystEvents=this.analystEvents.slice(-200);
@@ -143,6 +144,9 @@ export class TradingService {
         let request:ExecutionRequest|undefined;
         try {
           request=await this.enqueue(()=>this.engine.executionRequest(id,this.now()));if(!request)continue;
+          if(!this.reserveCodexCall()){
+            await this.enqueue(()=>this.engine.finishExecution(id,'SIZE_FAILED','Codex 今日呼叫額度已用完；本次未送單',this.now()));continue;
+          }
           this.executionAbort=new AbortController();const signal=AbortSignal.any([this.stop.signal,this.executionAbort.signal]);
           const settings=structuredClone(this.engine.settings),profile=join(dirname(this.store.path),'codex-execution-profile');
           this.executionAnalyst=new CodexAnalyst(settings,profile,undefined,join(dirname(this.store.path),'codex-login'),this.analystEvent);
@@ -198,10 +202,17 @@ export class TradingService {
   decide(review = false): Promise<void> {
     if (this.stopping) return Promise.reject(new Error('程式正在停止'));
     if (this.decisionTask) return Promise.reject(new Error('上一輪分析仍在執行'));
+    if(this.engine.settings.codex_enabled&&!this.reserveCodexCall())return Promise.reject(new Error('Codex 今日呼叫額度已用完；持倉保護與行情監測持續'));
     this.decisionAbort=new AbortController();
     const task = this.performDecision(review);
     this.decisionTask = task.finally(() => { this.decisionTask = undefined; this.analyst = undefined; });
     return this.decisionTask;
+  }
+  private reserveCodexCall():boolean {
+    if(this.engine.settings.mode==='demo')return true;
+    const key='codex_calls_'+twDay(this.now()),used=this.store.get<number>(key)??0;
+    if(used>=this.engine.settings.codex_daily_call_limit)return false;
+    this.store.set(key,used+1);return true;
   }
   private async performDecision(review: boolean): Promise<void> {
     const s = this.engine.settings;

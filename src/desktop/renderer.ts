@@ -96,6 +96,7 @@ for(const button of document.querySelectorAll<HTMLButtonElement>('[data-close]')
 for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('click',event=>{if(event.target===dialog){const box=dialog.getBoundingClientRect();const e=event as MouseEvent;
   if(e.clientX<box.left||e.clientX>box.right||e.clientY<box.top||e.clientY>box.bottom)dialog.close();}});
 const guided:Record<string,keyof Settings>={
+  's-call-limit':'codex_daily_call_limit','s-review-enabled':'postmarket_review_enabled',
   's-schedule':'strategy_schedule','s-interval':'decision_interval_minutes','s-monitor':'monitor_interval_seconds','s-watch':'watch_refresh_minutes',
   's-review':'postmarket_time','s-count':'watch_max_symbols','s-misses':'watch_remove_after_scans','s-amount':'watch_min_amount',
   's-url':'base_url','s-account':'stock_account_index','s-cash':'demo_cash',
@@ -115,9 +116,10 @@ function loadSettings(s:Settings):void {
     if(typeof v==='boolean')node.checked=v;else node.value=String(v);}
   if(!codexDirty){el<HTMLInputElement>('codex-model-control').value=s.codex_model;el<HTMLSelectElement>('codex-reasoning-control').value=s.codex_reasoning;}
   if(!replayPreferencesLoaded){replayPreferencesLoaded=true;
-    for(const [id,v] of Object.entries({'bt-schedule':s.strategy_schedule,'bt-times':s.strategy_times.join(','),'bt-interval':s.decision_interval_minutes,
+    for(const [id,v] of Object.entries({'bt-schedule':s.replay_strategy_schedule,'bt-times':s.replay_strategy_times.join(','),'bt-interval':s.replay_interval_minutes,
+      'bt-calls':s.replay_max_codex_calls,'bt-sizing':s.replay_execution_sizing,
       'bt-monitor':5,'bt-watch':5,'bt-cash':s.demo_cash}))el<HTMLInputElement>(id).value=String(v);
-    el<HTMLInputElement>('bt-whole').checked=s.whole_lots;schedulingFields('bt');
+    el<HTMLInputElement>('bt-review-enabled').checked=s.replay_review_enabled;el<HTMLInputElement>('bt-whole').checked=s.whole_lots;schedulingFields('bt');
   }
   el<HTMLInputElement>('s-times').value=s.strategy_times.join(',');el<HTMLSelectElement>('mode').value=s.mode==='live'?'live':'paper';
   el<HTMLTextAreaElement>('settings').value=JSON.stringify(s,null,2);text('settings-state','已儲存');schedulingFields('s');
@@ -138,14 +140,14 @@ function renderRuntime(state:DesktopState):void {
   text('experience',state.experience);text('codex-login-status',state.codex_login);
   if(!r||!s){text('headline',state.connection.busy?'連線中':state.connection.server_ready?'工作台尚未就緒':'請先登入 Shioaji');text('runtime-note',state.error||state.connection.status);
     for(const id of ['cash','equity','next-strategy','watch-count'])text(id,'—');text('cash-detail','等待帳戶資料');text('settlement-detail','等待交割資料');text('data-status','工作台尚未就緒');
-    el('strategy-stocks').replaceChildren();text('strategy-count','0 檔');text('strategy-stance','工作台尚未就緒');text('strategy-summary','等待連線與有效策略');text('strategy-expiry','');text('rule-summary','');
+    renderStrategy(state);text('strategy-count','0 檔');text('strategy-stance','工作台尚未就緒');text('strategy-summary','等待連線與有效策略');text('strategy-expiry','');text('rule-summary','');
     for(const id of ['positions','orders','overview-watch','watchlist','watch-changes','decisions'])table(id,['狀態'],[],'工作台尚未完成連線');return;}
   const labels={demo:'介面測試資料',paper:'模擬 · 真實行情',readonly:'實盤監控',live:'實盤 · 真實帳戶'};
   text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
   const valid=r.plan&&Date.parse(r.plan.analysis.expires_at)>Date.parse(workspaceCutoff(state));
   text('headline',!r.connected?'等待連線':r.killed?'已停止新委託':!r.auto?'監控已開啟':r.paused?'買進已暫停':!r.session?'交易時段外，持續監控':!valid?'等待有效策略':r.blocked||!r.watch.healthy?'新買進暫停，保護監控持續':'全自動偵測中');
   text('runtime-note',r.mode==='demo'?'虛構行情與模擬資金；日期區間測試可隨時執行。':r.mode==='readonly'?'帳戶核對模式；確認現金、交割與可賣量後再切換。':
-    r.auto?'定時更新條件；觸發後再由 Codex 確認數量，送單前重新核對風控。':'按「開始自動交易」建立首輪條件，之後依每日排程更新。');
+    r.auto?'定時更新策略；觸發後核算股數與風控。':'按「開始自動交易」建立首輪條件，之後依每日排程更新。');
   if(paper){text('headline',!r.connected?'等待 API 連線':state.backtest_progress.running?(state.replay_paused?'模擬已暫停':'歷史模擬執行中'):state.backtest_result?'模擬結果已保存':'準備歷史模擬');
     text('runtime-note','圖表、持倉、監測與 Codex 使用同一個模擬時間');}
   const a=r.account;
@@ -191,11 +193,12 @@ function renderRuntime(state:DesktopState):void {
   markSelectedStock();
   const displayedOrders=simulationView(state)&&!paper?(a?.orders??[]).slice(-30).reverse():r.orders;
   table('orders',['股票 / 方向','成交 / 股數','限價','狀態',''],displayedOrders.map(o=>[`${o.symbol} ${action[o.action]}`,`${o.filled} / ${o.shares}`,o.limit_price,action[o.status]??o.status,
-    ['FILLED','CANCELLED','REJECTED'].includes(o.status)?'已核對':o.purpose==='EXTERNAL'?'外部委託':{label:'撤單核對',command:'cancel '+o.local_id}]),simulationView(state)?'尚無即時模擬委託；條件觸發後會由 Codex 確認股數':'目前無未完成委託');
+    ['FILLED','CANCELLED','REJECTED'].includes(o.status)?'已核對':o.purpose==='EXTERNAL'?'外部委託':{label:'撤單核對',command:'cancel '+o.local_id}]),simulationView(state)?'尚無即時模擬委託；條件觸發後核算股數與風控':'目前無未完成委託');
   text('runtime-workspace-name',simulationView(state)?'即時模擬 · 虛擬資金':'正式交易 · 真實帳戶');
   text('runtime-orders-title',simulationView(state)?'模擬委託與成交':'未完成委託');
   text('runtime-schedule-note',s.strategy_schedule==='fixed'?'每日 '+s.strategy_times.join(' / '):'盤中每 '+s.decision_interval_minutes+' 分鐘');
   text('runtime-strategy-step',r.analyzing?'Codex 分析中':r.next_strategy_at?'下一輪 '+time(r.next_strategy_at):'等待交易日');
+  text('runtime-sizing-flow',s.execution_sizing==='deterministic'?'監測 › 程式核算股數 › 風控 › 送單／核對':'監測 › Codex 確認股數 › 風控 › 送單／核對');
   text('runtime-execution-step',`每 ${s.monitor_interval_seconds} 秒 · ${r.sizing?'Codex 股數確認中':'最近 '+time(r.last_monitor_at)}`);
   text('runtime-queue',r.execution_queue?.length?r.execution_queue.map(t=>`${t.symbol} ${action[t.action]} · ${action[t.state]??t.state}`).join('；'):'持倉持續監測出場；監測股票符合買進條件才觸發數量確認。');
   const stance={BUY_ALLOWED:'允許條件買進',HOLD_ONLY:'保留現金／觀望',REDUCE:'減碼優先'};
@@ -210,26 +213,30 @@ function renderRuntime(state:DesktopState):void {
   text('risk-summary',`現金保留 ${pct(riskSettings!.min_cash_fraction)} · 單筆 ${pct(riskSettings!.max_order_fraction)}（${riskSettings!.order_budget_basis==='EQUITY'?'淨資產':'扣除保留後'}） · 單檔 ${pct(riskSettings!.max_symbol_fraction)} · 日損失 ${pct(riskSettings!.daily_loss_fraction)} 停止新買進`);
 }
 function renderStrategy(state:DesktopState):void {
-  const r=workspaceRuntime(state),items=strategyItems(r,workspaceCutoff(state)),host=el('strategy-stocks');
-  text('strategy-count',items.length+' 檔');
-  const signature=JSON.stringify([items,r?.protections,r?.plan?.analysis.screening?.entry]);if(host.dataset.signature===signature)return;host.dataset.signature=signature;
-  const nodes:HTMLElement[]=items.map(item=>{
-    const card=document.createElement('article');card.className='stock-strategy';card.dataset.symbol=item.symbol;
-    const heading=document.createElement('div'),stock=document.createElement('button'),state=document.createElement('span');heading.className='stock-strategy-heading';
-    stock.textContent=item.symbol+' '+item.name+' · '+item.action;stock.className='quiet';stock.addEventListener('click',()=>void run(()=>showStock(item.symbol)));
-    state.textContent=item.state;state.className='chip';heading.append(stock,state);card.append(heading);
-    for(const [label,content] of [['觸發',item.trigger],['價格',item.price],['股數',item.size],['保護',item.protection],['理由',item.reason]] as const){
-      const row=document.createElement('p'),title=document.createElement('span'),value=document.createElement('span');title.textContent=label;value.textContent=content;row.append(title,value);card.append(row);
-    }
-    return card;
-  });
-  // A held stock remains protected even when the new plan has no decision for it.
+  const r=workspaceRuntime(state),items=strategyItems(r,workspaceCutoff(state));
+  const rows:Cell[][]=[];
+  const add=(symbol:string,name:string,direction:string,trigger:string,price:string,size:string,state:string)=>{
+    const decision=r?.plan?.analysis.decisions.find(d=>d.symbol===symbol);
+    const spec=r?.protections.find(p=>p.symbol===symbol)?.spec??decision?.smart;
+    rows.push([{label:symbol+' '+name,chartSymbol:symbol},direction,trigger,price,size,
+      spec?.stop_price??'—',spec?.take_profit??'—',spec?.trailing_activate?spec.trailing_activate+' / '+pct(spec.trailing_fraction!):'—',state]);
+  };
+  for(const item of items){const d=r!.plan!.analysis.decisions.find(d=>d.symbol===item.symbol)!;
+    add(item.symbol,item.name,item.action,item.trigger,d.action==='HOLD'?'—':d.limit_price,d.action==='HOLD'?'—':fmt(d.shares),item.state);}
   for(const p of r?.protections??[]){if(items.some(d=>d.symbol===p.symbol))continue;
-    const card=document.createElement('article');card.className='stock-strategy';const stock=document.createElement('button');stock.className='quiet';stock.textContent=p.symbol+' · 持倉保護';stock.addEventListener('click',()=>void run(()=>showStock(p.symbol)));
-    const detail=document.createElement('p');detail.textContent=`停損 ${p.spec.stop_price} · ${p.spec.take_profit?'固定停利 '+p.spec.take_profit:'無固定停利'} · ${p.triggered||'持續追蹤'}`;card.append(stock,detail);nodes.push(card);
+    add(p.symbol,r?.metadata[p.symbol]?.name??'','持倉保護','停損／移動退場','—','依可賣量',p.triggered||'監測中');}
+  const rule=r?.plan?.analysis.screening?.entry;
+  if(rule)for(const w of r!.watch.entries){if(rows.some(row=>(row[0] as {chartSymbol:string}).chartSymbol===w.symbol))continue;
+    const active=Date.parse(r!.plan!.analysis.expires_at)>Date.parse(workspaceCutoff(state));
+    add(w.symbol,w.name,'規則候選',rule.signal,'待觸發','待核算',!active?'策略已到期':r!.decisions.find(d=>d.symbol===w.symbol)?.state? action[r!.decisions.find(d=>d.symbol===w.symbol)!.state]??'等待條件':w.eligible?'等待條件':'觀測中');}
+  text('strategy-count',rows.length+' 檔');
+  for(const id of ['strategy-stocks','strategy-expanded']){
+    if(id==='strategy-stocks')table(id,['股票','方向','觸發條件','限價','參考股數','停損／停利','狀態'],rows.map(row=>[...row.slice(0,5),`停損 ${row[5]}\n停利 ${row[6]}${row[7]==='—'?'':'\n移動 '+row[7]}`,row[8]!]),'尚無股票策略');
+    else table(id,['股票','方向','觸發條件','限價','參考股數','停損','停利','移動啟動／回落','狀態'],rows,'尚無股票策略');
+    for(const row of el(id).querySelectorAll<HTMLTableRowElement>('tbody tr[data-chart-symbol]')){
+      row.title=items.find(d=>d.symbol===row.dataset.chartSymbol)?.reason??'持倉保護／程式選股規則';
+    }
   }
-  if(!nodes.length){const empty=document.createElement('p');empty.className='strategy-empty';empty.textContent=r?.plan?.analysis.screening?.entry?'本輪依上方自動選股規則持續篩選；個股觸發與股數確認結果會自動更新。':r?.plan?'本輪觀望，沒有新的個股買賣條件。':'等待程式產生第一輪股票策略。';nodes.push(empty);}
-  host.replaceChildren(...nodes);
 }
 function renderBacktest(state:DesktopState):void {
   const p=state.backtest_progress,r=state.backtest_result;renderReplay(state);
@@ -289,7 +296,7 @@ function request(compare=false):BacktestRequest {
     whole_lots:checked('bt-whole'),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
     capital_profile:value('bt-capital-profile') as BacktestRequest['capital_profile'],entry_cadence:value('bt-entry-cadence') as BacktestRequest['entry_cadence'],start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:value('replay-mode')==='direct'?0:Number(value('replay-speed-number')),
     decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
-    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),execution_slippage_bps:Number(value('bt-execution-slip')),fill_assumption:value('bt-fill') as BacktestRequest['fill_assumption'],research:{portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
+    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),postmarket_review_enabled:checked('bt-review-enabled'),execution_sizing:value('bt-sizing') as BacktestRequest['execution_sizing'],execution_slippage_bps:Number(value('bt-execution-slip')),fill_assumption:value('bt-fill') as BacktestRequest['fill_assumption'],research:{portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
 }
 el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>beginReplay());});
 el('bt-compare').addEventListener('click',()=>void run(()=>beginReplay(true)));
@@ -381,7 +388,7 @@ function renderStockDetails():void {
   const state=(replay?frame?.decisions:r?.decisions)?.find(x=>x.symbol===selectedSymbol);
   if(state)conditions.push(['目前狀態',action[state.state]??state.state],['執行／等待原因',state.reason]);
   if(position&&!position.sellable)conditions.push(['可賣限制','今日新增股數不可當日賣出']);
-  conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後，再由 Codex 按目前現金確認股數，送單前重新核對風控。':'等待 Codex 分析或模擬策略'));
+  conditionList('stock-conditions',conditions,decision?.reason??(rules?'符合規則後核算股數，送單前重新確認現金與風控。':'等待 Codex 分析或模擬策略'));
 }
 function conditionList(id:string,rows:[string,string][],note=''):void {
   const host=el(id);host.replaceChildren();for(const [label,v] of rows){const row=document.createElement('div');row.className='condition-item';const l=document.createElement('span'),n=document.createElement('strong');l.textContent=label;n.textContent=v;row.append(l,n);host.append(row);}if(note){const p=document.createElement('p');p.textContent=note;host.append(p);}
@@ -422,10 +429,12 @@ function renderExtras(state:DesktopState):void {
     const before=new Map([...stream.children].map(n=>[(n as HTMLElement).dataset.eventId,n as HTMLElement]));
     const top=stream.getBoundingClientRect().top,anchor=stream.scrollTop>4?[...stream.children].find(n=>n.getBoundingClientRect().bottom>top):undefined;
     const anchorTop=anchor?.getBoundingClientRect().top;
-    const cards=events.slice(-100).reverse().map(event=>{
+    const cards=events.filter(e=>!['REASONING','OUTPUT','USAGE','PLAN','MODEL','SNAPSHOT'].includes(e.stage)).slice(-12).reverse().map(event=>{
       const key=event.id??JSON.stringify([event.asof,event.stage,event.message]),stamp=JSON.stringify(event),old=before.get(key);
       if(old?.dataset.eventSignature===stamp)return old;
-      const row=analystCard(event);row.dataset.eventId=key;row.dataset.eventSignature=stamp;
+      const row=document.createElement('div');row.className='compact-event';row.classList.toggle('failed',event.stage==='FAILED'||event.stage==='HALTED');
+      const at=document.createElement('small'),body=document.createElement('span');at.textContent=time(event.asof)+' · '+(phase[event.stage]??event.stage);
+      body.textContent=event.message.replace(/\s+/g,' ').slice(0,110);row.append(at,body);row.dataset.eventId=key;row.dataset.eventSignature=stamp;
       const opened=[...(old?.querySelectorAll('details')??[])].map(d=>d.open);
       row.querySelectorAll('details').forEach((d,i)=>{d.open=opened[i]??false;});return row;
     });
@@ -608,6 +617,11 @@ el('connect-saved').addEventListener('click',()=>void run(async()=>{const result
 
 async function beginReplay(compare=false):Promise<string>{
   const form=el<HTMLFormElement>('backtest-form');if(!form.reportValidity())throw new Error('請核對模擬日期、本金與排程');
+  if(!latestSettings)throw new Error('設定尚未載入');
+  const replaySettings:Settings={...latestSettings,replay_strategy_schedule:value('bt-schedule') as Settings['replay_strategy_schedule'],
+    replay_strategy_times:times(value('bt-times')),replay_interval_minutes:Number(value('bt-interval')),replay_max_codex_calls:Number(value('bt-calls')),
+    replay_review_enabled:checked('bt-review-enabled'),replay_execution_sizing:value('bt-sizing') as Settings['replay_execution_sizing']};
+  await window.trader.saveSettings(JSON.stringify(replaySettings));latestSettings=replaySettings;
   if(value('bt-strategy')==='codex')await saveCodex();
   if(latestState?.simulation_scope==='realtime')await window.trader.simulationScope('replay');
   const result=await window.trader.backtest(request(compare));runningEquity.length=0;chartData=undefined;chartSignature='';chartGeneration++;

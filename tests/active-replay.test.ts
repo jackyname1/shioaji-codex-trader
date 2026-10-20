@@ -88,7 +88,7 @@ test('minute entry catches a brief non-rebound opportunity missed by the five-mi
   const analyze=async(s:Snapshot):Promise<Analysis>=>({snapshot_id:s.snapshot_id,expires_at:new Date(Date.parse(s.asof)+60*60000).toISOString(),
     stance:s.review_only?'HOLD_ONLY':'BUY_ALLOWED',candidates:['9001'],decisions:s.review_only?[]:[{...buy,conditions:guard('29.8')}],screening:null,summary:'isolated brief opportunity'});
   const frames:ReplayFrame[]=[];let calls=0;
-  const settings=SettingsSchema.parse({codex_enabled:true,watch_min_amount:'0'}),request={start:day,end:day,source:'sample',strategy:'codex',strategy_schedule:'fixed',strategy_times:['09:15'],capital_profile:'active'};
+  const settings=SettingsSchema.parse({codex_enabled:true,watch_min_amount:'0',execution_sizing:'codex'}),request={start:day,end:day,source:'sample',strategy:'codex',strategy_schedule:'fixed',strategy_times:['09:15'],capital_profile:'active'};
   const scheduled=await runBacktest({...request,entry_cadence:'scheduled'},data,settings,analyze,new AbortController().signal,undefined,undefined,undefined,undefined,async r=>{calls++;return testSize(r);});
   assert.equal(scheduled.orders.length,0);assert.equal(calls,0);
   const active=await runBacktest({...request,entry_cadence:'market'},data,settings,analyze,new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,async r=>{calls++;return testSize(r);});
@@ -105,7 +105,7 @@ test('legacy replay profile names share safe capital ceilings while respecting d
     expires_at:new Date(Date.parse(s.asof)+60*60000).toISOString(),stance:s.review_only?'HOLD_ONLY':'BUY_ALLOWED',
     candidates:['9001','9002','9003'],screening:null,summary:'isolated shared signals and rising prices',
     decisions:s.review_only||s.account.positions.length?[]:['9001','9002','9003'].map(symbol=>({...buy,symbol,entry_when:'IMMEDIATE',limit_price:'30.3'}))};};
-  const base=SettingsSchema.parse({codex_enabled:true,watch_min_amount:'0'}),request={start,end,source:'sample',strategy:'codex',strategy_schedule:'fixed',strategy_times:['09:10'],entry_cadence:'market'};
+  const base=SettingsSchema.parse({codex_enabled:true,watch_min_amount:'0',execution_sizing:'codex'}),request={start,end,source:'sample',strategy:'codex',strategy_schedule:'fixed',strategy_times:['09:10'],entry_cadence:'market'};
   const size=async(r:import('../src/core/execution.js').ExecutionRequest)=>{const lot=r.lots.find(l=>l.max_shares>0)!;
     const desired=Math.floor(Number(r.capital!.preferred_order_twd)/Number(lot.limit_price)),shares=Math.min(desired,lot.max_shares);
     return {request_id:r.request_id,symbol:r.symbol,action:r.action,shares,lot:lot.lot,limit_price:lot.limit_price,reason:'isolated full feasible allocation'};};

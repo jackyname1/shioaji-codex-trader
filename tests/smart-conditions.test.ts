@@ -207,7 +207,7 @@ test('minute replay catches an off-grid rebound, disallows same-day odd-lot exit
     decisions:s.review_only||s.account.positions.length?[]:[{...decision,limit_price:'30.3',trigger_price:'29.5',
       smart:{stop_price:'28.5',take_profit:null,reward_target:'33',trailing_activate:'31',trailing_fraction:'0.03'}}]};};
   const report=await runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'fixed',strategy_times:['09:10'],capital_profile:'balanced'},
-    data,SettingsSchema.parse({codex_enabled:true,watch_min_amount:'0'}),analyze,new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,
+    data,SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true,watch_min_amount:'0'}),analyze,new AbortController().signal,undefined,undefined,f=>frames.push(f),undefined,
     async r=>{sizings++;return {...await testSize(r),shares:100};});
   assert.equal(report.status,'COMPLETED');assert.equal(report.version,'0.2.5');
   assert.equal(report.orders.filter(o=>o.action==='BUY').length,1,JSON.stringify({logs:report.logs.slice(-25),failures:report.failures,frames:frames.filter(f=>f.at.includes('2026-01-05T01:1')).map(f=>({at:f.at,tracks:f.entry_tracks,decisions:f.decisions}))}));assert.match(report.orders[0]!.created_at,/01:13:00/);

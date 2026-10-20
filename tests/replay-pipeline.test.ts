@@ -56,7 +56,7 @@ test('chart zoom anchors the mouse, drag and slider share a viewport, updates pr
 test('paused slow Codex selection freezes virtual time; single step completes activation, risk, submission and reconciliation',async()=>{
   const clock=new ReplayClock(),abort=new AbortController(),frames:ReplayFrame[]=[],activities:ReplayActivity[]=[],progress:BacktestProgress[]=[];
   let release!:()=>void,entered!:()=>void,calls=0;const gate=new Promise<void>(resolve=>{release=resolve;}),began=new Promise<void>(resolve=>{entered=resolve;});
-  const running=runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({codex_enabled:true}),async s=>{
+  const running=runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360,postmarket_review_enabled:true},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{
     if(++calls===1){entered();await gate;}return rules(s);
   },abort.signal,p=>progress.push(structuredClone(p)),clock,f=>frames.push(f),e=>activities.push(e),testSize);
   await began;const frozen=frames.at(-1)!.at;clock.setSpeed(60);clock.command('pause');await nextTurn();
@@ -79,7 +79,7 @@ test('paused slow Codex selection freezes virtual time; single step completes ac
 test('fast-forward changes waiting only: prices, selections, automatic order/fill times and costs match a stepped run',async()=>{
   const options={start,end:start,source:'sample',strategy:'codex',end_time:'09:31',strategy_schedule:'interval',decision_interval_minutes:360};
   const run=async(stepped:boolean)=>{let elapsed=0;const clock=new ReplayClock(undefined,{now:()=>elapsed,wait:async(ms)=>{elapsed+=ms;await nextTurn();}});clock.setSpeed(stepped?60:0);
-    return runBacktest(options,flat(),SettingsSchema.parse({codex_enabled:true}),async s=>{await nextTurn();return rules(s);},new AbortController().signal,()=>undefined,clock,undefined,undefined,testSize);};
+    return runBacktest(options,flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{await nextTurn();return rules(s);},new AbortController().signal,()=>undefined,clock,undefined,undefined,testSize);};
   const fast=await run(false),paced=await run(true);
   assert.ok(fast.fills.length>0);assert.ok(fast.metrics.execution_confirmations!>0);
   assert.deepEqual(paced.strategy_log,fast.strategy_log);assert.deepEqual(paced.metrics,fast.metrics);assert.deepEqual(paced.daily_equity,fast.daily_equity);
@@ -87,7 +87,7 @@ test('fast-forward changes waiting only: prices, selections, automatic order/fil
   const orders=(r:typeof fast)=>r.orders.map(({local_id,broker_id,tag,plan_id,...o})=>o);assert.deepEqual(orders(paced),orders(fast));
 });
 test('a plan expiration remains a trigger between bars and cancels its remainder before any later fill',async()=>{
-  const report=await runBacktest({start,end:start,source:'sample',strategy:'codex',end_time:'09:31',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({codex_enabled:true}),async s=>{
+  const report=await runBacktest({start,end:start,source:'sample',strategy:'codex',end_time:'09:31',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{
     const a=rules(s);a.expires_at=new Date(Date.parse(s.asof)+60000).toISOString();a.screening!.entry=null;
     a.decisions=[{symbol:a.candidates[0]!,action:'BUY',shares:10,limit_price:'29.5',entry_when:'IMMEDIATE',trigger_price:'0',reason:'測試未成交掛單',smart:{stop_price:'29',take_profit:'33',trailing_activate:null,trailing_fraction:null}}];return a;
   },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
@@ -96,7 +96,7 @@ test('a plan expiration remains a trigger between bars and cancels its remainder
   assert.equal(report.final_frame!.decisions!.find(d=>d.symbol===order.symbol)!.state,'CANCELLED');
 });
 test('transient Codex failure preserves its specific reason and later sessions recover without reusing a failed plan',async()=>{
-  let failed=false;const report=await runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({codex_enabled:true}),async s=>{
+  let failed=false;const report=await runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{
     if(!failed){failed=true;throw new CodexError('Codex 測試輸出格式暫時無效');}return rules(s);
   },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
   assert.equal(report.status,'PARTIAL');assert.equal(report.failures!.length,1);assert.equal(report.failures![0]!.issue,'Codex 測試輸出格式暫時無效');
@@ -128,7 +128,7 @@ test('excluded universe HOLD comments do not invalidate the plan or authorize no
 });
 test('five-minute replay emits all intermediate checks and quantity requests only on checks, awaiting each result',async()=>{
   const frames:ReplayFrame[]=[],sizes:string[]=[];
-  const r=await runBacktest({start,end:start,source:'sample',strategy:'codex',end_time:'09:31',decision_interval_minutes:360},flat(),SettingsSchema.parse({codex_enabled:true}),async s=>rules(s),new AbortController().signal,()=>undefined,new ReplayClock(),f=>frames.push(f),undefined,async input=>{
+  const r=await runBacktest({start,end:start,source:'sample',strategy:'codex',end_time:'09:31',decision_interval_minutes:360},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>rules(s),new AbortController().signal,()=>undefined,new ReplayClock(),f=>frames.push(f),undefined,async input=>{
     const at=frames.at(-1)!.at;sizes.push(input.asof);await nextTurn();assert.equal(frames.at(-1)!.at,at);
     return testSize(input);
   });
