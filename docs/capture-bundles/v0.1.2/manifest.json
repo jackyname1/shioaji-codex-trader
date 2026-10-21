@@ -2,100 +2,100 @@
   "app_version": "0.1.2",
   "platform": "Windows x64",
   "fixture": "isolated synthetic GUI smoke test; no user credentials or brokerage orders",
-  "source_commit": "1791f71765e322c6f8047565d24a2012cad67494",
-  "source_tree": "0b5547e91af812afec1566e064d40cfa7af5cada",
-  "workflow_run_id": 39632969251,
+  "source_commit": "8aef55ff0f3adb073237a6107368e55c044ef213",
+  "source_tree": "59f94460f4bd59a6d0ab5c9d901f408aad94b40f",
+  "workflow_run_id": 39634106191,
   "images": [
     {
       "source_file": "SYNTHETIC-ui-paper-1600.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-paper-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 254277,
-      "sha256": "898f703a28f5f85334096fea482374bdae24b4a63e4a89472e18d82d76710446",
-      "git_blob_sha": "10db25ca841b5b06a9bb7ef7123b425ee157db07"
+      "size_bytes": 254152,
+      "sha256": "acf3477fd375dd1075476840ecf6c5fcf78bf8de941d5f43910f5fbd90a42927",
+      "git_blob_sha": "b83d27a9bba8ce915e095b2bec60889d37c0a8c3"
     },
     {
       "source_file": "SYNTHETIC-ui-capital-profile.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-capital-profile.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 252624,
-      "sha256": "a58b59a8baa4bfc5b7a093cefdaa55050c3d72c9832154eac4055913f1d44e37",
-      "git_blob_sha": "e73c6496cca548684f41d6dc6b4d70c23e5a9456"
+      "size_bytes": 252576,
+      "sha256": "c903b714c3101679a29c78133a1955897ddaedd4438b907c34c039189c7310a7",
+      "git_blob_sha": "b9a854ae5aa6a9e588ddbe68f1210e7a6da1f308"
     },
     {
       "source_file": "SYNTHETIC-ui-smart-conditions-1600.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-smart-conditions-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 251482,
-      "sha256": "c63299b26567a04fb60ae29bfaa6479bb9f6f4f4b7f677973a7b35cb8271595f",
-      "git_blob_sha": "7b973c53fc7ca425ec5280a6485e3afaebc3a751"
+      "size_bytes": 251474,
+      "sha256": "c8f85e7d96e85e16a8f1195b632e2857aa26802a05784a289544630f06f43364",
+      "git_blob_sha": "b1d0f0f0f8b0b325906b09a6d2b8e94798b79d54"
     },
     {
       "source_file": "SYNTHETIC-ui-realtime-1600.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-realtime-1600.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 247859,
-      "sha256": "fbad0b96d73003a689a516939be3ac72d0d759b4e484173f28b685ccbb353670",
-      "git_blob_sha": "d10a5d948f05496c5c2169da8aa9299fedd2d02c"
+      "size_bytes": 248453,
+      "sha256": "31fde8125122f6c802024559ee73ee184c5e9b4fc6cf94bf9e339cca9766ba6b",
+      "git_blob_sha": "6beb6252df318bdd7dc969d9615e19ea54e3d64b"
     },
     {
       "source_file": "SYNTHETIC-ui-live.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-live.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 242072,
-      "sha256": "49c8d5a2c2496e649a808b95910ff29f5efaaf9a4d6b72464b15b6316bbedf1e",
-      "git_blob_sha": "ba52a1523d82202e22f582425d26f33f414d4265"
+      "size_bytes": 242490,
+      "sha256": "8eb0bd0da471c6028d6dd643530ccd7a9ec87f3af7a6891a6ac819413fa6f80f",
+      "git_blob_sha": "a7274cf5f26577fd216fb1feddd941f7852c1dbf"
     },
     {
       "source_file": "SYNTHETIC-ui-connection.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-connection.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 213185,
-      "sha256": "e8697fe0730a952481590c3fde4b8b26885972d398cadd426e3c5941ac215a2c",
-      "git_blob_sha": "fe26e4402d37b7d44e3824f3330a8d4a5cd19cb1"
+      "size_bytes": 213253,
+      "sha256": "acae32b1a657258e8e40c4d1db31d9e39acc987d501d1091321ce4518c975e0a",
+      "git_blob_sha": "f3f506e24cd7854977923951bca373bd0697d3a8"
     },
     {
       "source_file": "SYNTHETIC-ui-codex-history.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-codex-history.png",
       "width": 1920,
       "height": 1080,
-      "size_bytes": 286265,
-      "sha256": "c29ed7c62d7c6a74d3736c328ccb2f44656860afa2df40565f2742ea7442ff59",
-      "git_blob_sha": "7b79d1764b720469d1b4f0eb58221efd33aae121"
+      "size_bytes": 286042,
+      "sha256": "bb0942c5b0d857f5fe5f6248e3f85cd5217642a00beed356074154ddf21e802c",
+      "git_blob_sha": "f6b43f84442b391d2d1466860e303c37de0de7d1"
     },
     {
       "source_file": "SYNTHETIC-ui-native-login-failure.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-native-login-failure.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 179151,
-      "sha256": "b5b4fed12d3169ae1e5b5ab731c2541719d7fbe07802377882035332f7b95d3a",
-      "git_blob_sha": "c574e42962dd15232e80533cd03903f544ac50e0"
+      "size_bytes": 179147,
+      "sha256": "838f6173531d03f32e72765ad5d6e6660f8d5fc883c1f2ed7a25662ff7b06253",
+      "git_blob_sha": "ed60e19c8e135000c5f81fe133377fd9fb71c370"
     },
     {
       "source_file": "SYNTHETIC-ui-tray.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-tray.png",
       "width": 440,
       "height": 690,
-      "size_bytes": 39306,
-      "sha256": "4096155599ec8b0fd66d8247ab7cd5fe617b552d052f8a9b65343f7e1b238b83",
-      "git_blob_sha": "d38327d56c74b40e3e2df4e7b139f6cf5ad0b27c"
+      "size_bytes": 39354,
+      "sha256": "e378d182cfa2dccb20cabb77bb90af2fb912c1fe7f58b9431150c60cf7ed7d93",
+      "git_blob_sha": "983bf0ff65cbd36ba08d880a0b9c0924a15bc065"
     },
     {
       "source_file": "SYNTHETIC-ui-replay-settings.png",
       "path": "docs/capture-bundles/v0.1.2/SYNTHETIC-ui-replay-settings.png",
       "width": 1600,
       "height": 960,
-      "size_bytes": 200817,
-      "sha256": "888ccfcaa3c3ba5e8e413d80c5054676babad4a854db854c3d1cd66d879de6ea",
-      "git_blob_sha": "c0bd3822bc0a01975bf01254671f13597059fa74"
+      "size_bytes": 200897,
+      "sha256": "499c789e28741b026aec997ecadabd56401e49b8cc0fff4bebc385a146d665b5",
+      "git_blob_sha": "e6844147583de494aa46c52b21cfafa058d5e69e"
     }
   ],
-  "bundle_sha256": "5b80fa8ec0897d6d3c58fbb9c58ca6cfeff3e539c2bcb5434b57ae88dd024bba"
+  "bundle_sha256": "9cc95381f85253597f21faf8e4b813f3ee176ea5701adcc7d30a7697d459c537"
 }
