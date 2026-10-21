@@ -5,6 +5,7 @@ export type Regime='TREND'|'RANGE'|'HIGH_RISK'|'UNKNOWN';
 export interface PortfolioState {version:1;high_water:string;equity:string;asof:string;session_day:string;session_index:number;
   blocked_until_session?:number;drawdown_latched?:boolean;loss_latched?:boolean;last_loss_event?:string}
 export interface PortfolioDecision {state:PortfolioState;drawdown_fraction:string;regime:Regime;scale:string;
+  enabled:boolean;
   blocked:boolean;reasons:string[];breadth:number|null;median_atr_fraction:number|null;closed_trades:number;recent_expectancy:string|null;
   provenance:string}
 /** As-of breadth proxy of the dynamic pool, NOT a TAIEX/index regime or a historical full-market universe. */
@@ -71,7 +72,7 @@ export function portfolioDecision(previous:PortfolioState|undefined,a:Account,fe
     if(useLoss&&recent.length>=3&&expectancy?.lt(0))scale=Decimal.min(scale,'.5');
   }
   if(reasons.length)scale=d(0);
-  return {state,drawdown_fraction:dd.toFixed(),...regime,scale:scale.toFixed(),blocked:scale.eq(0),reasons,
+  return {state,enabled:s.portfolio_risk_enabled,drawdown_fraction:dd.toFixed(),...regime,scale:scale.toFixed(),blocked:scale.eq(0),reasons,
     closed_trades:closed.length,recent_expectancy:expectancy?.toFixed()??null,
     provenance:'Observed account equity; prior completed dynamic-pool daily features. No index/real odd-lot depth inference.'};
 }

@@ -53,6 +53,21 @@ test('market proxy uses only prior completed data, with explicit UNKNOWN and hig
  const p=portfolioDecision(undefined,account(),{},[],s,now,true);assert.equal(p.blocked,true);assert.match(p.reasons.join(),/資料不足/);
 });
 function event(id:string,action:'BUY'|'SELL',shares:number,pnl:string|null,symbol='9001'):Experience{return {id,at:now.toISOString(),mode:'paper',kind:'SIMULATED_FILL',symbol,action,shares,price:'100',fee:'20',tax:'0',realized_pnl:pnl,note:''};}
+test('disabled portfolio gate still observes scoped full episodes independent of prompt feedback and as-of limits',async()=>{
+ const r=await rig();try{
+  r.engine.setSettings({...r.engine.settings,portfolio_risk_enabled:false,experience_enabled:false,experience_limit:5});
+  r.store.set('experience_scope','isolated-replay');
+  const at=new Date(now.getTime()+2000);
+  for(const e of [event('buy','BUY',10,null),event('partial','SELL',5,'-10'),event('closed','SELL',5,'-20')])r.store.recordExperience({...e,mode:'isolated-replay'});
+  for(let i=0;i<8;i++)r.store.recordExperience({...event('noise'+i,'BUY',0,null),kind:'RISK_REFUSAL',action:'NONE',mode:'isolated-replay'});
+  r.store.recordExperience({...event('foreign','SELL',10,'-999'),mode:'another-replay'});
+  r.store.recordExperience({...event('later','BUY',10,null),mode:'isolated-replay',at:new Date(at.getTime()+1000).toISOString()});
+  const p=r.engine.portfolioRisk(at,{...account(),asof:at.toISOString()})!;
+  assert.equal(p.closed_trades,1);assert.equal(p.recent_expectancy,'-30');assert.equal(p.enabled,false);
+  assert.equal(p.scale,'1');assert.equal(p.blocked,false);assert.deepEqual(p.reasons,[]);
+  assert.equal(r.store.simulatedFills('isolated-replay',at.toISOString()).length,3);
+ }finally{await r.engine.close();r.store.close();}
+});
 test('partial exits and unclosed positions do not inflate consecutive losses; recent negative expectancy scales entries',()=>{
  const es=[event('a','BUY',10,null),event('b','SELL',5,'-10'),event('c','SELL',5,'-20')];
  assert.equal(closedEpisodes(es,now.toISOString()).length,1);assert.equal(closedEpisodes(es,now.toISOString())[0]!.pnl,'-30');

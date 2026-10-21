@@ -169,7 +169,7 @@ export class Engine {
     if(!a)return;
     const scope=this.store.get<string>('experience_scope')??this.settings.mode;
     const p=portfolioDecision(this.store.get<PortfolioState>('portfolio_risk_v1'),a,features,
-      this.settings.portfolio_risk_enabled?this.store.experiences(scope,now.toISOString(),10000):[],this.settings,now,this.calendar.isOpen(twDay(now)));
+      this.store.simulatedFills(scope,now.toISOString()),this.settings,now,this.calendar.isOpen(twDay(now)));
     if(a.complete&&p.state.asof===now.toISOString())this.store.set('portfolio_risk_v1',p.state);
     return p;
   }
