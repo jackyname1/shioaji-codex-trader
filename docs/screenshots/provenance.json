@@ -112,5 +112,7 @@
   "capture_tree": "8e8e0d2971e5b3044458db398ffbfe32b20cd505",
   "workflow_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/39632969251",
   "source_gui_job_id": 119335815432,
-  "packaged_gui_job_id": 119338959026
+  "packaged_gui_job_id": 119343352865,
+  "packaged_validation_workflow_url": "https://github.com/jackyname1/shioaji-codex-trader/actions/runs/39634106191",
+  "code_validation_commit": "8aef55ff0f3adb073237a6107368e55c044ef213"
 }
