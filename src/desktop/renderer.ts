@@ -283,9 +283,10 @@ function renderBacktest(state:DesktopState):void {
     node.disabled=p.running;
   }
   if(!p.running)schedulingFields('bt');
-  el('bt-result').hidden=!r;el<HTMLButtonElement>('bt-json').disabled=!r;el<HTMLButtonElement>('bt-csv').disabled=!r;
+  el('bt-result').hidden=!r;el<HTMLButtonElement>('bt-export').disabled=p.running||!r;
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-backtest-export]'))button.disabled=p.running||!r;
   el<HTMLButtonElement>('bt-market').disabled=p.running||!r?.dataset_id;
-  if(!r){renderedReport='';text('bt-entry-diagnostics','測試完成後可查看進場與未成交診斷');table('bt-history',['日期區間','策略排程','淨損益','報酬','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,fmt(h.net_pnl),fmt(h.return_pct)+'%',phase[h.status]??h.status,{label:'檢視',report:h.id}]));return;}
+  if(!r){renderedReport='';text('bt-entry-diagnostics','測試完成後可查看進場與未成交診斷');text('bt-diagnosis','完成測試後顯示完整交易與策略期限診斷');table('bt-history',['日期區間','策略排程','淨損益','報酬','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,fmt(h.net_pnl),fmt(h.return_pct)+'%',phase[h.status]??h.status,{label:'檢視',report:h.id}]));return;}
   table('bt-history',['日期區間','策略排程','偵測','淨損益','報酬','回撤','呼叫','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,`${h.monitor_seconds} 秒`,fmt(h.net_pnl),fmt(h.return_pct)+'%',fmt(h.drawdown_pct)+'%',h.calls,
     (h.synthetic?'虛構 · ':'')+(phase[h.status]??h.status),{label:h.id===r.id?'檢視中':'檢視',report:h.id}]));
   if(renderedReport===r.id)return;renderedReport=r.id;const m=r.metrics;
@@ -295,6 +296,8 @@ function renderBacktest(state:DesktopState):void {
   text('bt-activity',`觀測加入 ${m.watch_adds} / 移除 ${m.watch_removes} · Codex ${m.codex_calls}`);text('bt-equity',fmt(m.final_equity));
   text('bt-capital',m.average_exposure_pct===undefined?'舊報表未統計持倉比例':`持倉：行情時點平均 ${fmt(m.average_exposure_pct)}% · 最高 ${fmt(m.max_exposure_pct??'0')}% · ${r.request.capital_profile==='active'?'標準風控':r.request.capital_profile==='balanced'?'標準風控':'自訂風控'}`);
   text('bt-entry-diagnostics',entryDiagnosticText(r.entry_diagnostics));
+  const diag=r.diagnostics;
+  text('bt-diagnosis',diag?`完整平倉 ${diag.trades.closed_trades} 筆 · 勝率 ${diag.trades.win_rate_pct??'無'}% · 平均淨損益 ${diag.trades.expectancy??'無'}\n`+diag.findings.map(f=>f.message).join('\n'):'舊報表可匯出損益診斷重新計算');
   text('bt-quality',`近似成交 · ${r.quality.universe_mode==='DAILY_HISTORICAL'?'每日歷史股票池':'固定股票池'} · 行情 ${r.quality.covered_sessions}/${r.quality.sessions} 日 · 有效策略 ${r.quality.successful_strategies}/${r.quality.strategy_slots}`);
   table('bt-fills',['台北時間','股票','方向','股數','價格','手續費 / 稅','已實現損益'],r.fills.slice().reverse().map(f=>[stamp(f.at),f.symbol,action[f.action]??f.action,f.shares,fmt(f.price),`${fmt(f.fee)} / ${fmt(f.tax)}`,f.realized_pnl===null?'—':fmt(f.realized_pnl)]),'本次無成交；請核對策略、資料與風控紀錄');
   table('bt-daily',['日期','淨值','現金','待收交割'],r.daily_equity.map(d=>[d.day,fmt(d.equity),fmt(d.cash),fmt(d.settlement_credits)]));
@@ -339,7 +342,8 @@ function request(compare=false):BacktestRequest {
 el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>beginReplay());});
 for(const id of ['bt-days','bt-times','bt-interval','bt-calls','bt-review-enabled'])el(id).addEventListener('input',replayCadenceHint);
 el('bt-compare').addEventListener('click',()=>void run(()=>beginReplay(true)));
-el('bt-cancel').addEventListener('click',()=>void run(()=>window.trader.cancelBacktest()));el('bt-json').addEventListener('click',()=>void run(()=>window.trader.exportBacktest('json')));el('bt-csv').addEventListener('click',()=>void run(()=>window.trader.exportBacktest('csv')));
+el('bt-cancel').addEventListener('click',()=>void run(()=>window.trader.cancelBacktest()));
+for(const button of document.querySelectorAll<HTMLButtonElement>('[data-backtest-export]'))button.addEventListener('click',()=>void run(()=>window.trader.exportBacktest(button.dataset.backtestExport as Parameters<typeof window.trader.exportBacktest>[0])));
 el('codex-login').addEventListener('click',()=>void run(()=>window.trader.loginCodex()));
 el('codex-device').addEventListener('click',()=>void run(()=>window.trader.loginCodex('device')));
 el('codex-open').addEventListener('click',()=>void run(()=>window.trader.openCodexLogin()));
@@ -669,7 +673,7 @@ async function beginReplay(compare=false):Promise<string>{
   chartViewport.reset();chartReportId='';
   el<HTMLInputElement>('chart-start').value=value('bt-start');el<HTMLInputElement>('chart-end').value=value('bt-end');
   text('market-chart','正在準備歷史行情');el('market-chart').classList.add('chart-empty');
-  for(const id of ['bt-json','bt-csv','bt-market'])el<HTMLButtonElement>(id).disabled=true;
+  for(const id of ['bt-json','bt-csv','bt-market','bt-export','bt-audit-export','bt-trades-export','bt-daily-export'])el<HTMLButtonElement>(id).disabled=true;
   el<HTMLInputElement>('chart-pan').disabled=true;
   el<HTMLDialogElement>('replay-settings-dialog').close();return result;
 }

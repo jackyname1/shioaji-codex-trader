@@ -233,6 +233,11 @@ export class Store {
     return (this.db.prepare('SELECT value FROM experiences WHERE mode=? AND at<=? ORDER BY at DESC,rowid DESC LIMIT ?')
       .all(mode,new Date(asof).toISOString(),limit) as {value:string}[]).reverse().map(x => ExperienceSchema.parse(JSON.parse(x.value)));
   }
+  // Risk accounting must not depend on the prompt's sample limit or feedback switch.
+  simulatedFills(mode:string,asof:string):Experience[] {
+    return (this.db.prepare("SELECT value FROM experiences WHERE mode=? AND at<=? AND json_extract(value,'$.kind')='SIMULATED_FILL' ORDER BY at,rowid")
+      .all(mode,new Date(asof).toISOString()) as {value:string}[]).map(x=>ExperienceSchema.parse(JSON.parse(x.value)));
+  }
   saveReview(raw: ExperienceReview): void {
     const x = ReviewSchema.parse(raw);
     this.db.prepare('INSERT OR IGNORE INTO reviews VALUES (?,?,?,?)').run(x.id,new Date(x.at).toISOString(),x.mode,JSON.stringify(x));

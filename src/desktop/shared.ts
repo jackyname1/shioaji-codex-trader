@@ -39,7 +39,7 @@ export interface TraderBridge {
   authorizeLive(): Promise<string>;
   backtest(request:BacktestRequest):Promise<string>;
   cancelBacktest():Promise<string>;
-  exportBacktest(format:'json'|'csv'):Promise<string>;
+  exportBacktest(format:import('../core/backtest-export.js').BacktestExportFormat):Promise<string>;
   selectBacktest(id:string):Promise<string>;
   loginCodex(method?:'device'):Promise<string>;
   openCodexLogin():Promise<string>;

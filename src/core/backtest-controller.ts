@@ -9,6 +9,7 @@ import type { AnalystEvent } from './codex.js';
 import { csvDataset,syntheticDataset } from './backtest-data.js';
 import { shioajiDataset } from './backtest-source.js';
 import { CodexAnalyst,appendAnalystEvent } from './codex.js';
+import {backtestDiagnostics} from './backtest-export.js';
 import {twDay,type Settings} from './models.js';
 
 export function appendReplayActivity(events:AnalystEvent[],event:ReplayActivity):void {
@@ -36,7 +37,7 @@ export class BacktestController {
   private abort?:AbortController;private task?:Promise<void>;
   constructor(readonly root:string,private readonly onClock?:(state:ReplayClockState)=>void){this.clock=new ReplayClock(onClock);}
   private useReport(r:BacktestReport):void {
-    this.report=r;this.frame=r.final_frame;
+    r.diagnostics=backtestDiagnostics(r);this.report=r;this.frame=r.final_frame;
     this.progress={running:false,phase:r.status,day:twDay(new Date(r.asof)),points:0,total_points:0,
       codex_calls:r.metrics.codex_calls,at:r.asof,last_error:r.failures?.at(-1)?.issue,
       message:r.status==='FAILED'?'本次沒有有效盤中策略：'+(r.failures?.at(-1)?.issue??'請查看策略與資料紀錄'):'已載入測試結果，可查看與匯出'};

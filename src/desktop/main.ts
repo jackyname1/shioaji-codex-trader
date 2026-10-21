@@ -18,7 +18,8 @@ import { bundledCodexPath, CodexError, codexEnvironment, prepareCodexProfile,com
 import {ReplayClock} from '../core/replay-clock.js';
 import { BacktestController } from '../core/backtest-controller.js';
 import {replayMinutesCsv} from '../core/backtest-data.js';
-import { BacktestRequestSchema,fillsCsv } from '../core/backtest.js';
+import { BacktestRequestSchema } from '../core/backtest.js';
+import {backtestExport,type BacktestExportFormat} from '../core/backtest-export.js';
 import { experienceStatus } from '../core/experience.js';
 import { z } from 'zod';
 import { CredentialVault,CredentialError,NativeConnection,connectionInput,type CredentialState } from './credentials.js';
@@ -441,12 +442,15 @@ function registerIpc(): void {
     return result;
   });
   handle('trader:backtest-export',async value=>{
-    if(!backtest.report||!['json','csv'].includes(String(value)))throw new Error('回測沒有可匯出的報表');
-    const format=value as 'json'|'csv',result=await dialog.showSaveDialog(window!,{
-      title:'匯出歷史模擬報表',defaultPath:`backtest-${backtest.report.request.start}-${backtest.report.request.end}.${format}`,
-      filters:[{name:format.toUpperCase(),extensions:[format]}]});
+    // Capture the selected result before awaiting the dialog; changing reports cannot mix runs.
+    const report=backtest.report;
+    if(backtest.progress.running)throw new Error('回測執行中，請等待結果保存後再匯出');
+    if(!report||!['json','csv','audit','trades','daily'].includes(String(value)))throw new Error('回測沒有可匯出的報表');
+    const output=backtestExport(report,value as BacktestExportFormat),result=await dialog.showSaveDialog(window!,{
+      title:'匯出'+output.label,defaultPath:`backtest-${report.request.start}-${report.request.end}-${value}.${output.extension}`,
+      filters:[{name:output.label,extensions:[output.extension]}]});
     if(result.canceled||!result.filePath)return '已取消匯出';
-    writeFileSync(result.filePath,format==='json'?JSON.stringify(backtest.report,null,2):fillsCsv(backtest.report),{mode:0o600});return '回測報表已匯出';
+    writeFileSync(result.filePath,output.content,{mode:0o600});return output.label+'已匯出';
   });
   handle('trader:exit',() => exit());
 }
@@ -544,6 +548,24 @@ async function smokeTest(): Promise<void> {
   const range=await window.webContents.executeJavaScript(`({start:document.querySelector('#chart-start').value,end:document.querySelector('#chart-end').value,schedule:document.querySelector('#schedule-strategy').textContent})`);
   if(range.start!==backtest.report.request.start||range.end!==backtest.report.request.end
     ||range.schedule!==`每${backtest.report.request.strategy_every_sessions??1}日 `+backtest.report.request.decision_interval_minutes+' 分鐘'||backtest.progress.total_runs!==undefined)throw new Error('切換歷史報表日期與排程未通過');
+  // Exercise the real preload/IPC/save path for every export in source and packaged builds.
+  await window.webContents.executeJavaScript(`document.querySelector('#bt-export').click()`);
+  const exportUi=await window.webContents.executeJavaScript(`({open:document.querySelector('#backtest-export-dialog').open,count:document.querySelectorAll('[data-backtest-export]:not(:disabled)').length,diagnosis:document.querySelector('#bt-diagnosis').textContent})`);
+  if(!exportUi.open||exportUi.count!==5||!exportUi.diagnosis.includes('完整平倉'))throw new Error('回測匯出入口或損益診斷未通過');
+  const replaySave=dialog.showSaveDialog;
+  try{
+    for(const format of ['json','csv','trades','daily','audit'] as const){
+      const filePath=join(dataRoot,'replay-export-'+format+'.fixture');
+      dialog.showSaveDialog=async()=>({canceled:false,filePath});
+      await window.webContents.executeJavaScript(`window.trader.exportBacktest('${format}')`);
+      const output=readFileSync(filePath,'utf8');
+      if(format==='json'){const parsed=JSON.parse(output);if(parsed.id!==backtest.report.id||!parsed.diagnostics||parsed.fills.length!==backtest.report.fills.length)throw new Error('完整回測 JSON 匯出未通過');}
+      else if(format==='audit'?!output.includes('回測損益診斷'):!output.includes(format==='daily'?'settlement_credits':format==='trades'?'exit_reason':'order_id'))throw new Error('回測 '+format+' 匯出未通過');
+    }
+    dialog.showSaveDialog=async()=>({canceled:true,filePath:''});
+    const cancelled=await window.webContents.executeJavaScript(`window.trader.exportBacktest('json')`);
+    if(cancelled!=='已取消匯出')throw new Error('回測匯出取消未通過');
+  }finally{dialog.showSaveDialog=replaySave;await window.webContents.executeJavaScript(`document.querySelector('#backtest-export-dialog').close()`);}
   smokeMark('REPLAY_GUI');window.webContents.debugger.attach('1.3');
   const artifacts=process.env.TRADER_SMOKE_OUTPUT??join(process.cwd(),'release');mkdirSync(artifacts,{recursive:true});
   for(const [width,height] of [[1600,960],[1366,768],[1100,740],[1920,1080]] as const){

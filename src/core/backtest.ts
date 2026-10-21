@@ -23,6 +23,7 @@ import {replayCapitalSettings} from './capital.js';
 import {EntryDiagnosticTracker,type EntryDiagnostics} from './entry-diagnostics.js';
 import {entryDiagnosticText} from './entry-diagnostics-text.js';
 import {tradeStatistics,exitStatistics} from './performance.js';
+import {backtestDiagnostics,backtestExport,type BacktestDiagnostics} from './backtest-export.js';
 
 export const BacktestRequestSchema = z.strictObject({
   start:z.string().refine(validDay),end:z.string().refine(validDay),
@@ -84,6 +85,7 @@ export interface BacktestReport {
   strategy_log:{at:string;review:boolean;stance:string;expires_at:string;summary:string;selected:string[]}[];watch_changes:WatchChange[];
   workflow?:ReplayActivity[];failures?:{at:string;review:boolean;stage:string;issue:string;diagnostic?:CodexFailureDetail}[];normalization?:HistoryDataset['normalization'];
   analyst_events?:AnalystEvent[];
+  diagnostics?:BacktestDiagnostics;
   daily_equity:{day:string;cash:string;settlement_credits:string;equity:string;asof:string;complete:boolean;exposure_pct?:string}[];
   fills:SimulatedFill[];orders:import('./models.js').Order[];reviews:import('./experience.js').ExperienceReview[];logs:string[];limitations:string[];
 }
@@ -366,7 +368,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     const returns=daily.map((row,i)=>Number(row.equity)/Number(i?daily[i-1]!.equity:request.initial_cash)-1),mean=returns.reduce((a,b)=>a+b,0)/Math.max(1,returns.length);
     const sd=returns.length>1?Math.sqrt(returns.reduce((a,b)=>a+(b-mean)**2,0)/(returns.length-1)):0;
     const breachDays=daily.filter(row=>store.get('daily_loss_breached_'+row.day)).map(row=>row.day);
-    return {version:'0.2.5',build:buildIdentity(),entry_diagnostics:entryDiagnostics.report(store.orders()),final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
+    const report:BacktestReport={version:'0.2.5',build:buildIdentity(),entry_diagnostics:entryDiagnostics.report(store.orders()),final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
       model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'columnar-observations-v2':'active-entry-feedback-v7',
       settings:reportSettings,
       metrics:{initial_cash:request.initial_cash,final_cash:account.cash,settlement_credits:account.settlement_credits,stock_value:marketValue(account).toFixed(2),
@@ -386,6 +388,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         average_exposure_pct:exposureSamples?exposureSum.div(exposureSamples).toFixed(4):'0.0000',max_exposure_pct:maxExposure.toFixed(4),exposure_samples:exposureSamples},
       quality,positions:account.positions,strategy_log:strategyLog,workflow,failures:failureLog,normalization:dataset.normalization,watch_changes:engine.watch.changes,daily_equity:daily,fills,orders:store.orders(),
       reviews:store.reviews('backtest:'+id,now.toISOString(),2000),logs:store.logs(2000),limitations};
+    report.diagnostics=backtestDiagnostics(report);return report;
   }finally{await engine.close();store.close();}
 }
 export function formatBacktestReport(r:BacktestReport):string{const m=r.metrics;
@@ -402,7 +405,5 @@ export function formatBacktestReport(r:BacktestReport):string{const m=r.metrics;
     `資料覆蓋=${r.quality.covered_sessions}/${r.quality.sessions} 交易日；有效策略=${r.quality.successful_strategies}/${r.quality.strategy_slots}`,
     `成交模型=近似；股票池=${r.quality.universe_mode==='DAILY_HISTORICAL'?'每日歷史排行':'固定資料池'}；${r.quality.halted_at?'停止於='+r.quality.halted_at:'已處理行情截止='+r.asof}`,
     '',...r.daily_equity.map(x=>`${x.day} 淨值=${x.equity} 現金=${x.cash} 待收=${x.settlement_credits}`),'',...r.limitations].join('\n');}
-const csvValue=(x:unknown):string=>'"'+String(x??'').replace(/"/g,'""')+'"';
-export function fillsCsv(r:BacktestReport):string{const fields=['at','symbol','action','lot','purpose','shares','price','amount','fee','tax','realized_pnl'] as const;
-  return '\uFEFF'+fields.join(',')+'\r\n'+r.fills.map(f=>fields.map(k=>csvValue(f[k])).join(',')).join('\r\n');}
+export function fillsCsv(r:BacktestReport):string{return backtestExport(r,'csv').content;}
 
