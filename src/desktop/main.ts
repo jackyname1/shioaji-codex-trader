@@ -731,8 +731,15 @@ async function smokeTest(): Promise<void> {
   await window.webContents.executeJavaScript(`(()=>{document.querySelector('[data-settings-tab="risk"]').click();
     const direction=document.querySelector('#s-direction');direction.value='reduce_only';direction.dispatchEvent(new Event('change',{bubbles:true}));
     document.querySelector('#settings-form').requestSubmit();})()`);
-  await new Promise(resolve=>setTimeout(resolve,1200));
-  if(service.engine.settings.trade_direction!=='reduce_only'||!await window.webContents.executeJavaScript(`document.querySelector('#strategy-stance').textContent.includes('僅減碼')`))throw new Error('僅減碼設定與工作台方向未同步');
+  // Saving and the renderer's one-second polling are asynchronous; require the same state assertion,
+  // but wait for convergence rather than sampling once at an arbitrary delay on a packaged build.
+  let directionSynced=false,directionUi='';
+  for(let n=0;n<100&&!directionSynced;n++){
+    directionUi=await window.webContents.executeJavaScript(`document.querySelector('#strategy-stance').textContent`);
+    directionSynced=service.engine.settings.trade_direction==='reduce_only'&&directionUi.includes('僅減碼');
+    if(!directionSynced)await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  if(!directionSynced)throw new Error(`僅減碼設定與工作台方向未同步：saved=${service.engine.settings.trade_direction}; visible=${directionUi}`);
   await service.saveSettings({...service.engine.settings,trade_direction:'auto'});await new Promise(resolve=>setTimeout(resolve,1200));
   await window.webContents.executeJavaScript(`document.querySelector('[data-settings-tab="connection"]').click()`);
   const dailyBefore={times:[...service.engine.settings.strategy_times],limit:service.engine.settings.codex_daily_call_limit};
