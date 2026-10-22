@@ -33,6 +33,9 @@ export function backtestDiagnostics(r:BacktestReport):BacktestDiagnostics {
   }
   if(trades.closed_trades<20)findings.push({code:'SMALL_SAMPLE',message:`只有 ${trades.closed_trades} 筆完整平倉交易；勝率與期望值為樣本描述，尚不能證明策略優勢。`});
   if(trades.expectancy!==null&&d(trades.expectancy).lt(0))findings.push({code:'NEGATIVE_EXPECTANCY',message:`完整交易平均淨損益 ${trades.expectancy} 元；提高曝險或交易次數不能據此推定改善。`});
+  if(r.positions.some(p=>p.shares>0))findings.push({code:'OPEN_POSITION_MARKS',message:`期末仍有未平倉庫存，未實現損益 ${r.metrics.unrealized_pnl} 元已計入淨損益，尚未扣未來賣出成本；不能視為已落袋收益。`});
+  const triggerRejects=(r.workflow??[]).filter(e=>e.stage==='RISK'&&e.message.includes('停損不得位於或低於跌停價'));
+  if(triggerRejects.length)findings.push({code:'LEGACY_TRIGGER_BAND_REJECTION',message:`舊版曾有 ${triggerRejects.length} 次狀態變更因停損觸發價位於今日跌停或以下而封鎖；跨日觸發條件與當日委託價格不同。修正版須以原始行情重跑，不能直接把遭拒訊號補算為獲利。`});
   if(gaps.length)findings.push({code:'PLAN_COVERAGE_GAP',message:`${days.length} 個已觀測交易日中，${gaps.length} 日盤中沒有有效策略；每 ${r.request.strategy_every_sessions??1} 個交易日分析與短期限會留下空窗。此處僅統計期限覆蓋，不代表缺少行情或一定錯失獲利；既有持倉保護仍持續。`});
   if(r.settings.portfolio_risk_enabled===false)findings.push({code:'PORTFOLIO_GATE_OFF',message:'組合研究風控未啟用；平倉統計仍須顯示，不能把 scale=1 解讀為風險檢查已通過。'});
   if(r.quality.execution_model==='APPROXIMATE')findings.push({code:'APPROXIMATE_FILLS',message:`成交模型為近似（${r.request.fill_assumption??'legacy'}），尚非真實零股排隊與成交證據。`});

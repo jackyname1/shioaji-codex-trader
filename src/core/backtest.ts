@@ -369,7 +369,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     const sd=returns.length>1?Math.sqrt(returns.reduce((a,b)=>a+(b-mean)**2,0)/(returns.length-1)):0;
     const breachDays=daily.filter(row=>store.get('daily_loss_breached_'+row.day)).map(row=>row.day);
     const report:BacktestReport={version:'0.2.5',build:buildIdentity(),entry_diagnostics:entryDiagnostics.report(store.orders()),final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
-      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'columnar-observations-v2':'active-entry-feedback-v7',
+      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'columnar-swing-triggers-v3':'swing-triggers-v8',
       settings:reportSettings,
       metrics:{initial_cash:request.initial_cash,final_cash:account.cash,settlement_credits:account.settlement_credits,stock_value:marketValue(account).toFixed(2),
         final_equity:final.toFixed(2),net_pnl:final.minus(request.initial_cash).toFixed(2),return_pct:final.div(request.initial_cash).minus(1).times(100).toFixed(4),

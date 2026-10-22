@@ -42,3 +42,10 @@ test('CSV keeps numeric losses, escapes multiline quotes and neutralizes spreads
   assert.equal(csvCell('-129.75'),'"-129.75"');assert.equal(csvCell('=HYPERLINK("test")'),'"\'=HYPERLINK(""test"")"');
   assert.equal(csvCell('two\n"lines"'),'"two\n""lines"""');assert.equal(csvCell('@cmd'),'"\'@cmd"');
 });
+test('old reports identify trigger-band rejections and distinguish marked inventory from realized returns',async()=>{
+  const r=await report();r.positions=[{symbol:'9001',shares:1,sellable:1,average_price:'30',last_price:'31'}];
+  r.workflow=[{at:r.asof,stage:'RISK',message:'9001：停損不得位於或低於跌停價，不能視為可成交的保護'}];
+  const codes=backtestDiagnostics(r).findings.map(f=>f.code);
+  assert.ok(codes.includes('OPEN_POSITION_MARKS'));assert.ok(codes.includes('LEGACY_TRIGGER_BAND_REJECTION'));
+  assert.match(backtestExport(r,'audit').content,/不能直接把遭拒訊號補算為獲利/);
+});

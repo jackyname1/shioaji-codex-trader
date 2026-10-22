@@ -1,6 +1,15 @@
-import {active,addDays,d,equity,remaining,twDay,type Account,type Decision,type Features,type Instrument,type Order,type Quote,type Settings,type SmartSpec} from './models.js';
+import {active,addDays,d,equity,remaining,twDay,SmartSchema,type Account,type Decision,type Features,type Instrument,type Order,type Quote,type Settings,type SmartSpec} from './models.js';
 import type {TradingCalendar} from './calendar.js';
 import {fee} from './costs.js';
+
+/** Local triggers may persist across sessions. Daily price bands apply to submitted orders. */
+export function entryProtectionIssues(price:string,spec:SmartSpec|undefined):string[]{
+  if(!spec||!SmartSchema.safeParse(spec).success)return ['缺少有效進場停損保護'];
+  if(!d(spec.stop_price).lt(price))return ['進場停損必須低於買進價格'];
+  if(spec.take_profit&&!d(spec.take_profit).gt(price)||spec.reward_target&&!d(spec.reward_target).gt(price))
+    return ['進場收益目標必須高於買進價格'];
+  return [];
+}
 
 /** Completed-session observations only. These are hypotheses, not an estimated probability of profit. */
 export function confirmationIssues(policy:Settings['entry_policy'],f:Features|undefined,q:Quote|undefined,decision?:Decision):string[]{
@@ -24,15 +33,13 @@ export function admissionIssues(order:Order,a:Account,s:Settings,spec:SmartSpec|
   features:Record<string,Features>,q:Quote|undefined,decision:Decision|undefined,calendar:TradingCalendar,now:Date,lastSell?:string,
   stops:Record<string,string>={}):string[]{
   if(order.action!=='BUY')return [];
-  const instrument=metadata[order.symbol],issues:string[]=[];
-  if(spec&&instrument&&d(spec.stop_price).lte(instrument.limit_down))issues.push('停損不得位於或低於跌停價，不能視為可成交的保護');
+  const instrument=metadata[order.symbol],issues=entryProtectionIssues(order.limit_price,spec);
   if(s.entry_policy==='legacy')return issues;
   issues.push(...confirmationIssues(s.entry_policy,features[order.symbol],q,decision));
   if(breadthState(features)!=='NORMAL')issues.push('股票池廣度風險偏高或不足五檔有效資料；此值不是大盤指數');
   if(a.positions.some(p=>p.symbol===order.symbol&&p.shares>0))issues.push('確認策略禁止同股加碼，先完成既有交易');
   if(lastSell){let completed=0;for(let day=addDays(twDay(new Date(lastSell)),1);day<twDay(now)&&completed<2;day=addDays(day,1))if(calendar.isOpen(day))completed++;
     if(completed<2)issues.push('賣出後尚未完成兩個交易日冷卻');}
-  if(!spec||!instrument||d(spec.stop_price).lte(instrument.limit_down))issues.push('停損不得位於或低於跌停價，不能視為可成交的保護');
   const category=instrument?.category;
   const known=(v:string|undefined)=>!!v&&!['HISTORICAL_SIMULATION','DEMO','UNKNOWN'].includes(v);
   const buys=a.orders.filter(o=>active(o)&&o.action==='BUY'&&o.local_id!==order.local_id);
