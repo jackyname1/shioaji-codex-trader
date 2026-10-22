@@ -1,3 +1,4 @@
+import {StrategyValidationError,mayRetainStrategy} from './strategy-admission.js';
 import {planActive} from './plan-lifecycle.js';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -240,19 +241,20 @@ export class TradingService {
       await this.enqueue(async () => { signal.throwIfAborted();await this.engine.activate(analysis,snapshot,this.now());this.clearCodexFailure(); });
       this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
     } catch (error) {
-      const issue=signal.aborted?'Codex 分析已停止':error instanceof CodexError?codexIssue(error):
+      const issue=signal.aborted?'Codex 分析已停止':error instanceof StrategyValidationError?error.message:error instanceof CodexError?codexIssue(error):
         error instanceof BrokerError?brokerIssue(error):error instanceof Error&&/^(帳戶快照|Codex 使用|Codex 決策|計畫有效|候選|買進標的|盤後檢討|策略|行情|歷史|觀測)/.test(error.message)?error.message:'策略資料或分析結果尚未通過核對';
       this.analysisStatus=issue;
       if(!this.analystEvents.some(e=>e.stage==='FAILED'&&Date.parse(e.at)>=this.now().getTime()-2000))this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:this.now().toISOString(),stage:'FAILED',message:issue,model:this.analyst?.selection?.model||s.codex_model||'Codex 預設模型',reasoning:s.codex_reasoning,purpose:'STRATEGY'});
       if (!this.stopping) await this.enqueue(async () => {
         this.blockCodexFailure(error);
-        if(!review)this.engine.entryBlocked = true;
+        const retained=mayRetainStrategy(this.engine.plan,error,this.now());
+        if(!review&&!retained)this.engine.entryBlocked = true;
         this.store.recordExperience({id:'analysis-failure:'+randomUUID(),at:this.now().toISOString(),mode:this.engine.settings.mode,
           kind:'ANALYSIS_FAILURE',symbol:'',action:'NONE',shares:0,price:null,fee:null,tax:null,realized_pnl:null,
           note:'分析逾時、資料不足或 schema／快照核對失敗；未採用該輪結果'});
-        this.engine.log('ANALYSIS_FAIL',issue+'；停止新買進，既有保護條件保留，委託仍需數量確認');
-        // A failed analysis must also cancel owned outstanding entry orders when execution is enabled.
-        if (!review&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,this.now());
+        this.engine.log('ANALYSIS_FAIL',issue+(retained?'；上一份已驗證策略繼續運作，未採用本輪訊號':'；停止新買進')+'；既有保護條件保留，委託仍需數量確認');
+        // Preserve validated entries on proposal rejection; data/broker/runtime failures still cancel.
+        if (!review&&!retained&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,this.now());
       });
       throw new Error('本輪決策未啟用：'+issue);
     }

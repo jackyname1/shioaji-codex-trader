@@ -1,3 +1,4 @@
+import {StrategyValidationError,mayRetainStrategy} from './strategy-admission.js';
 import {buildIdentity} from './build-identity.js';
 import { randomUUID } from 'node:crypto';
 import { setImmediate as yieldToEvents } from 'node:timers/promises';
@@ -256,12 +257,14 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       strategyLog.push({at:now.toISOString(),review,stance:analysis.stance,expires_at:analysis.expires_at,
         ...(!review?{lifecycle:engine.plan!.lifecycle}:{}),summary:analysis.summary,selected:analysis.candidates});
       activity(now.toISOString(),review?'REVIEW':'ACTIVATION',analysis.summary,{symbols:analysis.candidates,screening:analysis.screening});
-    }catch(error){if(signal.aborted)return;failures++;if(!review){engine.entryBlocked=true;await cancelEntries(now);}
-      const issue=request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW')?codexIssue(error):error instanceof z.ZodError?'策略欄位格式不符，請核對結構化輸出':
+    }catch(error){if(signal.aborted)return;failures++;
+      const retained=mayRetainStrategy(engine.plan,error,now);
+      if(!review&&!retained){engine.entryBlocked=true;await cancelEntries(now);}
+      const issue=error instanceof StrategyValidationError?error.message:request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW')?codexIssue(error):error instanceof z.ZodError?'策略欄位格式不符，請核對結構化輸出':
         error instanceof Error&&/^(Codex|計畫|候選|策略|盤後|決策|買進|帳戶|回測)/.test(error.message)?error.message:'歷史快照或策略驗證未完成';
       lastError=`${twDay(now)} ${twClock(now)} · ${stage} · ${issue}`;failureLog.push({at:now.toISOString(),review,stage,issue,
-        ...(request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW')?{diagnostic:diagnoseCodexFailure(error)}:{})});
-      activity(now.toISOString(),'FAILED',lastError);engine.log('ANALYSIS_FAIL',lastError+'；既有保護條件保留，委託仍需數量確認');
+        ...((error instanceof StrategyValidationError||request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW'))?{diagnostic:diagnoseCodexFailure(error)}:{})});
+      activity(now.toISOString(),'FAILED',lastError);engine.log('ANALYSIS_FAIL',lastError+(retained?'；上一份已驗證策略繼續運作，未採用本輪訊號':'；新買進停止')+'；既有保護條件保留，委託仍需數量確認');
       if(request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW'))await haltCodex(error,now);}
   };
   const executions=async(now:Date):Promise<void>=>{

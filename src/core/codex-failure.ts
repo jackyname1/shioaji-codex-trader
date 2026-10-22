@@ -1,3 +1,4 @@
+import {StrategyValidationError} from './strategy-admission.js';
 /** Diagnostic output is an allowlist, never a copy of SDK stderr, URLs, paths or environment values. */
 export type CodexFailureKind='QUOTA'|'RATE_LIMIT'|'NETWORK'|'AUTH'|'ACCESS'|'MODEL'|'RUNTIME'|'TIMEOUT'|'CANCELLED'|'OTHER';
 export interface CodexFailureDetail {kind:CodexFailureKind;code:string;http_status?:number;exit_code?:number;exit_signal?:string;proxy_configured?:boolean;custom_ca_configured?:boolean;
@@ -8,6 +9,7 @@ const rawMessage=(error:unknown):string=>{
   return parts.join('\n');
 };
 export function diagnoseCodexFailure(error:unknown):CodexFailureDetail {
+  if(error instanceof StrategyValidationError)return {kind:'OTHER',code:error.code,validation_phase:'SEMANTIC'};
   if(error instanceof CodexError)return {...error.diagnostic};
   if(error instanceof SyntaxError)return {kind:'OTHER',code:'INVALID_OUTPUT',validation_phase:'JSON'};
   if(error instanceof Error&&error.name==='ZodError'){

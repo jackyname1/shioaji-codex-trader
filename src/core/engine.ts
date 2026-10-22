@@ -1,3 +1,4 @@
+import {decisionDeadline} from './strategy-admission.js';
 import {planActive,planDeadline} from './plan-lifecycle.js';
 import { createHash, randomUUID } from 'node:crypto';
 import {portfolioDecision,type PortfolioState,type PortfolioDecision} from './portfolio-risk.js';
@@ -261,7 +262,7 @@ export class Engine {
         daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
-      portfolio_risk:this.portfolioRisk(now,a,bundle.features),universe:bundle.pool,features:bundle.features,hard_limits:{...limits,strategy_lifecycle:'UNTIL_REPLACED',capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
+      portfolio_risk:this.portfolioRisk(now,a,bundle.features),universe:bundle.pool,features:bundle.features,hard_limits:{...limits,strategy_lifecycle:'UNTIL_REPLACED',decision_deadline_at:decisionDeadline({asof:now.toISOString()},this.settings),market_timezone:'Asia/Taipei',capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
       quotes:structuredClone(quotes),entry_feedback:this.plan?{plan_id:this.plan.id,asof:now.toISOString(),
         signals:this.plan.analysis.decisions.filter(d=>d.action==='BUY').map(decision=>({symbol:decision.symbol,
           window:entryWindow(decision,bundle.features[decision.symbol],now,bundle.metadata[decision.symbol]),

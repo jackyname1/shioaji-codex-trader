@@ -320,7 +320,7 @@ function renderBacktest(state:DesktopState):void {
     `暖機不足股票：${r.quality.insufficient_symbols.join('、')||'無'}`,`缺行情交易日：${r.quality.missing_sessions.join('、')||'無'}`,...r.limitations].join('\n'));
   table('bt-workflow',['台北時間','步驟','股票','條件與結果'],(r.workflow??[]).slice(-400).map(e=>[stamp(e.at),phase[e.stage]??e.stage,e.symbols?.join('、')??'—',e.message+
     (e.screening?`\n成交額 ≥ ${fmt(e.screening.min_amount)} · 量比 ≥ ${e.screening.min_volume_ratio} · RSI ${e.screening.rsi_min}–${e.screening.rsi_max}`+(e.screening.entry?` · ${e.screening.entry.signal} · 每檔 ${pct(e.screening.entry.allocation_fraction)} · 停損 ${pct(e.screening.entry.stop_fraction)} · 停利 ${pct(e.screening.entry.take_profit_fraction)}`:' · 僅觀測'):'')]),'此舊版報表沒有流程明細，重新執行模擬後會保存');
-  if(r.failures?.length)text('bt-strategy-log',r.strategy_log.map(s=>`${stamp(s.at)} ${s.review?'檢討':'策略'} ${s.stance}\n${s.summary}`).join('\n\n')+'\n\n'+r.failures.map(f=>`${stamp(f.at)} ${phase[f.stage]??f.stage}：${f.issue}`).join('\n'));
+  if(r.failures?.length)text('bt-strategy-log',r.strategy_log.map(s=>`${stamp(s.at)} ${s.review?'檢討':'策略'} ${s.stance}\n${s.summary}`).join('\n\n')+'\n\n'+r.failures.map(f=>`${stamp(f.at)} ${phase[f.stage]??f.stage}${f.diagnostic?.code?' ['+f.diagnostic.code+']':''}：${f.issue}`).join('\n'));
   text('backtest',state.backtest);
   equityChart(el('equity-chart'),r.timeline??r.daily_equity.map(d=>({at:d.asof,equity:d.equity})),Number(r.metrics.initial_cash));
 }
