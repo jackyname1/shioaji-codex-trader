@@ -80,10 +80,15 @@ export function demoAnalysis(snapshot: Snapshot, settings: Settings, now: Date):
   if (!snapshot.synthetic) throw new Error('範例策略只能使用虛構行情');
   const candidates = snapshot.universe.slice(0,5).map(x => x.symbol), first = snapshot.universe[0];
   const price = first ? d(first.last) : d(1),reduceOnly=settings.trade_direction==='reduce_only';
+  // A flow fixture must itself fit the authorized principal ceiling. A fixed 200-share
+  // example could exceed it when the synthetic rotation starts with a higher-priced stock.
+  const budget=d(snapshot.account.equity).times(d(1).minus(d(settings.min_cash_fraction).clamp('.25',1)))
+    .times(d(settings.max_order_fraction).clamp(0,'.10'));
+  const shares=Math.max(0,Math.min(200,budget.div(price.plus(tickSize(price))).floor().toNumber()));
   return AnalysisSchema.parse({ snapshot_id: snapshot.snapshot_id,
     expires_at: new Date(now.getTime() + settings.plan_max_minutes * 60000).toISOString(),
-    stance: reduceOnly?'REDUCE':'BUY_ALLOWED', candidates, decisions: first && !snapshot.review_only && !reduceOnly ? [{
-      symbol: first.symbol, action: 'BUY', shares: 200, limit_price: price.plus(tickSize(price)).toFixed(),
+    stance: reduceOnly?'REDUCE':'BUY_ALLOWED', candidates, decisions: first && shares>0 && !snapshot.review_only && !reduceOnly ? [{
+      symbol: first.symbol, action: 'BUY', shares, limit_price: price.plus(tickSize(price)).toFixed(),
       entry_when: 'IMMEDIATE', trigger_price: '0', smart: { stop_price: roundPrice(price.times('.95')),
         take_profit: roundPrice(price.times('1.10')), trailing_activate: roundPrice(price.times('1.08')), trailing_fraction: '.03'.replace(/^\./, '0.') },
       conditions:[],reason: '虛構行情流程展示，不是投資策略或真實股票建議' }] : [],
