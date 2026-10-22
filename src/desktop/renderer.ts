@@ -1,3 +1,4 @@
+import {planActive,planDeadline} from '../core/plan-lifecycle.js';
 import {connectionLabel} from './connection-state.js';
 import {replayDisplayTime} from './replay-time.js';
 import type {ReplayClockState} from '../core/replay-clock.js';
@@ -117,7 +118,7 @@ selectSettingsTab('connection');
 const guided:Record<string,keyof Settings>={
   's-replay-days':'replay_every_sessions','s-replay-schedule':'replay_strategy_schedule','s-replay-interval':'replay_interval_minutes','s-replay-calls':'replay_max_codex_calls',
   's-replay-sizing':'replay_execution_sizing','s-replay-review':'replay_review_enabled',
-  's-catchup':'schedule_catch_up_minutes','s-timeout':'codex_timeout_seconds','s-pool':'candidate_pool_size','s-plan':'plan_max_minutes',
+  's-catchup':'schedule_catch_up_minutes','s-timeout':'codex_timeout_seconds','s-pool':'candidate_pool_size',
   's-direction':'trade_direction','s-exposure':'max_exposure_fraction','s-daily-buy':'max_daily_buy_fraction','s-daily-orders':'max_daily_buy_orders',
   's-tax':'sell_tax_rate','s-deviation':'price_deviation_fraction','s-spread':'max_spread_fraction','s-quote-age':'quote_max_age',
   's-account-age':'account_max_age','s-cooldown':'cooldown_seconds','s-experience':'experience_enabled','s-experience-limit':'experience_limit',
@@ -176,7 +177,7 @@ function renderRuntime(state:DesktopState):void {
     for(const id of ['positions','orders','overview-watch','watchlist','watch-changes','decisions'])table(id,['狀態'],[],'工作台尚未完成連線');return;}
   const labels={demo:'介面測試資料',paper:'模擬 · 真實行情',readonly:'實盤監控',live:'實盤 · 真實帳戶'};
   text('mode-badge',s.mode==='demo'?'介面測試 · 虛構行情':simulationView(state)?paper?'真實行情 · 歷史回放':'真實行情 · 虛擬資金':'真實行情 · 實盤帳戶');el('mode-badge').classList.toggle('live',r.mode==='live');
-  const valid=r.plan&&Date.parse(r.plan.analysis.expires_at)>Date.parse(workspaceCutoff(state));
+  const valid=planActive(r.plan,workspaceCutoff(state));
   text('headline',!r.connected?'等待連線':r.killed?'已停止新委託':!r.auto?'監控已開啟':r.paused?'買進已暫停':!r.session?'交易時段外，持續監控':!valid?'等待有效策略':r.blocked||!r.watch.healthy?'新買進暫停，保護監控持續':'全自動偵測中');
   text('runtime-note',r.mode==='demo'?'虛構行情與模擬資金；日期區間測試可隨時執行。':r.mode==='readonly'?'帳戶核對模式；確認現金、交割與可賣量後再切換。':
     r.auto?'定時更新策略；觸發後核算股數與風控。':'按「開始自動交易」建立首輪條件，之後依每日排程更新。');
@@ -238,7 +239,7 @@ function renderRuntime(state:DesktopState):void {
   const direction=strategyDirection(r,riskSettings!,workspaceCutoff(state));
   text('strategy-stance',direction.label);text('strategy-summary',r.plan?.analysis.summary??'取得有效策略後，程式會依條件執行。');
   renderStrategy(state);
-  text('strategy-expiry',r.plan?`有效至 ${stamp(r.plan.analysis.expires_at)}${valid?'':' · 已到期'}`:'');
+  text('strategy-expiry',r.plan?planDeadline(r.plan)?`舊版有效至 ${stamp(r.plan.analysis.expires_at)}${valid?'':' · 已到期'}`:'持續有效 · 直到新策略成功接替':'');
   const rule=r.plan?.analysis.screening?.entry;
   text('rule-summary',rule?`自動規則 ${rule.signal} · 每檔配置 ${pct(rule.allocation_fraction)} · 停損 ${pct(rule.stop_fraction)} · ${rule.trailing_fraction?'預估收益':'固定停利'} ${pct(rule.take_profit_fraction)} · 移動停損 ${rule.trailing_fraction?pct(rule.trailing_fraction):'關閉'}`:'依 Codex 個股決策執行；新加入股票等待授權條件');
   table('decisions',['股票','方向','參考股數','限價界線','觸發','策略理由'],(r.plan?.analysis.decisions??[]).map(d=>[{label:d.symbol,chartSymbol:d.symbol},action[d.action]??d.action,d.shares,d.limit_price,
@@ -265,7 +266,7 @@ function renderStrategy(state:DesktopState):void {
     add(p.symbol,r?.metadata[p.symbol]?.name??'','保護','停損／移動退場','—','依可賣量',p.triggered||'監測中');}
   const rule=r?.plan?.analysis.screening?.entry;
   if(rule&&!direction.restricted)for(const w of r!.watch.entries){if(rows.some(row=>(row[0] as {chartSymbol:string}).chartSymbol===w.symbol))continue;
-    const active=Date.parse(r!.plan!.analysis.expires_at)>Date.parse(workspaceCutoff(state));
+    const active=planActive(r!.plan,workspaceCutoff(state));
     add(w.symbol,w.name,'候選',({TREND:'趨勢',PULLBACK:'回檔',BREAKOUT:'突破',REBOUND:'反彈'} as Record<string,string>)[rule.signal]??rule.signal,'待觸發','待核算',!active?'策略已到期':r!.decisions.find(d=>d.symbol===w.symbol)?.state? action[r!.decisions.find(d=>d.symbol===w.symbol)!.state]??'等待條件':w.eligible?'等待條件':'觀測中');}
   text('strategy-count',rows.length+' 檔');
   for(const id of ['strategy-stocks','strategy-expanded']){

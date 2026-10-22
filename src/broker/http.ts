@@ -1,3 +1,4 @@
+import {planActive} from '../core/plan-lifecycle.js';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -539,7 +540,7 @@ export class ShioajiHttpBroker implements Broker {
       if (reasons.length) throw new NoSubmissionError(reasons.join('；'));
       if (o.purpose === 'ENTRY') {
         const plan = this.store.plan();
-        if (!plan || plan.id !== o.plan_id || Date.parse(plan.analysis.expires_at) <= now.getTime()) throw new NoSubmissionError('買進計畫已過期');
+        if (!plan || plan.id !== o.plan_id || !planActive(plan,now)) throw new NoSubmissionError('買進計畫已更新或失效');
       }
       payload=stockOrderPayload(o,m,this.selected);
       if (!this.liveSession.authorized(this.store.get('account_fingerprint'))) throw new NoSubmissionError('本次實盤授權已關閉');

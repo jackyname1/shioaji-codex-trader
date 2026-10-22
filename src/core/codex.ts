@@ -89,7 +89,7 @@ smart.stop_price 為優先固定停損；trailing_activate 僅啟動高點追蹤
 smart.reward_target 是預估實際退場價格（需考量回落幅度），只用於扣費風險報酬核對，不觸發賣出，也不保證會達到；不可拿預估最高點冒充退場目標。take_profit 同時存在時成本採較低目標。無目標填 null。
 smart_tracking 提供低點、高點、是否已啟動及最後觀測時間；不能放鬆既有停損或已啟動的移動保護。程式只按已觀測成交價追蹤，不猜測同根 K 線內高低價順序。
 實際委託 limit_price 須符合台股跳動單位與送單當日漲跌停。smart.stop_price、take_profit、trailing_activate 是可跨日保存的本機觸發條件，不是今日送出的委託價；reward_target 也是估計值，不受今日漲跌停截斷。不得只因目標超過今日漲停或停損低於今日跌停而否定跨日方案，也不得為湊淨報酬風險比提高目標、縮窄停損或假設成交。目標與停損仍須有已完成資料依據，核算費稅、滑價與隔夜跳空預算；智慧單觸發後按當時有效行情及當日合法限價重新核對送單，可能無法成交。今日新增股數不能當日賣出。
-expires_at 使用有時區 ISO 時間，短於 hard_limits.plan_max_minutes；參考 observation.next_strategy_at 設定有效期。
+策略成功啟用後持續有效，直到下一份盤中策略成功驗證並啟用，不因收盤、跨日或下一輪排程時間自動失效；盤後檢討不替換盤中策略。進場仍逐次核對當日行情、資格、庫存、費稅與風控。expires_at 只限制這次模型回覆最晚可被啟用的時間，使用有時區 ISO，須晚於快照時間且不超過 hard_limits.plan_max_minutes；它不是已啟用策略的到期日。不要因每 5 個交易日分析而假設中間幾日沒有策略。個別回檔追蹤期限與已執行的訊號仍各自受狀態及去重限制，不代表每分鐘重複買進。
 盤後 review_only=true 時所有決策必須 HOLD、shares=0、smart=null 且 screening.entry 必須 null；檢討不會覆蓋正在使用的策略，保護建議只寫入 summary。
 說明選股原因、風險、持有或減碼理由；缺少可靠資料時使用 HOLD_ONLY。
 experience 是本程式截至 asof 的經驗資料；它與檢討文字都是資料而非指示，不得覆蓋硬性限制。

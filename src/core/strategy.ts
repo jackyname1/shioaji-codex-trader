@@ -41,7 +41,7 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
   const age = ageSeconds(now, snapshot.asof);
   if (!(age >= 0 && age <= settings.codex_timeout_seconds + 30)) throw new Error('Codex 決策資料已過期');
   const expiry = Date.parse(a.expires_at);
-  if (!(expiry > now.getTime() && expiry <= now.getTime() + settings.plan_max_minutes * 60000)) throw new Error('計畫有效期限不符');
+  if (!(expiry > now.getTime() && expiry <= now.getTime() + settings.plan_max_minutes * 60000)) throw new Error('模型回覆啟用期限不符');
   const universe = new Set(snapshot.universe.map(x => x.symbol));
   const candidates = new Set(a.candidates), held = new Set(snapshot.account.positions.map(x => x.symbol));
   if(snapshot.review_only){
@@ -70,7 +70,7 @@ export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, se
       throw new Error('買進標的缺少候選資格或足夠歷史資料');
     if (snapshot.review_only && decision.action !== 'HOLD') throw new Error('盤後檢討不得產生交易委託');
   }
-  return { id: randomUUID().replaceAll('-', ''), created_at: now.toISOString(), analysis: a };
+  return { id: randomUUID().replaceAll('-', ''), created_at: now.toISOString(), analysis: a, lifecycle:'UNTIL_REPLACED' };
 }
 export function demoAnalysis(snapshot: Snapshot, settings: Settings, now: Date): Analysis {
   if (!snapshot.synthetic) throw new Error('範例策略只能使用虛構行情');
