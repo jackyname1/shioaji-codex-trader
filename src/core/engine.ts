@@ -1,3 +1,4 @@
+import {planActive,planDeadline} from './plan-lifecycle.js';
 import { createHash, randomUUID } from 'node:crypto';
 import {portfolioDecision,type PortfolioState,type PortfolioDecision} from './portfolio-risk.js';
 import {admissionIssues,confirmationIssues,breadthState,entryProtectionIssues} from './entry-policy.js';
@@ -260,7 +261,7 @@ export class Engine {
         daily_buy_amount:a.daily_buy_amount,daily_buy_count:a.daily_buy_count,
         positions:structuredClone(a.positions),open_orders:a.orders.filter(active).map(o => ({
           symbol:o.symbol,action:o.action,shares:remaining(o),limit_price:o.limit_price}))},
-      portfolio_risk:this.portfolioRisk(now,a,bundle.features),universe:bundle.pool,features:bundle.features,hard_limits:{...limits,capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
+      portfolio_risk:this.portfolioRisk(now,a,bundle.features),universe:bundle.pool,features:bundle.features,hard_limits:{...limits,strategy_lifecycle:'UNTIL_REPLACED',capital_profile:this.store.get('replay_capital_profile')??'custom'},capital:capitalSnapshot(a,this.settings),
       quotes:structuredClone(quotes),entry_feedback:this.plan?{plan_id:this.plan.id,asof:now.toISOString(),
         signals:this.plan.analysis.decisions.filter(d=>d.action==='BUY').map(decision=>({symbol:decision.symbol,
           window:entryWindow(decision,bundle.features[decision.symbol],now,bundle.metadata[decision.symbol]),
@@ -300,10 +301,10 @@ export class Engine {
     this.clearExecutions('Codex 已更新條件，舊的數量建議作廢');
     this.decisionStates.clear();
     await this.refreshWatch({pool:snapshot.universe,features:snapshot.features,metadata:this.metadata},now);
-    this.log('PLAN',`啟用 ${plan.id.slice(0,8)}，有效至 ${plan.analysis.expires_at}；${plan.analysis.screening?.entry?'含自動選股進場規則':'依個股決策執行'}`);
+    this.log('PLAN',`啟用 ${plan.id.slice(0,8)}，持續有效直到新策略成功接替；${plan.analysis.screening?.entry?'含自動選股進場規則':'依個股決策執行'}`);
   }
   private observeEntries(now:Date):void {
-    if(!this.plan||Date.parse(this.plan.analysis.expires_at)<=now.getTime())return;
+    if(!planActive(this.plan,now))return;
     for(const decision of this.plan.analysis.decisions.filter(d=>d.entry_when==='REBOUND'))for(const odd of [true,false]){
       const q=this.quotes.get(`${decision.symbol}:${odd}`);
       if(!q||q.simulated||!this.calendar.inSession(now,odd?'ODD':'COMMON')||!odd&&!this.settings.whole_lots
@@ -329,7 +330,7 @@ export class Engine {
     if (!this.lastRefresh || now.getTime() - this.lastRefresh.getTime() >= 20000 || this.broker.dirty) {
       await this.syncAccount(now);
     }
-    if ((this.entryDirectionIssue() || this.plan && Date.parse(this.plan.analysis.expires_at) <= now.getTime()) && this.canExecute())
+    if ((this.entryDirectionIssue() || this.plan && !planActive(this.plan,now)) && this.canExecute())
       for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.cancel(o.local_id,now);
     for (const q of this.broker.quotes(now)) this.quotes.set(`${q.symbol}:${q.odd}`,q);
     if (['demo','paper'].includes(this.settings.mode)) { await this.reconcile(now); await this.refreshAccount(now); }
@@ -340,9 +341,9 @@ export class Engine {
     for (const protection of this.store.protections()) {
       const p = this.account.positions.find(p => p.symbol === protection.symbol);
       const pendingBuy = this.account.orders.some(o => active(o) && o.symbol === protection.symbol && o.action === 'BUY');
-      const plannedBuy = this.plan && Date.parse(this.plan.analysis.expires_at) > now.getTime()
+      const plannedBuy = this.plan && planActive(this.plan,now)
         && this.plan.analysis.decisions.some(d => d.symbol === protection.symbol && d.action === 'BUY')
-        && !(this.store.order(createHash('sha256').update(`${this.plan.id}:${protection.symbol}:BUY`).digest('hex').slice(0,32))?.filled);
+        && !this.store.planOrders(this.plan.id,protection.symbol,'BUY').some(o=>o.filled>0);
       if (!p?.shares) { if (!pendingBuy && !plannedBuy) {this.store.removeProtection(protection.symbol);this.store.removeEntryTracks(protection.symbol);} continue; }
       const protectionLot = this.settings.whole_lots && p.sellable >= 1000 ? 'COMMON' : 'ODD';
       if(!this.calendar.inSession(now,protectionLot))continue;
@@ -373,7 +374,7 @@ export class Engine {
       await this.requestExecution({...this.newOrder(p.symbol,'SELL',protectionShares,q.bid,protectionLot,now,protection.plan_id,'PROTECTION'),exit_trigger:trigger as Order['exit_trigger'],trigger_context:{last:q.last,bid:q.bid,ask:q.ask,trade_at:q.trade_at,book_at:q.book_at,stop_price:protection.spec.stop_price,effective_stop:protection.protected_floor??protection.spec.stop_price}},
         now,'PROTECTION',undefined,undefined,trigger,protection.spec);
     }
-    if (!this.canExecute() || !this.plan || Date.parse(this.plan.analysis.expires_at) <= now.getTime()) return;
+    if (!this.canExecute() || !this.plan || !planActive(this.plan,now)) return;
     const plan = this.plan;
     const decisions=[...plan.analysis.decisions],ruleScores=new Map<string,number>();
     if(!this.entryDirectionIssue()&&(evaluateConditions||smartConditions&&plan.analysis.screening?.entry?.signal==='MULTI')&&this.settings.auto_watchlist&&plan.analysis.screening?.entry)for(const w of this.watch.entries) {
@@ -423,9 +424,16 @@ export class Engine {
       }
       const guardIssue=conditionIssue(decision,q,this.watchFeatures[decision.symbol],now);
       if(guardIssue){state('WAIT',guardIssue);continue;}
-      const id = createHash('sha256').update(`${plan.id}:${decision.symbol}:${decision.action}`).digest('hex').slice(0,32);
-      const prior=this.store.order(id);
-      if(prior){state(prior.status,`${prior.filled}/${prior.shares} 股；本輪已執行，不重送`);continue;}
+      const attempts=this.store.planOrders(plan.id,decision.symbol,decision.action),prior=attempts.at(-1);
+      // A confirmed, entirely unfilled ROD cancellation may be retried on a later session.
+      // Any fill consumes this plan's signal; unknown, rejected and same-day intents never auto-retry.
+      const consumed=attempts.find(o=>o.filled>0),unresolved=attempts.find(o=>o.status!=='CANCELLED');
+      if(prior&&(consumed||unresolved||twDay(new Date(prior.created_at))>=twDay(now))){
+        const blocked=consumed??unresolved??prior;
+        state(blocked.status,`${blocked.filled}/${blocked.shares} 股；本輪已成交、委託待核對或今日已嘗試，不重送`);continue;
+      }
+      const key=`${plan.id}:${decision.symbol}:${decision.action}${prior?':'+twDay(now):''}`;
+      const id=createHash('sha256').update(key).digest('hex').slice(0,32);
       if(this.pendingExecutions.size&&[...this.pendingExecutions.values()].some(t=>t.order.symbol===decision.symbol))continue;
       const sent=await this.requestExecution(this.newOrder(decision.symbol,decision.action,decision.shares,decision.limit_price,lot,now,plan.id,
         decision.action === 'BUY' ? 'ENTRY' : 'EXIT',id),now,source,decision,decision.smart??undefined);
@@ -496,7 +504,7 @@ export class Engine {
       if(!this.account.positions.some(p=>p.symbol===ticket.order.symbol&&p.sellable>0))return '今日新增零股不可當沖，等待可賣庫存';
       return '';
     }
-    if(!this.plan||this.plan.id!==ticket.order.plan_id||Date.parse(this.plan.analysis.expires_at)<=now.getTime())return '策略已更新或到期';
+    if(!this.plan||this.plan.id!==ticket.order.plan_id||!planActive(this.plan,now))return '策略已更新或到期';
     if(ticket.order.action==='BUY'){
       if(this.entryDirectionIssue())return this.entryDirectionIssue();
       const portfolio=this.portfolioRisk(now);if(portfolio?.blocked)return portfolio.reasons.join('；');
@@ -641,7 +649,7 @@ export class Engine {
       if(issue){this.finishExecution(executionId,'WAIT',issue+'；未送單',now);return false;}
     }
     if (order.purpose === 'ENTRY' && (!this.plan || order.plan_id !== this.plan.id
-      || Date.parse(this.plan.analysis.expires_at) <= now.getTime() || this.entryBlocked)) return false;
+      || !planActive(this.plan,now) || this.entryBlocked)) return false;
     const last = this.store.lastOrder(order.symbol)?.created_at;
     const reasons = this.risk.check(order,account,this.quotes.get(`${order.symbol}:${order.lot === 'ODD'}`),this.metadata[order.symbol],
       now,this.baseline(now),this.killed || (this.pausedEntries && order.action === 'BUY'),last);
@@ -727,7 +735,7 @@ export class Engine {
         `帳戶快照=${a.asof} 完整=${a.complete} ${a.issue}`,`今日買進預算占用=${a.daily_buy_amount} 筆數=${a.daily_buy_count}`,'','持倉：');
       lines.push(...(a.positions.length ? a.positions.map(p => `${p.symbol} ${p.shares} 股 / 可賣 ${p.sellable} / 成本 ${p.average_price} / 現價 ${p.last_price}`) : ['無']));
     }
-    if (this.plan) lines.push('',`計畫 ${this.plan.id.slice(0,8)} 到期 ${this.plan.analysis.expires_at}`,this.plan.analysis.summary,
+    if (this.plan) lines.push('',`計畫 ${this.plan.id.slice(0,8)} ${planDeadline(this.plan)?'舊版到期 '+planDeadline(this.plan):'持續有效直到新策略成功接替'}`,this.plan.analysis.summary,
       '候選：' + this.plan.analysis.candidates.join(', '),...this.plan.analysis.decisions.map(d => `${d.symbol} ${d.action} ${d.shares} 股 @ ${d.limit_price}：${d.reason}`));
     lines.push('',`偵測每 ${this.settings.monitor_interval_seconds} 秒 / 觀測更新每 ${this.settings.watch_refresh_minutes} 分鐘 / 策略 ${this.settings.strategy_schedule==='fixed'?this.settings.strategy_times.join('、'):this.settings.decision_interval_minutes+' 分鐘'}`,
       `觀測 ${this.watch.entries.filter(w=>w.state==='OBSERVE').length} 檔；${this.watch.healthy?'資料已確認':this.watch.issue}`);

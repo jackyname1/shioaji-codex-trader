@@ -119,7 +119,8 @@ export const AnalysisSchema = z.strictObject({
   .refine(a => new Set(a.decisions.map(x => x.symbol)).size === a.decisions.length, '每檔限一個決策')
   .refine(a => a.stance === 'BUY_ALLOWED' || a.decisions.every(x => x.action !== 'BUY'), '方向禁止買進');
 export type Analysis = z.infer<typeof AnalysisSchema>;
-export const PlanSchema = z.strictObject({ id: z.string(), created_at: timestamp, analysis: AnalysisSchema });
+export const PlanSchema = z.strictObject({ id: z.string(), created_at: timestamp, analysis: AnalysisSchema,
+  lifecycle:z.enum(['UNTIL_REPLACED','TIMED']).optional() });
 export type Plan = z.infer<typeof PlanSchema>;
 export const ProtectionSchema = z.strictObject({
   symbol, spec: SmartSchema, high_water: nonnegative, triggered: z.string(), plan_id: z.string(),
@@ -203,6 +204,7 @@ export const SettingsSchema = z.strictObject({
   watch_refresh_minutes: quantity.min(1).max(60).default(5),
   auto_watchlist: z.boolean().default(true), watch_max_symbols: quantity.min(5).max(20).default(12),
   watch_remove_after_scans: quantity.min(1).max(12).default(3), watch_min_amount: nonnegative.default('20000000'),
+  // Maximum model-reply admission window; activated new plans persist until replacement.
   plan_max_minutes: quantity.min(10).max(1440).default(360),
   candidate_pool_size: quantity.min(20).max(100).default(40), demo_cash: positive.default('100000'),
   start_minimized: z.boolean().default(false), keep_awake: z.boolean().default(true),

@@ -1,3 +1,4 @@
+import {planActive} from './plan-lifecycle.js';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Store } from './store.js';
@@ -288,7 +289,7 @@ export class TradingService {
         this.engine.setSettings({...this.engine.settings,auto_execute:true});this.engine.kill(false);this.engine.pauseEntries(false);
       });
       if(this.engine.killed||!this.engine.settings.auto_execute)return '自動啟動已停止';
-      if(!this.engine.plan||Date.parse(this.engine.plan.analysis.expires_at)<=this.now().getTime()) {
+      if(!planActive(this.engine.plan,this.now())) {
         if(!this.decisionTask)await this.command('decide');
         return '已啟動自動模式；等待有效策略後依條件執行';
       }

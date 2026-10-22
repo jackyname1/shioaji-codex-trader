@@ -65,7 +65,7 @@ test('a preflight refusal is marked rejected, never misreported as an uncertain 
 test('expiry cancels an entry remainder and retains independent protection',async () => {
   const r = await rig();
   try { await r.engine.tick(now); await r.engine.tick(new Date(now.getTime()+1000));
-    r.engine.plan!.analysis.expires_at=new Date(now.getTime()+1500).toISOString(); r.market.depth=0;
+    r.engine.plan!.lifecycle='TIMED';r.engine.plan!.analysis.expires_at=new Date(now.getTime()+1500).toISOString(); r.market.depth=0;
     await r.engine.tick(new Date(now.getTime()+2000)); assert.equal(r.store.orders()[0]!.status,'CANCELLED');
     assert.equal(r.store.orders()[0]!.filled,17); assert.equal(r.store.protections().length,1);
   } finally { await r.engine.close(); r.store.close(); }

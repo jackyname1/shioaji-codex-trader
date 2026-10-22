@@ -52,6 +52,8 @@ test('a six-session replay analyses on sessions one and six only, including revi
   assert.ok(r.metrics.monitor_checks>6);assert.equal(r.quality.skipped_strategies,0);
   assert.ok(r.strategy_log.every(x=>Date.parse(x.expires_at)===Date.parse(x.at)+3600000));
   assert.equal(r.settings.replay_every_sessions,5);
+  assert.ok(r.strategy_log.filter(x=>!x.review).every(x=>x.lifecycle==='UNTIL_REPLACED'));
+  assert.equal(r.diagnostics!.coverage.valid_plan_sessions,6);
 });
 test('the call budget stops at the next required analysis instead of replaying the remainder without fresh strategies',async()=>{
   const r=await runBacktest({start:'2026-01-05',end:'2026-01-12',source:'sample',strategy:'codex',strategy_every_sessions:1,

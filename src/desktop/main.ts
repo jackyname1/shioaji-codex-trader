@@ -539,6 +539,9 @@ async function smokeTest(): Promise<void> {
   await verifyRenderer();
   const qualityUi=await window.webContents.executeJavaScript(`({quality:document.querySelector('#bt-quality').textContent,cost:document.querySelector('#bt-cost').textContent})`);
   if(!qualityUi.quality.includes('近似成交')||!qualityUi.quality.includes('固定股票池')||!qualityUi.cost.includes('費用前損益'))throw new Error('打包後回測品質與成本介面未通過');
+  const lifecycleUi=await window.webContents.executeJavaScript(`document.querySelector('#strategy-expiry').textContent`);
+  if(backtest.report!.final_frame?.plan?.lifecycle!=='UNTIL_REPLACED'||!lifecycleUi.includes('持續有效')||!lifecycleUi.includes('新策略成功接替'))
+    throw new Error('策略持續有效狀態或介面未通過');
   const expectedStock=await window.webContents.executeJavaScript(`(()=>{const buttons=[...document.querySelectorAll('#overview-watch td button')];buttons[1]?.click();buttons[2]?.click();return buttons[2]?.textContent;})()`);
   await new Promise(resolve=>setTimeout(resolve,1800));
   const selected=await window.webContents.executeJavaScript(`document.querySelector('#chart-name').textContent`);
@@ -551,7 +554,8 @@ async function smokeTest(): Promise<void> {
   // Exercise the real preload/IPC/save path for every export in source and packaged builds.
   await window.webContents.executeJavaScript(`document.querySelector('#bt-export').click()`);
   const exportUi=await window.webContents.executeJavaScript(`({open:document.querySelector('#backtest-export-dialog').open,count:document.querySelectorAll('#backtest-export-dialog [data-backtest-export]:not(:disabled)').length,diagnosis:document.querySelector('#bt-diagnosis').textContent})`);
-  if(!exportUi.open||exportUi.count!==5||!exportUi.diagnosis.includes('完整平倉'))throw new Error('回測匯出入口或損益診斷未通過');
+  if(!exportUi.open||exportUi.count!==5||!exportUi.diagnosis.includes('完整平倉')||!exportUi.diagnosis.includes('績效檢核')
+    ||!exportUi.diagnosis.includes('獨立帳務重算：通過')||!backtest.report.diagnostics?.audit.passed)throw new Error('回測匯出入口或損益診斷未通過');
   const replaySave=dialog.showSaveDialog;
   try{
     for(const format of ['json','csv','trades','daily','audit'] as const){

@@ -1,17 +1,32 @@
 import {d,twDay} from './models.js';
 import {tradeStatistics} from './performance.js';
+import {auditBacktest} from './backtest-audit.js';
 import type {BacktestReport} from './backtest.js';
 
 export type BacktestExportFormat='json'|'csv'|'trades'|'daily'|'audit';
 export interface BacktestDiagnostics {
   version:1;
   trades:ReturnType<typeof tradeStatistics>;
+  audit:ReturnType<typeof auditBacktest>;
+  evaluation:{status:'ACCOUNTING_ERROR'|'FLOW_TEST'|'INCOMPLETE'|'NOT_PROFITABLE'|'INSUFFICIENT_SAMPLE'|'VALIDATION_REQUIRED';message:string};
   coverage:{observed_sessions:number;valid_plan_sessions:number;buy_allowed_sessions:number;no_valid_plan_days:string[]};
   findings:{code:string;message:string}[];
 }
 /** Describes observed results only; never tunes parameters or extends an expired plan. */
 export function backtestDiagnostics(r:BacktestReport):BacktestDiagnostics {
-  const trades=tradeStatistics(r.fills,r.orders),findings:BacktestDiagnostics['findings']=[];
+  const audit=auditBacktest(r),findings:BacktestDiagnostics['findings']=[];
+  let trades:ReturnType<typeof tradeStatistics>;
+  try{trades=tradeStatistics(r.fills,r.orders);}catch{trades=tradeStatistics([]);}
+  const evaluation:BacktestDiagnostics['evaluation']=!audit.passed
+    ?{status:'ACCOUNTING_ERROR',message:'帳務重算未通過，先修正紀錄與計算，不能採用本次獲利結果。'}
+    :r.synthetic?{status:'FLOW_TEST',message:'虛構資料只驗證程式流程，未驗證市場獲利。'}
+    :r.status!=='COMPLETED'||audit.stale_valuation_symbols.length?{status:'INCOMPLETE',message:'回測未完整完成或期末估值過期，績效驗證尚未通過。'}
+    :d(audit.net_pnl_after_estimated_exit_costs??r.metrics.net_pnl).lte(0)?{status:'NOT_PROFITABLE',message:'扣除已支付成本及期末估計賣出費稅後未獲利，尚未達到獲利要求。'}
+    :trades.closed_trades<20?{status:'INSUFFICIENT_SAMPLE',message:'本段估計淨損益為正，但完整平倉樣本不足；仍需增加樣本及樣本外驗證。'}
+    :{status:'VALIDATION_REQUIRED',message:'本段估計淨損益為正；仍須獨立期間、保守成交與模擬交易驗證，尚不能據此判定可實盤。'};
+  if(!audit.passed)findings.push({code:'ACCOUNTING_ERROR',message:'獨立成交重算失敗：'+audit.checks.filter(c=>!c.passed).map(c=>c.code).join('、')+'。'});
+  if(audit.stale_valuation_symbols.length)findings.push({code:'STALE_VALUATION',message:`期末 ${audit.stale_valuation_symbols.join('、')} 的估值行情距該日收盤或回測截止超過五分鐘，或沒有有效估值時間；陳舊價格可能扭曲損益。`});
+  if(audit.estimated_remaining_exit_costs!==null&&r.positions.some(p=>p.shares>0))findings.push({code:'ESTIMATED_EXIT_COSTS',message:`期末庫存另估賣出費稅 ${audit.estimated_remaining_exit_costs} 元，扣除後淨損益 ${audit.net_pnl_after_estimated_exit_costs} 元。僅沿用末價估算，未假設已賣出，亦未計未來滑價與排隊風險。`});
   const plans=r.strategy_log.filter(p=>!p.review).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at));
   const days=[...new Set(r.daily_equity.filter(row=>row.day<=twDay(new Date(r.asof))).map(row=>row.day))];
   let valid=0,buyAllowed=0;const gaps:string[]=[];
@@ -19,7 +34,8 @@ export function backtestDiagnostics(r:BacktestReport):BacktestDiagnostics {
     const opening=r.request.whole_lots||day>='2026-12-07'?'09:00':'09:10';
     const start=Math.max(Date.parse(day+'T'+opening+':00+08:00'),Date.parse(r.request.start+'T'+(r.request.start_time??'09:00')+':00+08:00'));
     const end=Math.min(Date.parse(day+'T13:30:00+08:00'),Date.parse(r.asof));
-    const active=plans.filter((p,i)=>Math.max(start,Date.parse(p.at))<Math.min(end,Date.parse(p.expires_at),Date.parse(plans[i+1]?.at??r.asof)));
+    const active=plans.filter((p,i)=>Math.max(start,Date.parse(p.at))<Math.min(end,
+      p.lifecycle==='UNTIL_REPLACED'?Infinity:Date.parse(p.expires_at),Date.parse(plans[i+1]?.at??r.asof)));
     if(active.length)valid++;else if(start<end)gaps.push(day);
     if(active.some(p=>p.stance==='BUY_ALLOWED'))buyAllowed++;
   }
@@ -36,10 +52,10 @@ export function backtestDiagnostics(r:BacktestReport):BacktestDiagnostics {
   if(r.positions.some(p=>p.shares>0))findings.push({code:'OPEN_POSITION_MARKS',message:`期末仍有未平倉庫存，未實現損益 ${r.metrics.unrealized_pnl} 元已計入淨損益，尚未扣未來賣出成本；不能視為已落袋收益。`});
   const triggerRejects=(r.workflow??[]).filter(e=>e.stage==='RISK'&&e.message.includes('停損不得位於或低於跌停價'));
   if(triggerRejects.length)findings.push({code:'LEGACY_TRIGGER_BAND_REJECTION',message:`舊版曾有 ${triggerRejects.length} 次狀態變更因停損觸發價位於今日跌停或以下而封鎖；跨日觸發條件與當日委託價格不同。修正版須以原始行情重跑，不能直接把遭拒訊號補算為獲利。`});
-  if(gaps.length)findings.push({code:'PLAN_COVERAGE_GAP',message:`${days.length} 個已觀測交易日中，${gaps.length} 日盤中沒有有效策略；每 ${r.request.strategy_every_sessions??1} 個交易日分析與短期限會留下空窗。此處僅統計期限覆蓋，不代表缺少行情或一定錯失獲利；既有持倉保護仍持續。`});
+  if(gaps.length)findings.push({code:'PLAN_COVERAGE_GAP',message:`${days.length} 個已觀測交易日中，${gaps.length} 日盤中沒有有效策略；舊版限時策略或尚未啟用首輪策略可能留下空窗。新版持續策略直到下一輪成功接替。此處僅統計策略覆蓋，不代表缺少行情或一定錯失獲利；既有持倉保護仍持續。`});
   if(r.settings.portfolio_risk_enabled===false)findings.push({code:'PORTFOLIO_GATE_OFF',message:'組合研究風控未啟用；平倉統計仍須顯示，不能把 scale=1 解讀為風險檢查已通過。'});
   if(r.quality.execution_model==='APPROXIMATE')findings.push({code:'APPROXIMATE_FILLS',message:`成交模型為近似（${r.request.fill_assumption??'legacy'}），尚非真實零股排隊與成交證據。`});
-  return {version:1,trades,coverage:{observed_sessions:days.length,valid_plan_sessions:valid,buy_allowed_sessions:buyAllowed,no_valid_plan_days:gaps},findings};
+  return {version:1,trades,audit,evaluation,coverage:{observed_sessions:days.length,valid_plan_sessions:valid,buy_allowed_sessions:buyAllowed,no_valid_plan_days:gaps},findings};
 }
 // Protect free-text CSV cells from spreadsheet formulas while retaining negative numeric amounts.
 export function csvCell(value:unknown):string {
@@ -59,7 +75,10 @@ export function diagnosticMarkdown(r:BacktestReport):string {
       ['最大回撤',`${m.max_drawdown_pct}%`],['完整交易／勝／負',`${t.closed_trades}／${t.winning_trades}／${t.losing_trades}`],
       ['完整交易勝率',t.win_rate_pct===null?'無':t.win_rate_pct+'%'],['獲利因子',t.profit_factor_unbounded?'無虧損分母':t.profit_factor],['平均每筆淨損益',t.expectancy],
       ['策略期限覆蓋交易日',`${diag.coverage.valid_plan_sessions}／${diag.coverage.observed_sessions}`],['允許買進的策略覆蓋交易日',diag.coverage.buy_allowed_sessions],
-    ]),'## 診斷',...diag.findings.map(f=>`- ${f.code}：${f.message}`),
+      ['期末庫存估計賣出費稅',diag.audit.estimated_remaining_exit_costs],['再扣期末估計賣出費稅後淨損益',diag.audit.net_pnl_after_estimated_exit_costs],
+    ]),'## 績效檢核',diag.evaluation.message,
+    '## 獨立帳務稽核',table(['檢查','結果','說明'],diag.audit.checks.map(c=>[c.code,c.passed?'通過':'未通過',c.message])),
+    '## 診斷',...diag.findings.map(f=>`- ${f.code}：${f.message}`),
     ...(diag.coverage.no_valid_plan_days.length?['無有效策略日期：'+diag.coverage.no_valid_plan_days.join('、')]:[]),
     '## 完整交易明細（含成本，未平倉不計入勝率）',table(['股票','進場 UTC','出場 UTC','持有小時','淨損益','出場原因'],t.episodes.map(e=>[e.symbol,e.entry_at,e.exit_at,e.holding_hours.toFixed(2),e.pnl,e.exit_reason])),
     '## 出場原因',table(['原因','完整交易','淨損益'],Object.entries(t.by_exit_reason).map(([k,v])=>[k,v.trades,v.pnl])),

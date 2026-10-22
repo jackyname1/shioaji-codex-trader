@@ -86,14 +86,15 @@ test('fast-forward changes waiting only: prices, selections, automatic order/fil
   const fills=(r:typeof fast)=>r.fills.map(({id,order_id,...f})=>f);assert.deepEqual(fills(paced),fills(fast));
   const orders=(r:typeof fast)=>r.orders.map(({local_id,broker_id,tag,plan_id,...o})=>o);assert.deepEqual(orders(paced),orders(fast));
 });
-test('a plan expiration remains a trigger between bars and cancels its remainder before any later fill',async()=>{
+test('a reply admission deadline does not cancel an activated strategy; replay cutoff still cancels its pending ROD',async()=>{
   const report=await runBacktest({start,end:start,source:'sample',strategy:'codex',end_time:'09:31',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{
     const a=rules(s);a.expires_at=new Date(Date.parse(s.asof)+60000).toISOString();a.screening!.entry=null;
     a.decisions=[{symbol:a.candidates[0]!,action:'BUY',shares:10,limit_price:'29.5',entry_when:'IMMEDIATE',trigger_price:'0',reason:'測試未成交掛單',smart:{stop_price:'29',take_profit:'33',trailing_activate:null,trailing_fraction:null}}];return a;
   },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
   const order=report.orders[0]!;assert.equal(order.status,'CANCELLED');assert.equal(order.filled,0);
-  const cancelled=report.workflow!.find(e=>e.stage==='RECONCILE'&&e.message.includes('CANCELLED'))!;assert.equal(cancelled.at,new Date(start+'T09:15:00+08:00').toISOString());
-  assert.equal(report.final_frame!.decisions!.find(d=>d.symbol===order.symbol)!.state,'CANCELLED');
+  assert.equal(report.final_frame!.plan!.lifecycle,'UNTIL_REPLACED');
+  assert.ok(report.workflow!.filter(e=>e.stage==='RECONCILE'&&e.message.includes('CANCELLED')).every(e=>e.at>=report.asof));
+  assert.ok(report.workflow!.some(e=>e.stage==='CLOSE'&&e.message.includes('區間結束')));
 });
 test('transient Codex failure preserves its specific reason and later sessions recover without reusing a failed plan',async()=>{
   let failed=false;const report=await runBacktest({start,end,source:'sample',strategy:'codex',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{

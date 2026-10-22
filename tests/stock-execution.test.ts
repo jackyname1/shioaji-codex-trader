@@ -93,6 +93,18 @@ test('real adapter BUY path keeps price/account/TIF/lot/quantity exact for both 
     assert.deepEqual(f.writes[0]!.body,stockOrderPayload(o,instrument(),selected));assert.equal(f.writes.length,1);
   }finally{await f.close();}}
 });
+test('final HTTP admission accepts an until-replaced strategy after its reply deadline but rejects a legacy timed strategy',async()=>{
+  for(const lifecycle of ['UNTIL_REPLACED','TIMED'] as const){const f=await fixture(true);try{
+    const plan=f.store.plan()!;plan.lifecycle=lifecycle;
+    plan.created_at=new Date(now.getTime()-86400000).toISOString();plan.analysis.expires_at=new Date(now.getTime()-1000).toISOString();
+    f.store.set('plan',plan);
+    if(lifecycle==='UNTIL_REPLACED'){
+      await f.broker.submit(order({status:'SUBMITTING'}));assert.equal(f.writes.length,1);
+    }else{
+      await assert.rejects(f.broker.submit(order({status:'SUBMITTING'})),/計畫已更新或失效/);assert.equal(f.writes.length,0);
+    }
+  }finally{await f.close();}}
+});
 test('concurrent submission and account refresh cannot reuse a snapshot while a mutation is unresolved',async()=>{
   const f=await fixture();let release!:()=>void;const wait=new Promise<void>(r=>{release=r;});let started!:()=>void;const sending=new Promise<void>(r=>{started=r;});
   f.setHandler(async(_path,body)=>{started();await wait;return Response.json(f.native(body));});

@@ -24,6 +24,7 @@ import {EntryDiagnosticTracker,type EntryDiagnostics} from './entry-diagnostics.
 import {entryDiagnosticText} from './entry-diagnostics-text.js';
 import {tradeStatistics,exitStatistics} from './performance.js';
 import {backtestDiagnostics,backtestExport,type BacktestDiagnostics} from './backtest-export.js';
+import {planActive,planDeadline} from './plan-lifecycle.js';
 
 export const BacktestRequestSchema = z.strictObject({
   start:z.string().refine(validDay),end:z.string().refine(validDay),
@@ -82,7 +83,7 @@ export interface BacktestReport {
     trades?:ReturnType<typeof tradeStatistics>;exits?:ReturnType<typeof exitStatistics>;daily_loss_breach_days?:string[];
     average_close_exposure_pct?:string;daily_sharpe?:string|null;skipped_idle_checks?:number};
   quality:BacktestQuality;positions:import('./models.js').Position[];
-  strategy_log:{at:string;review:boolean;stance:string;expires_at:string;summary:string;selected:string[]}[];watch_changes:WatchChange[];
+  strategy_log:{at:string;review:boolean;stance:string;expires_at:string;lifecycle?:import('./models.js').Plan['lifecycle'];summary:string;selected:string[]}[];watch_changes:WatchChange[];
   workflow?:ReplayActivity[];failures?:{at:string;review:boolean;stage:string;issue:string;diagnostic?:CodexFailureDetail}[];normalization?:HistoryDataset['normalization'];
   analyst_events?:AnalystEvent[];
   diagnostics?:BacktestDiagnostics;
@@ -182,7 +183,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   const anchor=expectedDays.find(day=>strategySlots(day,settings,calendar).some(slot=>!slot.review&&Date.parse(slot.at)>=Date.parse(bounds.start)&&Date.parse(slot.at)<=Date.parse(bounds.end)))??request.start;
   const events=replayEvents(marketTimes,coveredDays,settings,calendar,request.strategy_every_sessions,anchor).filter(e=>e.at>=bounds.start&&e.at<=bounds.end);
   const limitations=[...dataset.limitations,
-    `策略每 ${request.strategy_every_sessions} 個交易日分析；休市不計、缺行情的已知交易日仍計入間隔。間隔日持續核對行情、條件與持倉保護，不自動延長策略期限；額外盤後檢討只在分析日執行`,
+    `策略每 ${request.strategy_every_sessions} 個交易日分析；休市不計、缺行情的已知交易日仍計入間隔。成功啟用後持續有效，直到新策略成功接替；間隔日持續核對行情、條件與持倉保護。額外盤後檢討只在分析日執行，且不替換盤中策略`,
     ...(dataset.normalization?.duplicates?[`已整理 ${dataset.normalization.duplicates} 筆重複股票／時間；${dataset.normalization.revisions} 筆行情採用 Shioaji 同批最後修訂，成交量未重複加總`]:[]),
     '使用與即時交易相同的排程、觀測增刪、進場規則、風控、智慧單及部分成交引擎；委託只在獨立記憶體帳戶執行',
     '決策只看到截至虛擬時間已提供的價格與已完成日 K；盤中排除當日，盤後有收盤資料才納入當日；不讀取今日新聞、營收或既有實盤經驗',
@@ -239,6 +240,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       activity(now.toISOString(),'SNAPSHOT','建立當時帳戶、行情、觀測股與已完成日 K 快照');
       const snapshot=await engine.snapshot(now,review);snapshot.synthetic=dataset.synthetic;
       snapshot.hard_limits={...snapshot.hard_limits,historical_replay:true,replay_analysis_every_sessions:request.strategy_every_sessions,virtual_time:now.toISOString()};snapshot.data_limitations=[...new Set([...snapshot.data_limitations,...limitations])];
+      if(snapshot.observation)snapshot.observation.next_strategy_at=events.find(e=>e.decision===false&&e.at>now.toISOString())?.at??null;
       let analysis:Analysis;
       stage=review?'REVIEW':'ANALYSIS';
       if(request.strategy==='codex'){calls++;progress(stage,`${twClock(now)} 等待 Codex ${review?'盤後檢討':'選股與設定條件'}完成；虛擬時間保持不動`);
@@ -251,7 +253,8 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       if(signal.aborted)return;stage='ACTIVATION';progress(stage,`${twClock(now)} 驗證選股、設定觀測門檻與進出場條件`);
       await engine.activate(analysis,snapshot,now);successes++;lastError='';if(!review)quality.successful_strategies++;
       if(!review)entryDiagnostics.strategy(analysis,snapshot.features,snapshot.instruments??{},now);
-      strategyLog.push({at:now.toISOString(),review,stance:analysis.stance,expires_at:analysis.expires_at,summary:analysis.summary,selected:analysis.candidates});
+      strategyLog.push({at:now.toISOString(),review,stance:analysis.stance,expires_at:analysis.expires_at,
+        ...(!review?{lifecycle:engine.plan!.lifecycle}:{}),summary:analysis.summary,selected:analysis.candidates});
       activity(now.toISOString(),review?'REVIEW':'ACTIVATION',analysis.summary,{symbols:analysis.candidates,screening:analysis.screening});
     }catch(error){if(signal.aborted)return;failures++;if(!review){engine.entryBlocked=true;await cancelEntries(now);}
       const issue=request.strategy==='codex'&&(stage==='ANALYSIS'||stage==='REVIEW')?codexIssue(error):error instanceof z.ZodError?'策略欄位格式不符，請核對結構化輸出':
@@ -292,7 +295,8 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       exposure_pct:equity(account).gt(0)?marketValue(account).div(equity(account)).times(100).toFixed(4):'0'});
     activity(now.toISOString(),'CLOSE',`${partialAt?'區間結束':'收盤'}：撤銷未完成委託並核對模擬現金、庫存與交割款`);};
   const scheduleExpiry=(from:number):void=>{
-    if(!engine.plan)return;const at=nextMonitorTime(new Date(engine.plan.analysis.expires_at),settings.monitor_interval_seconds).toISOString();
+    if(!engine.plan)return;const deadline=planDeadline(engine.plan);if(!deadline)return;
+    const at=nextMonitorTime(new Date(deadline),settings.monitor_interval_seconds).toISOString();
     if(at<=events[from]!.at||at>bounds.end||!calendar.inSession(new Date(at),'COMMON'))return;
     let lo=from+1,hi=events.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(events[mid]!.at<at)lo=mid+1;else hi=mid;}
     if(events[lo]?.at===at)events[lo]!.check=true;
@@ -314,7 +318,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       const now=new Date(event.at),day=twDay(now);calendar.setAsOf(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=nextVisible();
       const freshQuote=[...engine.quotes.values()].some(q=>ageSeconds(now,q.trade_at)>=0&&ageSeconds(now,q.trade_at)<=settings.quote_max_age);
       // Offline runs may elide repeated stale-data checks. Never skip a price, decision, expiry, settlement clock, close or GUI frame.
-      const expiryPending=engine.plan&&Date.parse(engine.plan.analysis.expires_at)<=now.getTime()&&store.orders(true).some(o=>o.purpose==='ENTRY');
+      const expiryPending=engine.plan&&!planActive(engine.plan,now)&&store.orders(true).some(o=>o.purpose==='ENTRY');
       if(!clock&&!onFrame&&idleSettled&&!freshQuote&&!event.market&&event.decision===undefined&&!event.close&&twClock(now)!=='11:00'
         &&!expiryPending&&!engine.pendingExecutions.size){
         if(event.check){checks++;lastMonitor=event.at;entryDiagnostics.monitor(engine.decisionStates);}skippedIdle++;
@@ -369,7 +373,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
     const sd=returns.length>1?Math.sqrt(returns.reduce((a,b)=>a+(b-mean)**2,0)/(returns.length-1)):0;
     const breachDays=daily.filter(row=>store.get('daily_loss_breached_'+row.day)).map(row=>row.day);
     const report:BacktestReport={version:'0.2.5',build:buildIdentity(),entry_diagnostics:entryDiagnostics.report(store.orders()),final_frame:finalFrame,timeline,id,created_at:new Date().toISOString(),asof:now.toISOString(),status,request,source:dataset.source,synthetic:dataset.synthetic,frequency:dataset.frequency,
-      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'columnar-swing-triggers-v3':'swing-triggers-v8',
+      model:request.strategy==='codex'?(base.codex_model||'本機 Codex 預設模型'):request.strategy==='rules'?'快速程式策略':'流程示範（未呼叫 Codex）',prompt_version:settings.prompt_compaction?'columnar-until-replaced-v4':'until-replaced-v9',
       settings:reportSettings,
       metrics:{initial_cash:request.initial_cash,final_cash:account.cash,settlement_credits:account.settlement_credits,stock_value:marketValue(account).toFixed(2),
         final_equity:final.toFixed(2),net_pnl:final.minus(request.initial_cash).toFixed(2),return_pct:final.div(request.initial_cash).minus(1).times(100).toFixed(4),
@@ -388,7 +392,9 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         average_exposure_pct:exposureSamples?exposureSum.div(exposureSamples).toFixed(4):'0.0000',max_exposure_pct:maxExposure.toFixed(4),exposure_samples:exposureSamples},
       quality,positions:account.positions,strategy_log:strategyLog,workflow,failures:failureLog,normalization:dataset.normalization,watch_changes:engine.watch.changes,daily_equity:daily,fills,orders:store.orders(),
       reviews:store.reviews('backtest:'+id,now.toISOString(),2000),logs:store.logs(2000),limitations};
-    report.diagnostics=backtestDiagnostics(report);return report;
+    report.diagnostics=backtestDiagnostics(report);
+    if(!report.diagnostics.audit.passed){report.status='FAILED';report.limitations.push('獨立成交帳務重算未通過；本次績效不可採用，請匯出完整紀錄檢查。');report.diagnostics=backtestDiagnostics(report);}
+    return report;
   }finally{await engine.close();store.close();}
 }
 export function formatBacktestReport(r:BacktestReport):string{const m=r.metrics;

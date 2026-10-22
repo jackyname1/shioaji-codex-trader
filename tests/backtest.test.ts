@@ -130,7 +130,7 @@ test('cancel stops future decisions while preserving partial simulation and one 
   assert.equal(r.daily_equity.at(-1)!.complete,false);assert.equal(r.daily_equity.at(-1)!.asof,r.asof);
 });
 test('expired paper entry is cancelled before a new price event can fill it',async()=>{
-  const r=await rig();try{await r.engine.tick(now);r.engine.plan!.analysis.expires_at=new Date(now.getTime()+500).toISOString();
+  const r=await rig();try{await r.engine.tick(now);r.engine.plan!.lifecycle='TIMED';r.engine.plan!.analysis.expires_at=new Date(now.getTime()+500).toISOString();
     await r.engine.tick(new Date(now.getTime()+1000));assert.equal(r.store.orders()[0]!.filled,0);assert.equal(r.store.orders()[0]!.status,'CANCELLED');
   }finally{await r.engine.close();r.store.close();}
 });

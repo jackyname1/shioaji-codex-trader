@@ -1,3 +1,4 @@
+import {planActive,planDeadline} from '../core/plan-lifecycle.js';
 import type {Settings} from '../core/models.js';
 import type {DesktopState,RuntimeView} from './shared.js';
 import {workspaceRuntime,workspaceCutoff,replayView} from './workspace.js';
@@ -7,7 +8,7 @@ const actions:Record<string,string>={BUY:'買進',SELL:'賣出',HOLD:'觀望',PE
 export const dashboardTime=(at:string|null|undefined):string=>at&&Number.isFinite(Date.parse(at))?new Date(at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false,month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
 export const dashboardNumber=(n:string|number):string=>Number(n).toLocaleString('zh-TW',{maximumFractionDigits:2});
 export function strategyDirection(r:RuntimeView|null,s:Pick<Settings,'trade_direction'>,cutoff:string):{label:string;detail:string;restricted:boolean}{
-  const plan=r?.plan,valid=!!plan&&Date.parse(plan.created_at)<=Date.parse(cutoff)&&Date.parse(plan.analysis.expires_at)>Date.parse(cutoff);
+  const plan=r?.plan,valid=planActive(plan,cutoff);
   if(s.trade_direction==='reduce_only')return {label:'僅減碼 · 禁止新買進',restricted:true,
     detail:'設定持續生效；依有效賣出條件與可賣庫存減碼，不指定固定減碼比例。自動交易啟動後核對並撤銷本程式的進場掛單；待撤單確認前仍可能成交。既有保護持續。'};
   if(!valid)return {label:plan?'策略已到期／尚未生效':'等待第一輪策略',restricted:true,
@@ -21,7 +22,7 @@ export function strategyDirection(r:RuntimeView|null,s:Pick<Settings,'trade_dire
 }
 export function strategyItems(r:RuntimeView|null,cutoff:string,tradeDirection:Settings['trade_direction']='auto'):StrategyItem[]{
   if(!r)return [];
-  const valid=!!r.plan&&Date.parse(r.plan.created_at)<=Date.parse(cutoff)&&Date.parse(r.plan.analysis.expires_at)>Date.parse(cutoff);
+  const valid=planActive(r.plan,cutoff);
   return (r.plan?.analysis.decisions??[]).map(d=>{
     const guard=(d.conditions??[]).map(c=>`${c.left} ${{GT:'>',GTE:'≥',LT:'<',LTE:'≤'}[c.operator]} ${c.right==='VALUE'?c.value:c.right}`).join(' 且 ');
     const trigger=d.action==='HOLD'?'本輪不建立新委託':(d.entry_when==='IMMEDIATE'?'通過條件與風控後':d.entry_when==='REBOUND'?`跌至 ${d.trigger_price} 後，自低點回升 ${Number(d.rebound_fraction)*100}%`:`價格${d.entry_when==='BELOW'?'低於':'高於'} ${d.trigger_price}`)+(guard?'；且 '+guard:'');
@@ -60,7 +61,7 @@ export function traySnapshot(state:DesktopState):TraySnapshot {
     settlement:a&&available.settlements?`待付 ${dashboardNumber(a.settlement_debits)} · 待收 ${dashboardNumber(a.settlement_credits)}`:'交割資料待核對',orders:orders.length,
     next:replay?'回放依模擬排程':dashboardTime(r?.next_strategy_at),monitor:dashboardTime(r?.last_monitor_at),
     strategy:r?.plan?.analysis.summary??'等待第一輪有效策略；由程式產生選股與買賣條件。',
-    expiry:r?.plan?`有效至 ${dashboardTime(r.plan.analysis.expires_at)}${Date.parse(r.plan.analysis.expires_at)<=Date.parse(cutoff)?' · 已到期':''}`:'尚無有效策略',
+    expiry:r?.plan?planDeadline(r.plan)?`舊版有效至 ${dashboardTime(r.plan.analysis.expires_at)}${planActive(r.plan,cutoff)?'':' · 已到期'}`:'持續有效 · 直到新策略成功接替':'尚無有效策略',
     positions:a&&available.positions?a.positions.map(p=>({symbol:p.symbol,name:r?.metadata[p.symbol]?.name??'',shares:`${dashboardNumber(p.shares)} 股／可賣 ${dashboardNumber(p.sellable)}`,pnl:dashboardNumber((Number(p.last_price)-Number(p.average_price))*p.shares)})):[],
     watch:(r?.watch.entries??[]).map(w=>{const quote=r?.quotes.find(q=>q.symbol===w.symbol&&q.odd);
       const quoteFresh=quote&&Date.parse(cutoff)>=Date.parse(quote.trade_at)&&Date.parse(cutoff)-Date.parse(quote.trade_at)<=settings.quote_max_age*1000;
