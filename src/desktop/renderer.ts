@@ -41,7 +41,8 @@ function table(id:string,headers:string[],rows:Cell[][],empty='目前沒有資�
   if(!rows.length){const cell=body.insertRow().insertCell();cell.colSpan=headers.length;cell.className='empty';cell.textContent=empty;}
   for(const row of rows){const tr=body.insertRow();for(const v of row){const td=tr.insertCell();
     if(typeof v==='object'){const b=document.createElement('button');b.className='quiet';b.textContent=v.label;
-      b.addEventListener('click',()=>void run(()=>v.chartSymbol?showStock(v.chartSymbol):v.report?window.trader.selectBacktest(v.report):window.trader.command(v.command!)));td.append(b);
+      if(v.report)b.dataset.report=v.report;
+      b.addEventListener('click',()=>void run(()=>v.chartSymbol?showStock(v.chartSymbol):v.report?selectReport(v.report):window.trader.command(v.command!)));td.append(b);
     }else td.textContent=String(v);}
     const stock=row.find(v=>typeof v==='object'&&v.chartSymbol) as {chartSymbol:string}|undefined;
     if(stock){tr.dataset.chartSymbol=stock.chartSymbol;tr.tabIndex=0;tr.title=`查看 ${stock.chartSymbol} 行情與智慧條件`;
@@ -64,7 +65,12 @@ async function run(operation:()=>Promise<unknown>):Promise<void>{message('正在
   catch(e){message(e instanceof Error?e.message.replace(/^Error invoking remote method '[^']+': Error: /,''):'操作未完成',true);}
   finally{try{await refresh();}catch{message('工作台資料尚未載入，請查看連線診斷',true);}}}
 let codexDirty=false;let latestState:DesktopState|undefined;
-let settingsDirty=false,polling=false,latestSettings:Settings|undefined,renderedReport='';
+let settingsDirty=false,polling=false,latestSettings:Settings|undefined,renderedReport='',selectingReport=false;
+async function selectReport(id:string):Promise<string>{
+  if(selectingReport)throw new Error('正在載入回測報表，請稍候');
+  selectingReport=true;if(latestState)renderBacktest(latestState);
+  try{return await window.trader.selectBacktest(id);}finally{selectingReport=false;}
+}
 let loadedReplayProfile='';
 let currentWorkspace='';
 function updateWorkspace(state:DesktopState):void {
@@ -283,9 +289,13 @@ function renderBacktest(state:DesktopState):void {
     node.disabled=p.running;
   }
   if(!p.running)schedulingFields('bt');
-  el('bt-result').hidden=!r;el<HTMLButtonElement>('bt-export').disabled=p.running||!r;
-  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-backtest-export]'))button.disabled=p.running||!r;
-  el<HTMLButtonElement>('bt-market').disabled=p.running||!r?.dataset_id;
+  const exportBusy=p.running||selectingReport;
+  el('bt-result').hidden=!r;
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-backtest-export],[data-backtest-export-open]'))button.disabled=exportBusy||!r;
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-export-market]'))button.disabled=exportBusy||!r?.dataset_id;
+  text('history-export-selection',selectingReport?'正在載入選取的測試…':r?`${r.request.start} — ${r.request.end} · ${phase[r.status]??r.status}`:'尚未選取測試');
+  el('history-export-selection').dataset.reportId=r?.id??'';
+  text('history-export-hint',selectingReport?'載入完成後即可匯出':p.running?'回測執行中；停止或完成後即可匯出':!r?'先點選下方「檢視」，再按上方匯出':!r.dataset_id?'此舊報表未保存行情，仍可匯出完整紀錄':'已載入；可直接匯出完整紀錄與行情資料');
   if(!r){renderedReport='';text('bt-entry-diagnostics','測試完成後可查看進場與未成交診斷');text('bt-diagnosis','完成測試後顯示完整交易與策略期限診斷');table('bt-history',['日期區間','策略排程','淨損益','報酬','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,fmt(h.net_pnl),fmt(h.return_pct)+'%',phase[h.status]??h.status,{label:'檢視',report:h.id}]));return;}
   table('bt-history',['日期區間','策略排程','偵測','淨損益','報酬','回撤','呼叫','結果',''],state.backtest_history.map(h=>[`${h.start} — ${h.end}`,h.schedule,`${h.monitor_seconds} 秒`,fmt(h.net_pnl),fmt(h.return_pct)+'%',fmt(h.drawdown_pct)+'%',h.calls,
     (h.synthetic?'虛構 · ':'')+(phase[h.status]??h.status),{label:h.id===r.id?'檢視中':'檢視',report:h.id}]));
@@ -630,7 +640,7 @@ el('replay-speed').addEventListener('input',()=>updateReplaySpeed(true));
 el('replay-speed-number').addEventListener('change',()=>updateReplaySpeed());
 el('replay-mode').addEventListener('change',()=>updateReplaySpeed());
 updateReplaySpeed();
-el('bt-market').addEventListener('click',()=>void run(()=>window.trader.exportMarket()));
+for(const button of document.querySelectorAll<HTMLButtonElement>('[data-export-market]'))button.addEventListener('click',()=>void run(()=>window.trader.exportMarket()));
 for(const id of ['codex-model-control','codex-reasoning-control'])el(id).addEventListener('input',()=>{codexDirty=true;});
 async function saveCodex():Promise<string>{
   if(!latestSettings)throw new Error('設定尚未載入');
@@ -673,7 +683,7 @@ async function beginReplay(compare=false):Promise<string>{
   chartViewport.reset();chartReportId='';
   el<HTMLInputElement>('chart-start').value=value('bt-start');el<HTMLInputElement>('chart-end').value=value('bt-end');
   text('market-chart','正在準備歷史行情');el('market-chart').classList.add('chart-empty');
-  for(const id of ['bt-json','bt-csv','bt-market','bt-export','bt-audit-export','bt-trades-export','bt-daily-export'])el<HTMLButtonElement>(id).disabled=true;
+  for(const button of document.querySelectorAll<HTMLButtonElement>('[data-backtest-export],[data-backtest-export-open],[data-export-market]'))button.disabled=true;
   el<HTMLInputElement>('chart-pan').disabled=true;
   el<HTMLDialogElement>('replay-settings-dialog').close();return result;
 }

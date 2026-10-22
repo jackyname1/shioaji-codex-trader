@@ -1,12 +1,12 @@
 # Shioaji Codex Trader
 
-**[v0.1.2 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.2)** · Windows x64 免安裝
+**[v0.1.3 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.3)** · Windows x64 免安裝
 
 台灣股票桌面工作台。Shioaji 提供行情與帳務，Codex 設定股票策略，由程式逐筆核算股數、費稅、庫存及風控。提供即時模擬、歷史回測與實盤介面；啟動預設模擬模式，自動交易關閉。
 
 ## 下載與開始
 
-1. 下載 [Shioaji-Codex-Trader-0.1.2-Windows-x64.exe](https://github.com/jackyname1/shioaji-codex-trader/releases/download/v0.1.2/Shioaji-Codex-Trader-0.1.2-Windows-x64.exe)。先結束舊程式，再開新版；右下角可核對版本。
+1. 下載 [Shioaji-Codex-Trader-0.1.3-Windows-x64.exe](https://github.com/jackyname1/shioaji-codex-trader/releases/download/v0.1.3/Shioaji-Codex-Trader-0.1.3-Windows-x64.exe)。先結束舊程式，再開新版；右下角可核對版本。
 2. 開啟「帳戶與設定 → 帳戶連線」，輸入 API Key、Secret Key。實盤需要有效 CA 憑證及密碼；記住設定時使用系統加密保存。
 3. 在右側 Codex 控制台登入並測試連線。模型及推理強度可直接修改，儲存後於下一輪生效；留空使用帳戶預設模型。
 4. 先使用「模擬 → 即時模擬」或「歷史回放」。日常排程與回測用量各自設定、各自保存。回測預設每 5 個交易日分析一次，可調整為 1–20 個交易日。
@@ -21,9 +21,9 @@
 - 「減碼優先」會禁止本輪新買進，依明確賣出條件及股數減少持倉；策略方向旁可開啟完整說明。交易風控另可保存「僅減碼」，持續禁止新買進；預設依有效策略決定。
 - 設定頁分成帳戶連線、日常排程、歷史回測、交易風控及進階與桌面。
 
-![v0.1.2 歷史回放工作台](docs/screenshots/workbench-v0.1.2.png)
+![v0.1.3 歷史回放工作台](docs/screenshots/workbench-v0.1.3.png)
 
-![v0.1.2 系統匣速覽](docs/screenshots/tray-v0.1.2.png)
+![v0.1.3 系統匣速覽](docs/screenshots/tray-v0.1.3.png)
 
 ## 兩組 Codex 設定
 
@@ -37,9 +37,9 @@
 
 啟動、手動分析、失敗嘗試與額外股數模型均計入對應策略上限。登入測試另外使用少量模型用量。行情更新、條件偵測及持倉保護不呼叫模型。回測以拉長分析間隔降低用量：休市不計，額外檢討也只在分析日執行；有效條件及持倉保護持續監測，策略過期不自動延長。若下一個必要模型步驟已無剩餘預算，會停止並標記 PARTIAL，不再模擬剩餘期間。回放倍速不增加模型頻率。執行中的回測固定使用啟動時設定，修改預設供後續測試使用。
 
-![v0.1.2 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.2.png)
+![v0.1.3 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.3.png)
 
-![v0.1.2 帳戶連線設定](docs/screenshots/connection-v0.1.2.png)
+![v0.1.3 帳戶連線設定](docs/screenshots/connection-v0.1.3.png)
 
 截圖均來自本版 Windows 隔離測試，使用合成資料。[截圖來源與雜湊](docs/screenshots/provenance.json)
 
@@ -66,9 +66,12 @@
 - 日期最多 **367 天**；分鐘行情與暖機日 K 合計最多 **300 萬筆**，超量需分段。
 - 歷史下載每次最多 **30 個日曆日**，使用快取與節流。
 - 股票池每日 20–100 檔，跨日聯集可超過 100 檔；也可指定最多 100 檔固定股票。
+- 「測試紀錄 → 檢視」後，視窗上方直接提供「匯出完整 JSON」「其他匯出格式」「匯出行情資料」，捲動報表仍可操作；切換報表時暫停匯出，避免拿到上一份結果。
 - 「資產與損益 → 匯出回測紀錄」提供完整 JSON、成交 CSV、完整交易 CSV、每日淨值 CSV 與損益診斷 Markdown；行情資料另行匯出。完整 JSON 含設定、策略、委託、成交、每日資產與 Codex 紀錄。
 - 損益診斷拆分費用前／後收益、完整平倉勝率、平均損益、出場原因與策略期限空窗；組合研究風控關閉時仍統計平倉筆數，並顯示開關狀態。小樣本不視為獲利證明。故障保留 PARTIAL 結果及停止時刻，不算作完整回測。
 - 歷史零股五檔、排隊、企業行動及滑價存在近似；分鐘收盤價不能重建 K 線內路徑。測試畫面與小樣本結果不能當作實盤獲利證明。
+
+![v0.1.3 報表視窗內直接匯出](docs/screenshots/history-export-v0.1.3.png)
 
 ## 開發與驗證
 

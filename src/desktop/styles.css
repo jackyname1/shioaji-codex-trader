@@ -205,3 +205,11 @@ button[aria-label]{scroll-margin:12px}
   .history-toolbar{flex-wrap:wrap}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Keep report exports within the modal the user is viewing, including after scrolling. */
+.history-report-header{position:sticky;top:-16px;z-index:3;margin:-16px -16px 14px;padding:16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.history-report-header .dialog-heading{margin-bottom:10px;padding-bottom:10px}
+.history-report-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.history-report-selection{flex:1 1 260px;min-width:0;overflow-wrap:anywhere}
+.history-report-selection strong,.history-report-selection .subtle{display:block}
+.history-report-selection .subtle{margin-top:5px}

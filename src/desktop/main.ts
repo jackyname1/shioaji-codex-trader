@@ -3,7 +3,7 @@ import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, dialog, powerSave
   safeStorage, shell, screen, type IpcMainInvokeEvent } from 'electron';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, rmSync,readFileSync,writeFileSync,statSync,mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync,readFileSync,writeFileSync,statSync,mkdirSync,existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -550,7 +550,7 @@ async function smokeTest(): Promise<void> {
     ||range.schedule!==`每${backtest.report.request.strategy_every_sessions??1}日 `+backtest.report.request.decision_interval_minutes+' 分鐘'||backtest.progress.total_runs!==undefined)throw new Error('切換歷史報表日期與排程未通過');
   // Exercise the real preload/IPC/save path for every export in source and packaged builds.
   await window.webContents.executeJavaScript(`document.querySelector('#bt-export').click()`);
-  const exportUi=await window.webContents.executeJavaScript(`({open:document.querySelector('#backtest-export-dialog').open,count:document.querySelectorAll('[data-backtest-export]:not(:disabled)').length,diagnosis:document.querySelector('#bt-diagnosis').textContent})`);
+  const exportUi=await window.webContents.executeJavaScript(`({open:document.querySelector('#backtest-export-dialog').open,count:document.querySelectorAll('#backtest-export-dialog [data-backtest-export]:not(:disabled)').length,diagnosis:document.querySelector('#bt-diagnosis').textContent})`);
   if(!exportUi.open||exportUi.count!==5||!exportUi.diagnosis.includes('完整平倉'))throw new Error('回測匯出入口或損益診斷未通過');
   const replaySave=dialog.showSaveDialog;
   try{
@@ -731,8 +731,15 @@ async function smokeTest(): Promise<void> {
   await window.webContents.executeJavaScript(`(()=>{document.querySelector('[data-settings-tab="risk"]').click();
     const direction=document.querySelector('#s-direction');direction.value='reduce_only';direction.dispatchEvent(new Event('change',{bubbles:true}));
     document.querySelector('#settings-form').requestSubmit();})()`);
-  await new Promise(resolve=>setTimeout(resolve,1200));
-  if(service.engine.settings.trade_direction!=='reduce_only'||!await window.webContents.executeJavaScript(`document.querySelector('#strategy-stance').textContent.includes('僅減碼')`))throw new Error('僅減碼設定與工作台方向未同步');
+  // Saving and the renderer's one-second polling are asynchronous; require the same state assertion,
+  // but wait for convergence rather than sampling once at an arbitrary delay on a packaged build.
+  let directionSynced=false,directionUi='';
+  for(let n=0;n<100&&!directionSynced;n++){
+    directionUi=await window.webContents.executeJavaScript(`document.querySelector('#strategy-stance').textContent`);
+    directionSynced=service.engine.settings.trade_direction==='reduce_only'&&directionUi.includes('僅減碼');
+    if(!directionSynced)await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  if(!directionSynced)throw new Error(`僅減碼設定與工作台方向未同步：saved=${service.engine.settings.trade_direction}; visible=${directionUi}`);
   await service.saveSettings({...service.engine.settings,trade_direction:'auto'});await new Promise(resolve=>setTimeout(resolve,1200));
   await window.webContents.executeJavaScript(`document.querySelector('[data-settings-tab="connection"]').click()`);
   const dailyBefore={times:[...service.engine.settings.strategy_times],limit:service.engine.settings.codex_daily_call_limit};
@@ -764,6 +771,34 @@ async function smokeTest(): Promise<void> {
   await window.webContents.executeJavaScript(`document.querySelector('#forget-keys').click()`);await new Promise(resolve=>setTimeout(resolve,350));
   if(!await window.webContents.executeJavaScript(`['api-key','secret-key','ca-path','ca-password'].every(id=>document.getElementById(id).value==='')`))throw new Error('清除記憶後欄位未清空');
   await window.webContents.executeJavaScript(`document.querySelector('#settings-dialog').close();document.querySelector('[data-dialog="history-dialog"]').click()`);
+  // Follow the user's actual path: open history, select a different report, export inside the still-open modal.
+  const historyTarget=backtest.history.find(r=>r.id!==backtest.report?.id)?.id;
+  if(!historyTarget)throw new Error('缺少第二份隔離報表，無法驗證檢視後匯出');
+  const selectionBlocked=await window.webContents.executeJavaScript(`(()=>{document.querySelector('#bt-history [data-report="${historyTarget}"]').click();return document.querySelector('#history-export-json').disabled;})()`);
+  if(!selectionBlocked)throw new Error('切換報表時匯出未暫停，可能匯出上一份測試');
+  let historyReady=false;
+  for(let n=0;n<100&&!historyReady;n++){
+    historyReady=await window.webContents.executeJavaScript(`document.querySelector('#history-export-selection').dataset.reportId==='${historyTarget}'&&!document.querySelector('#history-export-json').disabled`);
+    if(!historyReady)await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  if(!historyReady||backtest.report?.id!==historyTarget)throw new Error('檢視後未顯示選取報表與匯出按鈕');
+  const historySave=dialog.showSaveDialog,historyJson=join(dataRoot,'history-selected.json'),historyMarket=join(dataRoot,'history-market.json');
+  try{
+    dialog.showSaveDialog=async()=>({canceled:false,filePath:historyJson});
+    await window.webContents.executeJavaScript(`document.querySelector('#history-export-json').click()`);
+    for(let n=0;n<100&&!existsSync(historyJson);n++)await new Promise(resolve=>setTimeout(resolve,50));
+    if(!existsSync(historyJson)||JSON.parse(readFileSync(historyJson,'utf8')).id!==historyTarget)throw new Error('報表視窗匯出的 JSON 不是目前檢視的測試');
+    dialog.showSaveDialog=async()=>({canceled:false,filePath:historyMarket});
+    await window.webContents.executeJavaScript(`document.querySelector('#history-export-market').click()`);
+    for(let n=0;n<100&&!existsSync(historyMarket);n++)await new Promise(resolve=>setTimeout(resolve,50));
+    if(!existsSync(historyMarket)||JSON.parse(readFileSync(historyMarket,'utf8')).points.length!==(await backtest.marketData()).points.length)throw new Error('報表視窗行情資料匯出未通過');
+  }finally{dialog.showSaveDialog=historySave;}
+  const historyControls=await window.webContents.executeJavaScript(`(()=>{const d=document.querySelector('#history-dialog');d.scrollTop=d.scrollHeight;
+    const b=document.querySelector('#history-export-json').getBoundingClientRect(),r=d.getBoundingClientRect();
+    const visible=d.open&&b.top>=r.top&&b.bottom<=r.bottom&&b.left>=r.left&&b.right<=r.right;
+    document.querySelector('#history-export-more').click();const nested=document.querySelector('#backtest-export-dialog').open;
+    document.querySelector('#backtest-export-dialog').close();d.scrollTop=0;return {visible,nested,historyOpen:d.open};})()`);
+  if(!historyControls.visible||!historyControls.nested||!historyControls.historyOpen)throw new Error('報表捲動後匯出不可見，或其他格式遮蔽原報表');
   await capture('SYNTHETIC-ui-history.png',1600,960);
   await window.webContents.executeJavaScript(`document.querySelector('#history-dialog').close()`);
   await window.webContents.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');window.webContents.debugger.detach();
