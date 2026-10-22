@@ -106,3 +106,18 @@ test('an expired initial reply never creates any order and the replay is FAILED'
     async s=>({...proposal(s),expires_at:'2026-09-09T07:15:00+08:00'}),new AbortController().signal);
   assert.equal(r.status,'FAILED');assert.equal(r.orders.length,0);assert.equal(r.fills.length,0);
 });
+
+test('stale held-stock valuation makes a fully processed replay PARTIAL even if cash accounting balances',async()=>{
+  const data=syntheticDataset('2026-09-08','2026-09-08');
+  data.points=data.points.filter(p=>p.symbol!=='9001'||twClock(new Date(p.at))<='10:00');
+  for(const p of data.points){p.open=p.high=p.low=p.close='30';p.volume_shares=1000000;}
+  const r=await runBacktest({start:'2026-09-08',end:'2026-09-08',source:'sample',strategy:'codex',
+    strategy_schedule:'fixed',strategy_times:['09:15'],execution_sizing:'deterministic'},data,
+    SettingsSchema.parse({codex_enabled:true,auto_watchlist:false}),async s=>({
+      ...proposal(s),decisions:proposal(s).decisions.map(d=>({...d,limit_price:'30.05',entry_when:'IMMEDIATE',trigger_price:'0'})),
+    }),new AbortController().signal);
+  assert.ok(r.fills.some(f=>f.action==='BUY'));
+  assert.equal(r.diagnostics!.audit.passed,true);assert.equal(r.status,'PARTIAL');
+  assert.ok(r.diagnostics!.audit.stale_valuation_symbols.includes('9001'));
+  assert.ok(r.limitations.some(l=>l.includes('STALE_VALUATION')));
+});
