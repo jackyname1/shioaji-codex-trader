@@ -38,7 +38,7 @@ test('capital snapshots reserve open buys and settlements and clip the soft targ
   a.orders=[order({symbol:'9002',shares:100,limit_price:'100',status:'PARTIAL',filled:20})];
   const s=SettingsSchema.parse({target_exposure_fraction:'0.9',max_exposure_fraction:'0.50'});
   const c=capitalSnapshot(a,s);assert.equal(c.order_limit_twd,'8925');assert.equal(c.reserved_buy_principal_twd,'8000');
-  assert.equal(c.reserved_buy_cash_twd,'8020');assert.equal(c.exposure_twd,'18000');
+  assert.equal(c.reserved_buy_cash_twd,'8000');assert.equal(c.exposure_twd,'18000');
   assert.equal(c.target_exposure_twd,'59500');assert.equal(c.target_gap_twd,'41500');
 });
 test('entry economics include both fees and taxes at target and stop, and reject the logged weak reward/risk setup',()=>{

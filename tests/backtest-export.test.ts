@@ -64,3 +64,16 @@ test('order and failure CSV preserve rejected/unfilled orders and specific error
   assert.equal(failures.split('\r\n').length,3);
   assert.match(backtestExport(r,'audit').content,/REPLY_EXPIRED/);
 });
+
+test('new CSV exports agree with raw unique funnel, strategy and execution attribution records',async()=>{
+ const r=await report();
+ for(const format of ['funnel','rejections','strategies','decisions','attribution'] as const){
+  const output=backtestExport(r,format);assert.equal(output.extension,'csv');assert.ok(output.content.length>0);
+ }
+ assert.ok(r.entry_funnel);assert.match(backtestExport(r,'funnel').content,/signal_id.*stage.*not_required/);
+ assert.match(backtestExport(r,'rejections').content,/signal_id.*code.*samples/);
+ assert.match(backtestExport(r,'strategies').content,/lifecycle/);assert.match(backtestExport(r,'decisions').content,/run_id/);
+ assert.match(backtestExport(r,'attribution').content,/reference_gross_pnl.*spread_cost.*modeled_price_impact/);
+ assert.equal(r.diagnostics!.attribution!.closed.length,r.metrics.trades!.closed_trades);
+ assert.equal(r.diagnostics!.attribution!.reconciled,true);assert.match(r.dataset_sha256!,/^[a-f0-9]{64}$/);
+});

@@ -1,20 +1,25 @@
+import type {EntryObserver,EntryStage} from './entry-funnel.js';
 import {Decimal} from 'decimal.js';
 import {active,d,equity,marketValue,remaining,type Account,type Decision,type EntryTrack,type Features,type Plan,type Quote,type Settings} from './models.js';
 import {roundPrice} from './risk.js';
 import {orderBudget} from './capital.js';
-import {entryQualityIssues,entryRiskIssues,fee,roundTripEstimate} from './costs.js';
+import {entryQualityIssues,entryRiskIssues,fee,roundTripEstimate,remainingBuyCost} from './costs.js';
 import {researchExit,entryReady,trackEntry} from './smart.js';
 import {COMMON_MAX_SHARES} from './stock-lot.js';
 
 export interface Opportunity {decision?:Decision;track?:EntryTrack;reason:string;score?:number;signal?:string}
 /** Three independent, bounded signals share a single symbol/order identity. No target is derived from a desired RR. */
-export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Account,s:Settings,now:Date,existing?:EntryTrack):Opportunity {
+export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Account,s:Settings,now:Date,existing?:EntryTrack,observe?:EntryObserver):Opportunity {
+  let stage:EntryStage='DATA';
+  const run=():Opportunity=>{
   const rule=plan.analysis.screening!.entry!;
   if(!f.ma5||!f.ma20||!f.ma60||!f.atr14||!f.support20||!f.resistance20||f.rsi14===undefined||f.volume_ratio20===undefined)
     return {reason:'行情或資料不足：三策略需 MA60、ATR、量能與支撐壓力'};
+  observe?.({stage:'DATA',status:'PASS',code:'MULTI_DATA_READY'});stage='TREND';
   const price=d(q.last),entry=d(roundPrice(q.ask,false)),atr=d(f.atr14),resistance=d(f.resistance20);
   const up=f.ma5>=f.ma20&&f.ma20>=f.ma60&&(f.ma20_previous===undefined||f.ma20>=f.ma20_previous);
   if(!up)return {reason:'無有效候選：均線趨勢未維持多頭'};
+  observe?.({stage:'TREND',status:'PASS',code:'MULTI_TREND'});stage='TRIGGER';
   if(f.rsi14>75||price.gt(d(f.ma20).plus(atr.times(3)))||price.minus(f.ma20).abs().div(f.ma20).gt(rule.max_ma20_distance))
     return {reason:'買入觸發未達：價格過熱或偏離均線'};
   const reboundFraction=Decimal.max('.004',Decimal.min('.025',atr.times('.30').div(f.ma20))).toFixed(6);
@@ -41,13 +46,15 @@ export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Ac
     stop=Decimal.min(d(f.ma5).minus(atr.times('.5')),entry.minus(atr.times('1.5')));
   }else return {track,reason:track.status==='EXPIRED'?'買入觸發未達：回檔追蹤超時，等待新策略':track.status==='INVALID'?'買入觸發未達：支撐失效，等待新策略':
     track.armed?`追蹤低點 ${track.low_water}；等待回升 ${reboundFraction}`:'買入觸發未達：等待回檔反彈、趨勢延續或突破確認'};
+  observe?.({stage:'TRIGGER',status:'PASS',code:'MULTI_'+signal});stage='COST';
   stop=d(roundPrice(stop));target=d(roundPrice(target));
   if(stop.lte(0)||stop.gte(entry)||entry.minus(stop).div(entry).gt('.15')||target.lte(entry))return {track,reason:'風險報酬不足：支撐、實際賣價與既有壓力不相容'};
   const smart=researchExit({stop_price:stop.toFixed(),take_profit:target.toFixed(),reward_target:target.toFixed(),
     trailing_activate:s.adaptive_protection?entry.plus(entry.minus(stop).times('1.25')).toFixed():null,
     trailing_fraction:s.adaptive_protection?Decimal.max('.02',Decimal.min('.08',atr.times('1.8').div(entry))).toFixed():null},entry.toFixed(),f.atr14,s);
+  stage='RISK';
   const buys=a.orders.filter(o=>active(o)&&o.action==='BUY'),e=equity(a);
-  const reserved=buys.reduce((v,o)=>v.plus(d(o.limit_price).times(remaining(o))).plus(fee(d(o.limit_price).times(remaining(o)),s)),d(0));
+  const reserved=buys.reduce((v,o)=>v.plus(remainingBuyCost(o,s)),d(0));
   const principal=buys.reduce((v,o)=>v.plus(d(o.limit_price).times(remaining(o))),d(0));
   const held=a.positions.find(p=>p.symbol===symbol),heldValue=held?d(held.last_price).times(held.shares):d(0);
   const symbolReserved=buys.filter(o=>o.symbol===symbol).reduce((v,o)=>v.plus(d(o.limit_price).times(remaining(o))),d(0));
@@ -67,11 +74,17 @@ export function multiOpportunity(plan:Plan,symbol:string,f:Features,q:Quote,a:Ac
     if(entryRiskIssues(n,entry.toFixed(),smart,a,s,symbol).length||entry.times(n).plus(fee(entry.times(n),s)).gt(cash))hi=mid-1;else lo=mid;}
   max=lo*step;
   if(!max)return {track,reason:'購買力或單筆風險上限不足一個交易單位'};
+  stage='COST';
   const quality=entryQualityIssues(max,entry.toFixed(),smart,s);
   if(quality.length)return {track,reason:quality.join('；')};
+  observe?.({stage:'COST',status:'PASS',code:'NET_ECONOMICS'});
   const estimate=roundTripEstimate(max,entry.toFixed(),target.toFixed(),s,stop.toFixed());
   const score=strength*Number(estimate.estimated_reward_risk??0)*Math.log1p(Number(estimate.estimated_net_target_gain??0))*(heldValue.gt(0)?.7:1);
   return {track,signal,score,reason:'訊號已觸發，等待最終股數風控核對',decision:{...pullback,entry_when:signal==='PULLBACK20'?'REBOUND':'IMMEDIATE',
     trigger_price:signal==='PULLBACK20'?pullback.trigger_price:'0',rebound_fraction:signal==='PULLBACK20'?reboundFraction:null,
     shares:max,smart,reason:`${signal}；${recentBreakout?'此前已完成突破區間投射':'既有壓力／完成區間'}目標 ${target}；預期淨利 ${estimate.estimated_net_target_gain}；淨報酬風險 ${estimate.estimated_reward_risk}`}};
+  };
+  const result=run();
+  if(!result.decision)observe?.({stage,status:'BLOCK',code:'MULTI_'+stage,reason:result.reason});
+  return result;
 }

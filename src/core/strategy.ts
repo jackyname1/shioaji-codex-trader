@@ -1,4 +1,4 @@
-import {StrategyValidationError,validateDecisionTime} from './strategy-admission.js';
+import {StrategyValidationError,validateDecisionTime,validateReplyTimestamp} from './strategy-admission.js';
 import { randomUUID } from 'node:crypto';
 import { AnalysisSchema, ageSeconds, d, type Analysis, type Bar, type Features, type Plan, type Settings, type Snapshot } from './models.js';
 import { roundPrice, tickSize } from './risk.js';
@@ -33,8 +33,7 @@ export function indicators(bars: Bar[]): Features {
 }
 export function validateAnalysis(raw: unknown, snapshot: Snapshot, now: Date, settings: Settings): Plan {
   const expiry=raw&&typeof raw==='object'&&'expires_at' in raw?(raw as {expires_at?:unknown}).expires_at:undefined;
-  if(typeof expiry==='string'&&!/(?:Z|[+-]\d{2}:\d{2})$/.test(expiry))
-    throw new StrategyValidationError('REPLY_TIMEZONE_REQUIRED','回覆期限必須包含 Z 或明確時區偏移');
+  validateReplyTimestamp(expiry);
   const parsed=AnalysisSchema.safeParse(raw);
   if(!parsed.success)throw new StrategyValidationError(
     parsed.error.issues.some(i=>i.path[0]==='expires_at')?'REPLY_TIME_INVALID':'STRATEGY_SCHEMA_INVALID',
@@ -84,7 +83,7 @@ export function demoAnalysis(snapshot: Snapshot, settings: Settings, now: Date):
   return AnalysisSchema.parse({ snapshot_id: snapshot.snapshot_id,
     expires_at: new Date(now.getTime() + settings.plan_max_minutes * 60000).toISOString(),
     stance: reduceOnly?'REDUCE':'BUY_ALLOWED', candidates, decisions: first && !snapshot.review_only && !reduceOnly ? [{
-      symbol: first.symbol, action: 'BUY', shares: 10, limit_price: price.plus(tickSize(price)).toFixed(),
+      symbol: first.symbol, action: 'BUY', shares: 200, limit_price: price.plus(tickSize(price)).toFixed(),
       entry_when: 'IMMEDIATE', trigger_price: '0', smart: { stop_price: roundPrice(price.times('.95')),
         take_profit: roundPrice(price.times('1.10')), trailing_activate: roundPrice(price.times('1.08')), trailing_fraction: '.03'.replace(/^\./, '0.') },
       conditions:[],reason: '虛構行情流程展示，不是投資策略或真實股票建議' }] : [],

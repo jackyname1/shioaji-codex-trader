@@ -22,7 +22,7 @@ function flat():HistoryDataset {const data=syntheticDataset(start,end);for(const
 function rules(s:Snapshot):Analysis {return {snapshot_id:s.snapshot_id,expires_at:new Date(Date.parse(s.asof)+90*60000).toISOString(),
   stance:s.review_only?'HOLD_ONLY':'BUY_ALLOWED',candidates:s.universe.slice(0,5).map(c=>c.symbol),decisions:[],
   screening:s.review_only?null:{min_amount:'20000000',min_volume_ratio:'0',rsi_min:0,rsi_max:100,return20_min:'-0.5',
-    entry:{signal:'TREND',allocation_fraction:'0.02',max_ma20_distance:'0.10',stop_fraction:'0.05',take_profit_fraction:'0.10',trailing_fraction:'0.03'}},
+    entry:{signal:'TREND',allocation_fraction:'0.02',max_ma20_distance:'0.10',stop_fraction:'0.05',take_profit_fraction:'0.15',trailing_fraction:'0.03'}},
   summary:s.review_only?'測試替身：完成盤後成本與執行檢討':'測試替身：每日選股並授權受限規則進場'};}
 
 test('history normalizes equivalent timestamps/prices once and preserves distinct stocks and minutes',()=>{
@@ -89,7 +89,7 @@ test('fast-forward changes waiting only: prices, selections, automatic order/fil
 test('a reply admission deadline does not cancel an activated strategy; replay cutoff still cancels its pending ROD',async()=>{
   const report=await runBacktest({start,end:start,source:'sample',strategy:'codex',end_time:'09:31',strategy_schedule:'interval',decision_interval_minutes:360},flat(),SettingsSchema.parse({execution_sizing:'codex',codex_enabled:true}),async s=>{
     const a=rules(s);a.expires_at=new Date(Date.parse(s.asof)+60000).toISOString();a.screening!.entry=null;
-    a.decisions=[{symbol:a.candidates[0]!,action:'BUY',shares:10,limit_price:'29.5',entry_when:'IMMEDIATE',trigger_price:'0',reason:'測試未成交掛單',smart:{stop_price:'29',take_profit:'33',trailing_activate:null,trailing_fraction:null}}];return a;
+    a.decisions=[{symbol:a.candidates[0]!,action:'BUY',shares:30,limit_price:'29.5',entry_when:'IMMEDIATE',trigger_price:'0',reason:'測試未成交掛單',smart:{stop_price:'29',take_profit:'35',trailing_activate:null,trailing_fraction:null}}];return a;
   },new AbortController().signal,undefined,undefined,undefined,undefined,testSize);
   const order=report.orders[0]!;assert.equal(order.status,'CANCELLED');assert.equal(order.filled,0);
   assert.equal(report.final_frame!.plan!.lifecycle,'UNTIL_REPLACED');
@@ -123,7 +123,7 @@ test('excluded universe HOLD comments do not invalidate the plan or authorize no
   const s=snapshot(),config=SettingsSchema.parse({}),a=rules(s),symbol=s.universe[1]!.symbol;
   a.candidates=[s.universe[0]!.symbol];a.decisions=[{symbol,action:'HOLD',shares:0,limit_price:'30',entry_when:'IMMEDIATE',trigger_price:'0',smart:null,reason:'未入選，保持觀望'}];
   assert.ok(validateAnalysis(a,s,now,config));
-  assert.throws(()=>validateAnalysis({...a,decisions:[{...a.decisions[0]!,action:'BUY',shares:1,smart:{stop_price:'29',take_profit:'33',trailing_activate:null,trailing_fraction:null}}]},s,now,config),/決策標的/);
+  assert.throws(()=>validateAnalysis({...a,decisions:[{...a.decisions[0]!,action:'BUY',shares:1,smart:{stop_price:'29',take_profit:'35',trailing_activate:null,trailing_fraction:null}}]},s,now,config),/決策標的/);
   assert.throws(()=>validateAnalysis({...a,decisions:[{...a.decisions[0]!,symbol:'9999'}]},s,now,config),/決策標的/);
   assert.throws(()=>validateAnalysis({...a,decisions:[{...a.decisions[0]!,smart:{stop_price:'29',take_profit:null,trailing_activate:null,trailing_fraction:null}}]},s,now,config),/決策標的/);
 });

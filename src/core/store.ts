@@ -2,10 +2,11 @@ import {authorizedRisk} from './risk-policy.js';
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, mkdirSync, openSync, readFileSync, closeSync, unlinkSync, writeFileSync, fstatSync, statSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import {createHash, randomUUID } from 'node:crypto';
 import { ExperienceSchema, ReviewSchema, type Experience, type ExperienceReview } from './experience.js';
 import { AccountSchema, OrderSchema, PlanSchema, ProtectionSchema, EntryTrackSchema, SessionSchema, SettingsSchema,
   active, storedSettings, type Account, type Order, type Plan, type Protection, type EntryTrack, type SessionDay, type Settings } from './models.js';
+import type {WatchChange} from './watchlist.js';
 import type { AnalystEvent } from './codex.js';
 import {processState,type ProcessState} from './store-process.js';
 
@@ -53,6 +54,7 @@ export class Store {
       this.operation='schema';
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
         CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS watch_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS analyst_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, tag TEXT UNIQUE NOT NULL, value TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS orders_status ON orders(json_extract(value,'$.status'));
@@ -72,6 +74,11 @@ export class Store {
       if(safelyClosed)this.releaseLock();
       throw error instanceof StoreOpenError?error:new StoreOpenError(this.operation,error); }
   }
+  recordWatchChanges(changes:WatchChange[]):void {
+    const insert=this.db.prepare('INSERT OR IGNORE INTO watch_events(id,value) VALUES(?,?)');
+    for(const event of changes){const value=JSON.stringify(event);insert.run(createHash('sha256').update(value).digest('hex'),value);}
+  }
+  watchChanges():WatchChange[]{return (this.db.prepare('SELECT value FROM watch_events ORDER BY sequence').all() as {value:string}[]).map(r=>JSON.parse(r.value) as WatchChange);}
   recordAnalystEvent(event:AnalystEvent):void {
     const id=event.id??randomUUID();
     this.db.prepare('INSERT INTO analyst_events(id,value) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value')

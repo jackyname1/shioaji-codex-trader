@@ -72,11 +72,11 @@ test('selling old holdings then buying today cannot make the newly purchased sha
   const service=serviceFor(f);
   try{await service.start(false);assert.equal(service.engine.account!.complete,true);assert.equal(service.engine.account!.positions[0]!.sellable,200);assert.equal(f.mutations,0);}finally{await service.close();}
 });
-test('desktop live mode automatically becomes ready after recovery without enabling automation or undoing stop',async()=>{
+test('desktop recovery never grants consent or enables live trading',async()=>{
   const f=new StartupFixture();f.balanceFails=true;const service=serviceFor(f,true);
   try{await service.saveSettings({...service.engine.settings,monitor_interval_seconds:1,auto_watchlist:false});await service.start(true);
     assert.equal(service.liveAuthorized,false);f.balanceFails=false;
-    await until(()=>service.liveAuthorized);assert.equal(service.liveReadiness().ready,true);assert.equal(service.engine.settings.auto_execute,false);
+    await until(()=>service.engine.account?.complete===true);assert.equal(service.liveAuthorized,false);assert.equal(service.liveReadiness().ready,false);assert.equal(service.liveReadiness(new Date(),'cancel').ready,true);assert.equal(service.engine.settings.auto_execute,false);
     await service.command('stop');await service.command('continue');
     await new Promise(r=>setTimeout(r,1200));assert.equal(service.liveAuthorized,false);assert.equal(service.engine.settings.auto_execute,false);assert.equal(f.mutations,0);
   }finally{await service.close();}

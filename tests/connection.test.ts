@@ -97,7 +97,7 @@ test('either sign of outstanding settlements is reserved automatically without r
   try{
     await service.start(false);await service.engine.refreshAccount(new Date());
     assert.equal(service.engine.account?.complete,true);assert.equal(service.engine.account?.settlement_debits,'4700');
-    assert.equal(service.engine.account?.settlement_credits,'0');assert.ok(service.liveReadiness().ready);
+    assert.equal(service.engine.account?.settlement_credits,'0');assert.ok(service.liveReadiness(new Date(),'cancel').ready);assert.equal(service.liveReadiness().ready,false);
     assert.equal(service.engine.settings.fee_rate,'0.001425');assert.equal(service.engine.settings.minimum_fee,'20');
   }finally{await service.close();}
 });

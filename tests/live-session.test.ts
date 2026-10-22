@@ -60,6 +60,12 @@ async function serviceFixture(f = new NativeFixture(), path=':memory:') {
   return {service,f};
 }
 
+// Isolate legacy session/queue tests from the separate production qualification gate.
+// There is no production certificate and no network: this fixture grants only a mocked in-memory session.
+async function grantIsolatedSession(service:TradingService){
+  await service.activateLive('cancel');
+  service.liveSession.grant(service.store.get<string>('account_fingerprint')!,'trade');
+}
 test('live session is bound to one account and cancellation permission never enables new orders',()=>{
   const session=new LiveSession(),account='a'.repeat(64);
   assert.equal(session.authorized(account),false);assert.throws(()=>session.grant(''));
@@ -72,7 +78,7 @@ test('one session grant starts live automation without an environment flag; paus
   const {service,f}=await serviceFixture();
   try {
     await assert.rejects(service.command('auto on'),/本次實盤授權/);
-    assert.equal(service.liveReadiness().ready,true);await service.activateLive();await service.command('start-auto');
+    assert.equal(service.liveReadiness().ready,false);assert.equal(service.liveReadiness(new Date(),'cancel').ready,true);await grantIsolatedSession(service);await service.command('start-auto');
     assert.equal(service.engine.settings.auto_execute,true);assert.equal(service.liveAuthorized,true);
     await service.command('pause');await service.command('resume');assert.equal(service.liveAuthorized,true);
     await service.command('stop');assert.equal(service.liveAuthorized,false);assert.equal(service.engine.settings.auto_execute,false);
@@ -85,7 +91,7 @@ test('restart ignores legacy persisted consent and auto-execute, and changing tr
   let current:TradingService|undefined;
   try {
     const first=await serviceFixture(new NativeFixture(),path);current=first.service;
-    await current.activateLive();await current.command('auto on');
+    await grantIsolatedSession(current);await current.command('auto on');
     await current.saveSettings({...current.engine.settings,max_order_fraction:'0.05'});
     assert.equal(current.liveAuthorized,false);assert.equal(current.engine.settings.auto_execute,false);
     current.store.set('live_consent',{fingerprint:current.store.get('account_fingerprint'),at:new Date().toISOString()});
@@ -105,7 +111,7 @@ test('built-in costs need no manual confirmation; expired login and uncertain or
   const {service,f}=await serviceFixture();
   try {
     assert.ok(!service.liveReadiness().issues.some(i=>/手續費|交割款符號/.test(i)));
-    await service.activateLive();assert.equal(service.liveAuthorized,true);await service.command('lock-live');
+    await grantIsolatedSession(service);assert.equal(service.liveAuthorized,true);await service.command('lock-live');
     f.expires=0;await assert.rejects(service.activateLive(),/過期/);f.expires=3600;
     service.store.saveOrder(order({status:'UNKNOWN',created_at:new Date().toISOString()}));
     await assert.rejects(service.activateLive(),/待核對/);assert.equal(f.mutations,0);
@@ -117,9 +123,9 @@ test('broker refuses persisted consent, changed accounts and revoked grants befo
   try {
     service.store.set('live_consent',{fingerprint:service.store.get('account_fingerprint')});
     await assert.rejects(service.broker.cancel(local),NoSubmissionError);assert.equal(f.mutations,0);
-    await service.activateLive();f.onHealth=()=>service.liveSession.revoke();
+    await grantIsolatedSession(service);f.onHealth=()=>service.liveSession.revoke();
     await assert.rejects(service.broker.cancel(local),NoSubmissionError);assert.equal(f.mutations,0);f.onHealth=undefined;
-    await service.activateLive();f.account='DIFFERENT';
+    await grantIsolatedSession(service);f.account='DIFFERENT';
     await assert.rejects(service.broker.cancel(local),NoSubmissionError);assert.equal(service.liveAuthorized,false);assert.equal(f.mutations,0);
   } finally {await service.close();}
 });
@@ -159,7 +165,7 @@ test('desktop account changes and consent prompts reject concurrent operations a
 test('emergency stop immediately revokes permission even while an earlier queue operation is waiting',async()=>{
   const {service}=await serviceFixture();let release!:()=>void;
   try {
-    await service.activateLive();const blocked=service.enqueue(()=>new Promise<void>(resolve=>{release=resolve;}));
+    await grantIsolatedSession(service);const blocked=service.enqueue(()=>new Promise<void>(resolve=>{release=resolve;}));
     await Promise.resolve();const stopped=service.command('stop');assert.equal(service.liveAuthorized,false);
     release();await blocked;await stopped;assert.equal(service.engine.killed,true);
   } finally {release?.();await service.close();}
@@ -168,7 +174,7 @@ test('authorization in progress cannot replace a competing emergency stop with a
   const {service,f}=await serviceFixture();let stopped:Promise<string>|undefined;
   try {
     f.onHealth=()=>{f.onHealth=undefined;stopped=service.command('stop');};
-    await assert.rejects(service.activateLive(),/實盤啟動已停止/);await stopped;
+    await assert.rejects(service.activateLive('cancel'),/實盤啟動已停止/);await stopped;
     assert.equal(service.liveAuthorized,false);assert.equal(service.engine.killed,true);assert.equal(f.mutations,0);
   } finally {await service.close();}
 });
@@ -189,4 +195,15 @@ test('cancelled analysis cannot activate a completed result waiting in the engin
     await service.command('cancel-analysis');release();await blocked;await rejection;
     assert.equal(service.engine.plan,undefined);assert.equal(service.store.plan(),undefined);
   } finally {release?.();await service.close();}
+});
+
+test('even a healthy broker and legacy consent cannot bypass missing independent validation',async()=>{
+  const {service,f}=await serviceFixture();try{
+    service.store.set('live_consent',{approved:true});
+    assert.equal(service.liveReadiness().ready,false);
+    assert.equal(service.liveReadiness(new Date(),'cancel').ready,true);
+    await assert.rejects(service.activateLive(),/LIVE_VALIDATION_PENDING/);
+    await assert.rejects(service.command('auto on'),/本次實盤授權/);
+    assert.equal(service.liveAuthorized,false);assert.equal(f.mutations,0);
+  }finally{await service.close();}
 });

@@ -3,7 +3,7 @@ import { Decimal } from 'decimal.js';
 import { active, d, equity, remaining, type Account, type Decision, type Features, type Instrument,
   type Order, type Quote, type Settings, type SmartSpec } from './models.js';
 import { Risk, fee, roundPrice } from './risk.js';
-import {entryRiskIssues,entryQualityIssues,roundTripEstimate,rewardTarget} from './costs.js';
+import {entryRiskIssues,entryQualityIssues,roundTripEstimate,rewardTarget,remainingBuyCost} from './costs.js';
 import {COMMON_MAX_SHARES} from './stock-lot.js';
 import {breakEvenExitPrice} from './execution-economics.js';
 export {roundTripEstimate} from './costs.js';
@@ -23,6 +23,7 @@ export interface ExecutionTicket {
 export interface ExecutionLot {
   lot:'ODD'|'COMMON';quote:Quote;limit_price:string;min_price:string;max_price:string;
   step:number;min_shares?:number;max_shares:number;reasons:string[];
+  blocked_stage?:'COST'|'RISK'|'TRIGGER';
   cost_at_max_shares?:ReturnType<typeof roundTripEstimate>;
   estimated_break_even_exit_price?:string|null;
 }
@@ -51,9 +52,7 @@ export function deterministicAdvice(r:ExecutionRequest,s:Settings):ExecutionAdvi
 export const executionSettingsKey=(s:Settings):string=>JSON.stringify(Object.entries(s)
   .filter(([key])=>!['start_minimized','keep_awake'].includes(key)).sort(([a],[b])=>a.localeCompare(b)));
 export function spendableCash(account:Account,s:Settings):{reserved:string;available:string}{
-  const reserved=account.orders.filter(o=>active(o)&&o.action==='BUY').reduce((sum,o)=>{
-    const amount=d(o.limit_price).times(remaining(o));return sum.plus(amount).plus(fee(amount,s));
-  },d(0));
+  const reserved=account.orders.filter(o=>active(o)&&o.action==='BUY').reduce((sum,o)=>sum.plus(remainingBuyCost(o,s)),d(0));
   return {reserved:reserved.toFixed(),available:Decimal.max(0,d(account.cash).minus(account.settlement_debits).minus(reserved)).toFixed()};
 }
 /** Bounds are determined by the same final risk checker, including fees and all standing reservations. */
@@ -81,7 +80,7 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     if(ticket.order.action==='BUY')reasons.push(...entryRiskIssues(shares,price,ticket.smart,account,s,ticket.order.symbol));
     return reasons;
   };
-  const reasons=test(step);
+  const reasons=test(step);let blocked_stage:'COST'|'RISK'|'TRIGGER'='RISK';
   if(d(minPrice).gt(maxPrice)||d(price).lt(minPrice)||d(price).gt(maxPrice))reasons.push('策略限價與目前可用價格範圍不符');
   if(ticket.order.action==='BUY'&&ticket.smart&&(d(price).lte(ticket.smart.stop_price)
     ||ticket.smart.take_profit&&d(price).gte(ticket.smart.take_profit)))reasons.push('目前進場價已超過保護條件範圍');
@@ -91,14 +90,14 @@ export function executionLot(ticket:ExecutionTicket,q:Quote,account:Account,inst
     while(lo<=hi){const mid=Math.floor((lo+hi)/2);if(!test(mid*step).length){units=mid;lo=mid+1;}else hi=mid-1;}
   }
   let minimum=units?step:0;
-  if(ticket.order.action==='BUY'&&units&&d(s.min_entry_reward_risk).gt(0)){
+  if(ticket.order.action==='BUY'&&units){
     const atMaximum=entryQualityIssues(units*step,price,ticket.smart,s);
     // Fee/tax rounding can make adjacent quantities differ: examine actual lot units.
     while(units&&entryQualityIssues(units*step,price,ticket.smart,s).length)units--;
-    if(!units){minimum=0;reasons.push(...atMaximum);}
+    if(!units){blocked_stage='COST';minimum=0;reasons.push(...atMaximum);}
     else {let first=1;while(first<units&&entryQualityIssues(first*step,price,ticket.smart,s).length)first++;minimum=first*step;}
   }
-  return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,min_shares:minimum,max_shares:units*step,reasons,
+  return {lot,quote:structuredClone(q),limit_price:price,min_price:minPrice,max_price:maxPrice,step,min_shares:minimum,max_shares:units*step,reasons,...(!units?{blocked_stage}:{}),
     ...(ticket.order.action==='BUY'&&units?{cost_at_max_shares:roundTripEstimate(units*step,price,rewardTarget(ticket.smart),s,ticket.smart?.stop_price??null),
       estimated_break_even_exit_price:breakEvenExitPrice(units*step,price,instrument.limit_up,s)}:{})};
 }

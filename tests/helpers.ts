@@ -43,9 +43,10 @@ export async function rig(store = new Store(':memory:')) {
   const broker = new PaperBroker(store,market,s,calendar), engine = new Engine(store,broker,s,calendar);
   await engine.start(now);
   const input = await engine.snapshot(now);
+  // Synthetic target leaves room for the small-quantity orchestration fixtures after real minimum fees.
   const analysis = {snapshot_id:input.snapshot_id,expires_at:new Date(now.getTime()+7200000).toISOString(),stance:'BUY_ALLOWED',
     candidates:input.universe.slice(0,5).map(x => x.symbol),summary:'test',decisions:[{symbol:'9001',action:'BUY',shares:30,
       limit_price:'30.05',entry_when:'IMMEDIATE',trigger_price:'0',reason:'test',
-      smart:{stop_price:'29',take_profit:'35',trailing_activate:'33',trailing_fraction:'0.03'}}]};
+      smart:{stop_price:'29',take_profit:'45',trailing_activate:'33',trailing_fraction:'0.03'}}]};
   await engine.activate(analysis as never,input,now); return {store,s,calendar,market,broker,engine};
 }

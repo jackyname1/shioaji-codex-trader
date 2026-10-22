@@ -1,4 +1,4 @@
-import {decisionDeadline} from './strategy-admission.js';
+import {decisionDeadline,StrategyValidationError,validateReplyTimestamp} from './strategy-admission.js';
 import {compactSnapshot,tableContext} from './prompt-input.js';
 import { Codex, type ThreadEvent, type ThreadOptions } from '@openai/codex-sdk';
 import { z } from 'zod';
@@ -166,6 +166,7 @@ export function codexOutputSchema(source:z.ZodType=CodexAnalysisSchema): unknown
   visit(schema); return schema;
 }
 export function codexIssue(error: unknown): string {
+  if(error instanceof StrategyValidationError)return error.message;
   if (error instanceof CodexError) return error.message;
   const known=codexFailureMessage(diagnoseCodexFailure(error));if(known)return known;
   const raw = error instanceof Error ? error.message : '';
@@ -247,7 +248,9 @@ export class CodexAnalyst {
       if(!completed)throw new CodexError(codexFailureMessage({kind:'NETWORK',code:'STREAM_INTERRUPTED'}),'NETWORK',{kind:'NETWORK',code:'STREAM_INTERRUPTED'});
       if(!response)throw new CodexError(codexFailureMessage({kind:'RUNTIME',code:'EMPTY_OUTPUT'}),'RUNTIME',{kind:'RUNTIME',code:'EMPTY_OUTPUT'});
       if(response.length>200000)throw new Error('Codex 未產生完整有效結果');
-      const result=schema.parse(JSON.parse(response));
+      const raw:unknown=JSON.parse(response);
+      if(purpose==='STRATEGY'&&raw&&typeof raw==='object'&&'expires_at' in raw)validateReplyTimestamp(raw.expires_at);
+      const result=schema.parse(raw);
       const message=purpose==='STRATEGY'?(result as Analysis).summary:((result as ExecutionAdvice).action+' '+(result as ExecutionAdvice).shares+' 股 · '+(result as ExecutionAdvice).reason);
       emit(purpose==='EXECUTION'?'SIZE_DECISION':'DECISION',message,'decision',result);return result;
     } catch (error) {

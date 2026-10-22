@@ -147,3 +147,8 @@ test('post-commit subscription failure reports the actual saved plan and blocks 
     assert.equal(r.engine.watch.healthy,false);assert.deepEqual(r.store.protections(),protections);
   }finally{await r.engine.close();r.store.close();}
 });
+
+test('snapshot timestamps without explicit timezone never depend on the machine timezone',()=>{
+  const input={...snapshot(),asof:'2026-10-08T10:00:00'};
+  assert.throws(()=>decisionDeadline(input,settings()),code('STRATEGY_CLOCK_INVALID'));
+});

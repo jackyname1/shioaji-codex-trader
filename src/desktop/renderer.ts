@@ -1,3 +1,4 @@
+import {backtestSeries} from '../core/backtest-series.js';
 import {planActive,planDeadline} from '../core/plan-lifecycle.js';
 import {connectionLabel} from './connection-state.js';
 import {replayDisplayTime} from './replay-time.js';
@@ -307,7 +308,14 @@ function renderBacktest(state:DesktopState):void {
   text('bt-activity',`觀測加入 ${m.watch_adds} / 移除 ${m.watch_removes} · Codex ${m.codex_calls}`);text('bt-equity',fmt(m.final_equity));
   text('bt-capital',m.average_exposure_pct===undefined?'舊報表未統計持倉比例':`持倉：行情時點平均 ${fmt(m.average_exposure_pct)}% · 最高 ${fmt(m.max_exposure_pct??'0')}% · ${r.request.capital_profile==='active'?'標準風控':r.request.capital_profile==='balanced'?'標準風控':'自訂風控'}`);
   text('bt-entry-diagnostics',entryDiagnosticText(r.entry_diagnostics));
+  text('bt-funnel-definition',r.entry_funnel?`${r.entry_funnel.definition} 唯一訊號 ${r.entry_funnel.unique_signals}；${r.entry_funnel.complete?'完整保存':'診斷不完整，略過 '+r.entry_funnel.omitted_signals+' 個訊號'}`:'舊報表沒有實際檢查事件，無法還原八階段漏斗；須用原始資料重播。');
+  const stageNames:Record<string,string>={CANDIDATE:'候選',DATA:'資料',TREND:'趨勢',TRIGGER:'價格觸發',COST:'成本',RISK:'風控',SUBMITTED:'送單',FILLED:'成交'};
+  table('bt-funnel',['階段','已觀測','曾通過','無此要求','曾阻擋','未觀測','依序轉換'],(r.entry_funnel?.stages??[]).map(s=>[stageNames[s.stage]??s.stage,s.observed,s.passed,s.not_required,s.blocked,s.unknown,s.converted]),'未記錄實際檢查事件');
+  table('bt-rejections',['階段','錯誤碼','唯一訊號','重複觀測'],(r.entry_funnel?.rejections??[]).map(s=>[stageNames[s.stage]??s.stage,s.code,s.signals,s.samples]),'沒有已記錄的拒絕事件');
   const diag=r.diagnostics;
+  text('bt-attribution-limits',diag?.attribution?.limitation??'舊報表未保存執行歸因，可匯出診斷重算；無原始報價時不推算滑價。');
+  table('bt-attribution',['股票','進場台北時間','出場台北時間','價差損益','費／稅','淨損益','報價差成本','模型價格影響','出場原因'],(diag?.attribution?.closed??[]).map(e=>[e.symbol,stamp(e.entry_at),stamp(e.exit_at!),fmt(e.gross_pnl),fmt(e.fees)+' / '+fmt(e.taxes),fmt(e.net_pnl),e.spread_cost===null?'未提供':fmt(e.spread_cost),e.modeled_price_impact===null?'未提供':fmt(e.modeled_price_impact),e.exit_reasons.join('、')]),'沒有完整平倉交易');
+  table('bt-exit-attribution',['出場原因','交易數','淨損益'],Object.entries(diag?.attribution?.by_exit??{}).map(([reason,e])=>[reason,e.trades,fmt(e.net_pnl)]),'沒有完整平倉交易');
   text('bt-diagnosis',diag?(diag.evaluation?`績效檢核：${diag.evaluation.message}\n`:'')+
     (diag.audit?`獨立帳務重算：${diag.audit.passed?'通過':'未通過'} · 再扣期末估計賣出費稅後淨損益 ${diag.audit.net_pnl_after_estimated_exit_costs??'無法估計'}\n`:'')+
     `完整平倉 ${diag.trades.closed_trades} 筆 · 勝率 ${diag.trades.win_rate_pct??'無'}% · 平均淨損益 ${diag.trades.expectancy??'無'}\n`+diag.findings.map(f=>f.message).join('\n'):'舊報表可匯出損益診斷重新計算');
@@ -322,6 +330,10 @@ function renderBacktest(state:DesktopState):void {
     (e.screening?`\n成交額 ≥ ${fmt(e.screening.min_amount)} · 量比 ≥ ${e.screening.min_volume_ratio} · RSI ${e.screening.rsi_min}–${e.screening.rsi_max}`+(e.screening.entry?` · ${e.screening.entry.signal} · 每檔 ${pct(e.screening.entry.allocation_fraction)} · 停損 ${pct(e.screening.entry.stop_fraction)} · 停利 ${pct(e.screening.entry.take_profit_fraction)}`:' · 僅觀測'):'')]),'此舊版報表沒有流程明細，重新執行模擬後會保存');
   if(r.failures?.length)text('bt-strategy-log',r.strategy_log.map(s=>`${stamp(s.at)} ${s.review?'檢討':'策略'} ${s.stance}\n${s.summary}`).join('\n\n')+'\n\n'+r.failures.map(f=>`${stamp(f.at)} ${phase[f.stage]??f.stage}${f.diagnostic?.code?' ['+f.diagnostic.code+']':''}：${f.issue}`).join('\n'));
   text('backtest',state.backtest);
+  const series=backtestSeries(r);
+  equityChart(el('drawdown-chart'),series.drawdown,0,{label:'淨值高點回撤百分比',format:v=>v.toFixed(2)+'%',color:'var(--up)'});
+  equityChart(el('cost-chart'),series.costs,0,{label:'累積手續費與交易稅',color:'var(--muted)'});
+  equityChart(el('exposure-chart'),series.exposure,0,{label:'已觀測資金曝險百分比',format:v=>v.toFixed(1)+'%'});
   equityChart(el('equity-chart'),r.timeline??r.daily_equity.map(d=>({at:d.asof,equity:d.equity})),Number(r.metrics.initial_cash));
 }
 async function refresh():Promise<void>{if(polling)return;polling=true;
@@ -350,7 +362,7 @@ function request(compare=false):BacktestRequest {
     whole_lots:checked('bt-whole'),strategy_every_sessions:Number(value('bt-days')),strategy_schedule:compare?'interval':value('bt-schedule') as BacktestRequest['strategy_schedule'],strategy_times:times(value('bt-times')),
     capital_profile:value('bt-capital-profile') as BacktestRequest['capital_profile'],entry_cadence:value('bt-entry-cadence') as BacktestRequest['entry_cadence'],start_time:value('bt-start-time'),end_time:value('bt-end-time'),symbols:times(value('bt-symbols')),playback_speed:value('replay-mode')==='direct'?0:Number(value('replay-speed-number')),
     decision_interval_minutes:Number(value('bt-interval')),monitor_interval_seconds:300,watch_refresh_minutes:5,
-    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),postmarket_review_enabled:checked('bt-review-enabled'),execution_sizing:value('bt-sizing') as BacktestRequest['execution_sizing'],execution_slippage_bps:Number(value('bt-execution-slip')),fill_assumption:value('bt-fill') as BacktestRequest['fill_assumption'],research:{portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
+    comparison_intervals:compare?times(value('bt-compare-times')).map(Number):[],max_codex_calls:Number(value('bt-calls')),postmarket_review_enabled:checked('bt-review-enabled'),execution_sizing:value('bt-sizing') as BacktestRequest['execution_sizing'],execution_slippage_bps:Number(value('bt-execution-slip')),fill_assumption:value('bt-fill') as BacktestRequest['fill_assumption'],research:{cost_aware:checked('bt-research-cost'),portfolio:checked('bt-research-portfolio'),entry_quality:checked('bt-research-entry'),exit_mode:value('bt-research-exit') as 'baseline'|'fixed'|'atr_trail',drawdown:value('bt-research-dd') as '0.03'|'0.04'|'0.05',cooldown:Number(value('bt-research-cooldown')),prompt_compaction:checked('bt-research-prompt')},participation:value('bt-participation')};
 }
 el<HTMLFormElement>('backtest-form').addEventListener('submit',e=>{e.preventDefault();void run(()=>beginReplay());});
 for(const id of ['bt-days','bt-times','bt-interval','bt-calls','bt-review-enabled'])el(id).addEventListener('input',replayCadenceHint);

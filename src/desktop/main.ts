@@ -445,7 +445,7 @@ function registerIpc(): void {
     // Capture the selected result before awaiting the dialog; changing reports cannot mix runs.
     const report=backtest.report;
     if(backtest.progress.running)throw new Error('回測執行中，請等待結果保存後再匯出');
-    if(!report||!['json','csv','audit','trades','daily','orders','failures'].includes(String(value)))throw new Error('回測沒有可匯出的報表');
+    if(!report||!['json','csv','audit','trades','daily','orders','failures','funnel','rejections','strategies','decisions','attribution'].includes(String(value)))throw new Error('回測沒有可匯出的報表');
     const output=backtestExport(report,value as BacktestExportFormat),result=await dialog.showSaveDialog(window!,{
       title:'匯出'+output.label,defaultPath:`backtest-${report.request.start}-${report.request.end}-${value}.${output.extension}`,
       filters:[{name:output.label,extensions:[output.extension]}]});
@@ -479,7 +479,7 @@ async function enableLive(startAutomation:boolean,afterAuthorization?:(selected:
     if(!(startAutomation?selected.liveAuthorized:selected.liveCancelAuthorized)){
       if(quitting||epoch!==liveActionEpoch||selected!==service)throw new Error('實盤啟動已停止');
       await selected.activateLive(startAutomation?'trade':'cancel');
-    }else await selected.prepareLive();
+    }else await selected.prepareLive(startAutomation?'trade':'cancel');
     if(quitting||epoch!==liveActionEpoch||selected!==service){selected.liveSession.revoke();throw new Error('實盤啟動已停止');}
     return afterAuthorization?afterAuthorization(selected):selected.command('start-auto');
   });
@@ -554,17 +554,17 @@ async function smokeTest(): Promise<void> {
   // Exercise the real preload/IPC/save path for every export in source and packaged builds.
   await window.webContents.executeJavaScript(`document.querySelector('#bt-export').click()`);
   const exportUi=await window.webContents.executeJavaScript(`({open:document.querySelector('#backtest-export-dialog').open,count:document.querySelectorAll('#backtest-export-dialog [data-backtest-export]:not(:disabled)').length,diagnosis:document.querySelector('#bt-diagnosis').textContent})`);
-  if(!exportUi.open||exportUi.count!==7||!exportUi.diagnosis.includes('完整平倉')||!exportUi.diagnosis.includes('績效檢核')
+  if(!exportUi.open||exportUi.count!==12||!exportUi.diagnosis.includes('完整平倉')||!exportUi.diagnosis.includes('績效檢核')
     ||!exportUi.diagnosis.includes('獨立帳務重算：通過')||!backtest.report.diagnostics?.audit.passed)throw new Error('回測匯出入口或損益診斷未通過');
   const replaySave=dialog.showSaveDialog;
   try{
-    for(const format of ['json','csv','trades','daily','audit','orders','failures'] as const){
+    for(const format of ['json','csv','trades','daily','audit','orders','failures','funnel','rejections','strategies','decisions','attribution'] as const){
       const filePath=join(dataRoot,'replay-export-'+format+'.fixture');
       dialog.showSaveDialog=async()=>({canceled:false,filePath});
       await window.webContents.executeJavaScript(`window.trader.exportBacktest('${format}')`);
       const output=readFileSync(filePath,'utf8');
       if(format==='json'){const parsed=JSON.parse(output);if(parsed.id!==backtest.report.id||!parsed.diagnostics||parsed.fills.length!==backtest.report.fills.length)throw new Error('完整回測 JSON 匯出未通過');}
-      else if(format==='audit'?!output.includes('回測損益診斷'):!output.includes(format==='daily'?'settlement_credits':format==='trades'?'exit_reason':format==='orders'?'local_id':format==='failures'?'code':'order_id'))throw new Error('回測 '+format+' 匯出未通過');
+      else if(format==='audit'?!output.includes('回測損益診斷'):!output.includes(format==='daily'?'settlement_credits':format==='trades'?'exit_reason':format==='orders'?'local_id':format==='failures'?'code':format==='funnel'||format==='rejections'?'signal_id':format==='strategies'?'lifecycle':format==='decisions'?'run_id':format==='attribution'?'gross_pnl':'order_id'))throw new Error('回測 '+format+' 匯出未通過');
     }
     dialog.showSaveDialog=async()=>({canceled:true,filePath:''});
     const cancelled=await window.webContents.executeJavaScript(`window.trader.exportBacktest('json')`);

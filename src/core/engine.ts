@@ -1,3 +1,4 @@
+import {EntryFunnel,type EntryStage,type EntryObserver} from './entry-funnel.js';
 import {decisionDeadline} from './strategy-admission.js';
 import {planActive,planDeadline} from './plan-lifecycle.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -29,6 +30,7 @@ import { ExecutionAdviceSchema, deterministicAdvice, executionLot, executionSett
 export interface Bundle { pool: Candidate[]; features: Record<string,Features>; metadata: Record<string,Instrument>;
   fundamentals?: Record<string,unknown>; announcements?: unknown[]; limitations?: string[] }
 export class Engine {
+  readonly entryFunnel=new EntryFunnel();
   risk: Risk;
   plan?: Plan;
   account?: Account;
@@ -146,7 +148,7 @@ export class Engine {
         eligible:false,score:0,reason,added_at:at,checked_at:at,misses:0});
       this.watch.changes.push({at,symbol,action:'RETAIN',reason});
     }
-    this.watch.changes=this.watch.changes.slice(-120);this.store.set('watch_state',this.watch);
+    this.store.recordWatchChanges(this.watch.changes);this.watch.changes=this.watch.changes.slice(-120);this.store.set('watch_state',this.watch);
     if(newPin&&this.connected)try{await this.updateSubscriptions(now);}catch(error){
       this.metadataDay='';this.logOnce('SUBSCRIPTION','持倉已保留監測；行情訂閱稍後重新核對：'+brokerIssue(error));
     }
@@ -160,6 +162,7 @@ export class Engine {
   }
   private recordReconciledFill(o:Order,previous:number,now:Date):void {
     if(o.filled<=previous)return;
+    if(o.action==='BUY')this.entryFunnel.record(o.plan_id,o.symbol,o.purpose,now,{stage:'FILLED',status:'PASS',code:'RECONCILED_BUY_FILL'});
     // Persist the time of observed sell fills, rather than resetting cooldown with each new plan.
     if(o.action==='SELL')this.store.set(`last_sell:${o.symbol}`,now.toISOString());
     if(['paper','demo'].includes(this.settings.mode))return;
@@ -227,11 +230,29 @@ export class Engine {
     }));
     return {pool,features,metadata:await this.broker.instruments(symbols,now)};
   }
+  private observeCandidates(bundle:Bundle,now:Date):void {
+    const plan=this.plan;if(!planActive(plan,now))return;
+    const buys=new Set(plan.analysis.decisions.filter(d=>d.action==='BUY').map(d=>d.symbol));
+    for(const c of bundle.pool){
+      if(!plan.analysis.candidates.includes(c.symbol)&&!buys.has(c.symbol)&&!plan.analysis.screening?.entry)continue;
+      const note=this.entryFunnel.observer(plan.id,c.symbol,plan.analysis.candidates.includes(c.symbol)?'CODEX':'SCANNER',now);
+      note({stage:'CANDIDATE',status:'PASS',code:'VISIBLE_CANDIDATE'});
+      const base=watchEligibility(c,bundle.features[c.symbol],bundle.metadata[c.symbol],this.settings,undefined,now);
+      note({stage:'DATA',status:base.length?'BLOCK':'PASS',code:base.length?'CANDIDATE_DATA':'HISTORY_METADATA_LIQUIDITY',reason:base.join('；')});
+      if(!base.length&&this.settings.auto_watchlist){
+        const filters=watchEligibility(c,bundle.features[c.symbol],bundle.metadata[c.symbol],this.settings,plan,now);
+        if(filters.length)note({stage:'TREND',status:'BLOCK',code:'SCREENING_FILTER',reason:filters.join('；')});
+      }
+      if(!buys.has(c.symbol)&&!plan.analysis.screening?.entry)
+        note({stage:'TRIGGER',status:'BLOCK',code:'NO_BUY_AUTHORITY',reason:'候選未獲 BUY 或規則進場授權'});
+    }
+  }
   async refreshWatch(bundle:Bundle,now:Date):Promise<void> {
     this.metadata={...this.metadata,...bundle.metadata};this.watchFeatures=bundle.features;
-    const previous=this.watch;
+    const previous=this.watch;this.observeCandidates(bundle,now);
     this.watch=selectWatchlist(previous,bundle,this.settings,this.plan,this.account,this.store.orders(true),this.store.protections(),now);
     this.store.set('watch_state',this.watch);
+    this.store.recordWatchChanges(this.watch.changes);
     for(const c of this.watch.changes.filter(c=>c.at===now.toISOString()))this.log('WATCH',`${c.action} ${c.symbol}：${c.reason}`);
     if(this.canExecute())for(const o of this.store.orders(true))if(o.purpose==='ENTRY'
       &&!this.watch.entries.some(w=>w.symbol===o.symbol&&w.eligible))await this.cancel(o.local_id,now);
@@ -392,9 +413,9 @@ export class Engine {
         this.decisionStates.set(w.symbol,{state:'WAIT',reason:'觀測資料更新尚未確認',source:'RULE'});continue;
       }
       const tracking=(lot:'ODD'|'COMMON')=>this.store.entryTracks().find(t=>t.symbol===w.symbol&&t.plan_id===plan.id&&t.lot===lot);
-      const common=this.settings.whole_lots?ruleEntry(plan,w,this.watchFeatures[w.symbol],this.quotes.get(`${w.symbol}:false`),this.account,this.settings,now,tracking('COMMON')):undefined;
+      const common=this.settings.whole_lots?ruleEntry(plan,w,this.watchFeatures[w.symbol],this.quotes.get(`${w.symbol}:false`),this.account,this.settings,now,tracking('COMMON'),this.entryFunnel.observer(plan.id,w.symbol,'RULE',now)):undefined;
       if(common?.track)this.store.saveEntryTrack(common.track);
-      const sized=common?.decision?common:ruleEntry(plan,w,this.watchFeatures[w.symbol],this.quotes.get(`${w.symbol}:true`),this.account,this.settings,now,tracking('ODD'));
+      const sized=common?.decision?common:ruleEntry(plan,w,this.watchFeatures[w.symbol],this.quotes.get(`${w.symbol}:true`),this.account,this.settings,now,tracking('ODD'),this.entryFunnel.observer(plan.id,w.symbol,'RULE',now));
       if(sized.track)this.store.saveEntryTrack(sized.track);
       if(sized.decision){decisions.push(sized.decision);ruleScores.set(w.symbol,sized.score??0);}
       else this.decisionStates.set(w.symbol,{state:sized.track?.status==='TRACKING'?'TRACKING':sized.track?.status==='EXPIRED'?'EXPIRED':'WAIT',reason:sized.reason,source:'RULE'});
@@ -404,17 +425,23 @@ export class Engine {
     for (const decision of decisions) {
       if(!evaluateConditions&&decision.entry_when!=='REBOUND')continue;
       const source=plan.analysis.decisions.includes(decision)?'CODEX':'RULE';
-      const state=(state:string,reason:string):void=>{this.decisionStates.set(decision.symbol,{state,reason,source});};
+      const note=this.entryFunnel.observer(plan.id,decision.symbol,source,now);let gate:EntryStage='RISK';
+      if(decision.action==='BUY')note({stage:'CANDIDATE',status:'PASS',code:'AUTHORIZED_BUY_SIGNAL'});
+      const state=(state:string,reason:string):void=>{this.decisionStates.set(decision.symbol,{state,reason,source});
+        if(decision.action==='BUY'&&['WAIT','BLOCKED','EXPIRED','REJECTED'].includes(state))note({stage:gate,status:'BLOCK',code:'ENTRY_'+gate,reason});};
       if(exitsTriggered.has(decision.symbol))continue;
       if([...this.pendingExecutions.values()].some(t=>t.order.symbol===decision.symbol))continue;
       if(decision.action==='HOLD'){state('HOLD',decision.reason);continue;}
       if(decision.action==='BUY'&&this.entryDirectionIssue()){state('BLOCKED',this.entryDirectionIssue());continue;}
       if(decision.action==='BUY'&&dailyBlocked){state('BLOCKED','達到日損失限制，當日停止新增買進');continue;}
+      gate='TRIGGER';
       if(decision.action==='BUY'){
         const window=entryWindow(decision,this.watchFeatures[decision.symbol],now,this.metadata[decision.symbol]);
         if(window.issue){state('BLOCKED',window.issue);this.logOnce('BLOCK',`${decision.symbol} ${window.issue}`);continue;}
       }
+      gate='RISK';
       if(decision.action==='BUY'&&(this.entryBlocked||this.pausedEntries)){state('BLOCKED','新買進已暫停，保護監控持續');continue;}
+      gate='DATA';
       if(decision.action==='BUY'&&this.settings.auto_watchlist&&(!this.watch.healthy
         ||ageSeconds(now,this.watch.asof)>this.settings.watch_refresh_minutes*120
         ||!this.watch.entries.some(w=>w.symbol===decision.symbol&&w.eligible))){state('BLOCKED','目前觀測資格未確認');continue;}
@@ -424,6 +451,11 @@ export class Engine {
       if(q&&(q.simulated||!this.calendar.inSession(now,lot)||[q.trade_at,q.book_at].some(t=>ageSeconds(now,t)<0||ageSeconds(now,t)>this.settings.quote_max_age))){
         state('WAIT','等待交易時段內新鮮成交與五檔行情');continue;
       }
+      if(decision.action==='BUY'){
+        note({stage:'DATA',status:'PASS',code:'FRESH_ENTRY_INPUTS'});
+        if(source==='CODEX'&&this.settings.entry_policy==='legacy')note({stage:'TREND',status:'NOT_REQUIRED',code:'AI_LEGACY_NO_DETERMINISTIC_TREND'});
+      }
+      gate='TRIGGER';
       const tracking=this.store.entryTracks().find(t=>t.plan_id===plan.id&&t.symbol===decision.symbol&&t.lot===lot);
       if (!q || !entryReady(decision,q.last,tracking)) {state('WAIT',!q?'等待對應市場行情':decision.entry_when==='REBOUND'
         ?tracking?.armed?`追蹤低點 ${tracking.low_water}；等待回升至 ${reboundExit(tracking,decision)}`:`等待跌至 ${decision.trigger_price} 啟動反彈追蹤`
@@ -433,6 +465,7 @@ export class Engine {
       }
       const guardIssue=conditionIssue(decision,q,this.watchFeatures[decision.symbol],now);
       if(guardIssue){state('WAIT',guardIssue);continue;}
+      if(decision.action==='BUY')note({stage:'TRIGGER',status:'PASS',code:'PRICE_AND_CONDITIONS'});
       const attempts=this.store.planOrders(plan.id,decision.symbol,decision.action),prior=attempts.at(-1);
       // A confirmed, entirely unfilled ROD cancellation may be retried on a later session.
       // Any fill consumes this plan's signal; unknown, rejected and same-day intents never auto-retry.
@@ -458,7 +491,9 @@ export class Engine {
     if(this.settings.codex_enabled&&order.action==='BUY'){
       // Reject already-known invalid signals before paying for a quantity turn; final admission still reruns after refresh.
       const issues=confirmationIssues(this.settings.entry_policy,this.watchFeatures[order.symbol],this.quotes.get(`${order.symbol}:${order.lot==='ODD'}`),condition);
-      issues.push(...entryProtectionIssues(order.limit_price,smart));
+      if(order.action==='BUY')this.entryFunnel.record(order.plan_id,order.symbol,source,now,{stage:'TREND',status:issues.length?'BLOCK':this.settings.entry_policy==='legacy'?'NOT_REQUIRED':'PASS',code:'ENTRY_CONFIRMATION',reason:issues.join('；')});
+      const protectionIssues=entryProtectionIssues(order.limit_price,smart);issues.push(...protectionIssues);
+      if(protectionIssues.length)this.entryFunnel.record(order.plan_id,order.symbol,source,now,{stage:'COST',status:'BLOCK',code:'INVALID_PROTECTION',reason:protectionIssues.join('；')});
       if(this.settings.entry_policy!=='legacy'){
         if(breadthState(this.watchFeatures)!=='NORMAL')issues.push('股票池廣度風險偏高或資料不足');
         if(this.account?.positions.some(p=>p.symbol===order.symbol&&p.shares>0))issues.push('確認策略禁止同股加碼');
@@ -556,6 +591,7 @@ export class Engine {
     const lots=valid.map(q=>executionLot(ticket,q,this.account!,m,this.risk,now,this.baseline(now),last,this.portfolioRisk(now)?.scale));
     if(!lots.some(l=>l.max_shares>0)){
       const issue=[...new Set(lots.flatMap(l=>l.reasons))].join('；')||'目前可用預算或庫存不足';
+      if(ticket.order.action==='BUY')for(const lot of lots)this.entryFunnel.record(ticket.order.plan_id,ticket.order.symbol,ticket.source,now,{stage:lot.blocked_stage??'RISK',status:'BLOCK',code:'SIZING_'+(lot.blocked_stage??'RISK'),reason:lot.reasons.join('；')});
       this.finishExecution(id,'BLOCKED',issue,now);this.logOnce('RISK',`${ticket.order.symbol} ${ticket.order.action}：${issue}`);return;
     }
     ticket.state='RUNNING';const a=this.account!,cash=spendableCash(a,this.settings);
@@ -594,8 +630,11 @@ export class Engine {
     const last=this.store.lastOrder(advice.symbol)?.created_at;
     const bounds=executionLot(ticket,q!,this.account!,m,this.risk,now,this.baseline(now),last,this.portfolioRisk(now)?.scale);
     if(advice.action==='BUY'){
-      const issues=[...entryRiskIssues(advice.shares,advice.limit_price,ticket.smart,this.account!,this.settings,advice.symbol),
-        ...entryQualityIssues(advice.shares,advice.limit_price,ticket.smart,this.settings)];
+      const riskIssues=entryRiskIssues(advice.shares,advice.limit_price,ticket.smart,this.account!,this.settings,advice.symbol);
+      const costs=entryQualityIssues(advice.shares,advice.limit_price,ticket.smart,this.settings);
+      this.entryFunnel.record(ticket.order.plan_id,advice.symbol,ticket.source,now,{stage:'COST',status:costs.length?'BLOCK':'PASS',code:'SIZED_NET_ECONOMICS',reason:costs.join('；')});
+      if(riskIssues.length)this.entryFunnel.record(ticket.order.plan_id,advice.symbol,ticket.source,now,{stage:'RISK',status:'BLOCK',code:'SIZED_TRADE_RISK',reason:riskIssues.join('；')});
+      const issues=[...riskIssues,...costs];
       if(issues.length){this.finishExecution(id,'BLOCKED',issues.join('；')+'；未送單',now);return false;}
     }
     if(advice.shares<(bounds.min_shares??bounds.step)||advice.shares>bounds.max_shares||advice.shares%bounds.step!==0||d(advice.limit_price).lt(bounds.min_price)||d(advice.limit_price).gt(bounds.max_price)
@@ -675,8 +714,9 @@ export class Engine {
       const lastSell=this.store.get<string>(`last_sell:${order.symbol}`)??this.store.orders().filter(o=>o.symbol===order.symbol&&o.action==='SELL'&&o.filled>0).at(-1)?.created_at;
       reasons.push(...admissionIssues(order,account,this.settings,spec,this.metadata,this.watchFeatures,quote,condition,this.calendar,now,lastSell,
         Object.fromEntries(protections.map(p=>[p.symbol,p.protected_floor??p.spec.stop_price]))));
-      reasons.push(...entryRiskIssues(order.shares,order.limit_price,spec,account,this.settings,order.symbol),
-        ...entryQualityIssues(order.shares,order.limit_price,spec,this.settings));
+      const costs=entryQualityIssues(order.shares,order.limit_price,spec,this.settings);
+      this.entryFunnel.record(order.plan_id,order.symbol,'ENTRY',now,{stage:'COST',status:costs.length?'BLOCK':'PASS',code:'FINAL_NET_ECONOMICS',reason:costs.join('；')});
+      reasons.push(...entryRiskIssues(order.shares,order.limit_price,spec,account,this.settings,order.symbol),...costs);
       if(this.settings.entry_quality_enabled){
         const score=candidateScore(this.watchFeatures[order.symbol],quote,this.settings,now,portfolio?.regime,order.shares,spec);
         reasons.push(...score.reasons);if(score.score<50)reasons.push('可解釋進場評分不足 50');
@@ -694,6 +734,7 @@ export class Engine {
         if(risk.gt(equity(account).times(this.settings.max_portfolio_stop_fraction)))reasons.push('同時觸停損的組合損失超過上限');
       }
     }
+    if(order.action==='BUY')this.entryFunnel.record(order.plan_id,order.symbol,'ENTRY',now,{stage:'RISK',status:reasons.length?'BLOCK':'PASS',code:'FINAL_RISK_ENGINE',reason:reasons.join('；')});
     if (reasons.length) { this.decisionStates.set(order.symbol,{state:'BLOCKED',reason:reasons.join('；'),source:order.purpose});
       this.logOnce('RISK',`${order.symbol} ${order.action}：${reasons.join('；')}`);
       const refusal=createHash('sha256').update(`${twDay(now)}:${order.plan_id}:${order.symbol}:${order.action}:${reasons.join(';')}`).digest('hex');
@@ -705,6 +746,8 @@ export class Engine {
     order.status = 'SUBMITTING'; this.store.saveOrder(order);
     try {
       const result = await this.broker.submit(order); this.recordReconciledFill(result,order.filled,now);this.store.saveOrder(result);
+      if(order.action==='BUY')this.entryFunnel.record(order.plan_id,order.symbol,'ENTRY',now,{stage:'SUBMITTED',status:['REJECTED','UNKNOWN'].includes(result.status)?'BLOCK':'PASS',code:'BROKER_'+result.status});
+      if(['REJECTED','UNKNOWN'].includes(result.status)){this.decisionStates.set(order.symbol,{state:result.status,reason:'券商未確認接受委託',source:order.purpose});return false;}
       this.log('ORDER',`${order.symbol} ${order.action} ${order.shares} 股 @ ${order.limit_price} ${result.status}`);
     } catch (error) {
       if (error instanceof NoSubmissionError) {

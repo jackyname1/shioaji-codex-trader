@@ -1,7 +1,17 @@
 import {Decimal} from 'decimal.js';
-import {d,equity,type Account,type Settings,type SmartSpec} from './models.js';
+import {d,equity,remaining,type Account,type Order,type Settings,type SmartSpec} from './models.js';
 
 export const fee=(amount:Decimal.Value,s:Settings):Decimal=>Decimal.max(s.minimum_fee,d(amount).times(s.fee_rate).ceil());
+/** Upper bound on the remaining cash obligation of a limit buy. Once any part fills,
+ * at least the minimum fee has already been charged. Actual past prices may be better
+ * than the limit, so only that known lower bound is deducted, never an invented fee.
+ */
+export function remainingBuyCost(order:Order,s:Settings):Decimal {
+  const amount=d(order.limit_price).times(remaining(order));
+  if(amount.lte(0))return d(0);
+  const extra=order.filled>0?Decimal.max(0,fee(d(order.limit_price).times(order.shares),s).minus(s.minimum_fee)):fee(amount,s);
+  return amount.plus(extra);
+}
 export function rewardTarget(s:SmartSpec|undefined):string|null {
   if(!s)return null;
   return s.take_profit&&s.reward_target?Decimal.min(s.take_profit,s.reward_target).toFixed():s.take_profit??s.reward_target??null;
@@ -45,11 +55,11 @@ export function entryRiskIssues(shares:number,price:string,smart:SmartSpec|undef
   return issues;
 }
 export function entryQualityIssues(shares:number,price:string,smart:SmartSpec|undefined,s:Settings):string[]{
-  if(!d(s.min_entry_reward_risk).gt(0))return [];
   const target=rewardTarget(smart);
   if(!smart||!target||!d(smart.stop_price).lt(price)||!d(target).gt(price))return ['缺少有效停損與收益目標，無法核對扣費報酬風險比'];
   const estimate=roundTripEstimate(shares,price,target,s,smart.stop_price);
   if(!d(estimate.estimated_net_target_gain!).gt(0))return ['停利價差不足覆蓋雙邊手續費與賣出稅'];
   if(d(estimate.estimated_net_target_gain!).lt(s.min_net_profit_twd))return ['預期淨利不足最低成本效益門檻'];
+  if(s.research_cost_aware&&d(estimate.estimated_net_target_gain!).lt(d(estimate.estimated_total_costs!).times(2)))return ['研究成本門檻：預期淨收益不足雙邊費稅的兩倍'];
   return d(estimate.estimated_reward_risk!).lt(s.min_entry_reward_risk)?['扣費後報酬風險比未達進場門檻']:[];
 }
