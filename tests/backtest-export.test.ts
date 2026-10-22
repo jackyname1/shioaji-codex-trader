@@ -49,3 +49,18 @@ test('old reports identify trigger-band rejections and distinguish marked invent
   assert.ok(codes.includes('OPEN_POSITION_MARKS'));assert.ok(codes.includes('LEGACY_TRIGGER_BAND_REJECTION'));
   assert.match(backtestExport(r,'audit').content,/不能直接把遭拒訊號補算為獲利/);
 });
+
+test('order and failure CSV preserve rejected/unfilled orders and specific error and missing-data codes',async()=>{
+  const r=await report();
+  const orders=backtestExport(r,'orders');assert.equal(orders.extension,'csv');
+  assert.match(orders.content,/local_id.*plan_id.*shares.*status/);
+  // Synthetic reasons contain no newline, so each physical row corresponds to one complete order.
+  assert.equal(orders.content.split('\r\n').length,r.orders.length+1);
+  r.failures=[{at:'2026-09-09T01:15:00Z',review:false,stage:'ACTIVATION',issue:'策略驗證失敗',
+    diagnostic:{kind:'OTHER',code:'REPLY_EXPIRED',validation_phase:'SEMANTIC'}}];
+  r.quality.missing_sessions=['2026-09-10'];
+  const failures=backtestExport(r,'failures').content;
+  assert.match(failures,/REPLY_EXPIRED/);assert.match(failures,/MISSING_SESSION/);
+  assert.equal(failures.split('\r\n').length,3);
+  assert.match(backtestExport(r,'audit').content,/REPLY_EXPIRED/);
+});

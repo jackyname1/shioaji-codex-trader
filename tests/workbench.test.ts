@@ -1,3 +1,4 @@
+import {decisionDeadline} from '../src/core/strategy-admission.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -160,7 +161,9 @@ test('Codex activity shows the actual model, official reasoning summary, complet
   assert.deepEqual(events.map(e => e.stage), ['PROMPT_METRICS', 'SNAPSHOT', 'MODEL', 'RUNNING', 'REASONING', 'OUTPUT', 'USAGE', 'VALIDATING', 'DECISION']);
   assert.ok(events.every(e => e.asof === input.asof)); assert.equal(events.find(e=>e.stage==='REASONING')!.message,'OFFICIAL_REASONING_SUMMARY');
   assert.equal(events.find(e=>e.stage==='MODEL')!.message.includes('注入測試模型'),true);
-  assert.deepEqual(events.find(e=>e.stage==='SNAPSHOT')!.details,input);
+  assert.deepEqual(events.find(e=>e.stage==='SNAPSHOT')!.details,{...input,hard_limits:{...input.hard_limits,
+    decision_deadline_at:decisionDeadline(input,SettingsSchema.parse({codex_enabled:true})),market_timezone:'Asia/Taipei'}});
+  assert.deepEqual(input.hard_limits,{plan_max_minutes:120},'enrichment must not mutate the bound caller snapshot');
   assert.deepEqual(events.find(e=>e.stage==='DECISION')!.details,analysis);
 });
 test('fast program replay requires no Codex calls, respects exact end time, and retains its full chart data after restore', async () => {

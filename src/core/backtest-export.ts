@@ -3,7 +3,7 @@ import {tradeStatistics} from './performance.js';
 import {auditBacktest} from './backtest-audit.js';
 import type {BacktestReport} from './backtest.js';
 
-export type BacktestExportFormat='json'|'csv'|'trades'|'daily'|'audit';
+export type BacktestExportFormat='json'|'csv'|'trades'|'daily'|'audit'|'orders'|'failures';
 export interface BacktestDiagnostics {
   version:1;
   trades:ReturnType<typeof tradeStatistics>;
@@ -78,6 +78,7 @@ export function diagnosticMarkdown(r:BacktestReport):string {
       ['期末庫存估計賣出費稅',diag.audit.estimated_remaining_exit_costs],['再扣期末估計賣出費稅後淨損益',diag.audit.net_pnl_after_estimated_exit_costs],
     ]),'## 績效檢核',diag.evaluation.message,
     '## 獨立帳務稽核',table(['檢查','結果','說明'],diag.audit.checks.map(c=>[c.code,c.passed?'通過':'未通過',c.message])),
+    '## 策略失敗',table(['日期 UTC','階段','錯誤碼','原因'],(r.failures??[]).map(f=>[f.at,f.stage,f.diagnostic?.code??'UNCLASSIFIED',f.issue])),
     '## 診斷',...diag.findings.map(f=>`- ${f.code}：${f.message}`),
     ...(diag.coverage.no_valid_plan_days.length?['無有效策略日期：'+diag.coverage.no_valid_plan_days.join('、')]:[]),
     '## 完整交易明細（含成本，未平倉不計入勝率）',table(['股票','進場 UTC','出場 UTC','持有小時','淨損益','出場原因'],t.episodes.map(e=>[e.symbol,e.entry_at,e.exit_at,e.holding_hours.toFixed(2),e.pnl,e.exit_reason])),
@@ -97,6 +98,16 @@ export function backtestExport(r:BacktestReport,format:BacktestExportFormat):{ex
   if(format==='daily'){
     const fields=['day','asof','complete','equity','cash','settlement_credits','exposure_pct'] as const;
     return {extension:'csv',label:'每日淨值',content:csv([...fields],r.daily_equity.map(e=>fields.map(k=>e[k])))};
+  }
+  if(format==='orders'){
+    const fields=['local_id','broker_id','tag','created_at','plan_id','symbol','action','purpose','lot','shares','filled','limit_price','status','exit_trigger','trigger_reason'] as const;
+    return {extension:'csv',label:'交易委託',content:csv([...fields],r.orders.map(o=>fields.map(k=>o[k])))};
+  }
+  if(format==='failures'){
+    return {extension:'csv',label:'策略失敗與缺資料',content:csv(['at','review','stage','code','issue'],[
+      ...(r.failures??[]).map(f=>[f.at,f.review,f.stage,f.diagnostic?.code??'UNCLASSIFIED',f.issue]),
+      ...r.quality.missing_sessions.map(day=>[day,false,'DATA','MISSING_SESSION','交易日缺少行情']),
+    ])};
   }
   if(format!=='csv')throw new Error('回測匯出格式不合法');
   const fields=['id','order_id','at','symbol','action','lot','purpose','shares','price','amount','fee','tax','realized_pnl','exit_trigger','book_source'] as const;

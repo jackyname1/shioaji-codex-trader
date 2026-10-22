@@ -35,8 +35,8 @@ test('reply time errors distinguish timezone, malformed date, expiry and server 
   assert.throws(()=>validateAnalysis(a,input,new Date(now.getTime()+(s.codex_timeout_seconds+31)*1000),s),code('SNAPSHOT_STALE'));
 });
 test('response latency cannot extend a snapshot deadline and equivalent UTC/offset times agree',()=>{
-  const s=SettingsSchema.parse({...settings(),plan_max_minutes:1}),input=snapshot(),at=new Date(now.getTime()+10000);
-  const a={...demoAnalysis(input,s,now),expires_at:new Date(now.getTime()+65000).toISOString()};
+  const s=SettingsSchema.parse({...settings(),plan_max_minutes:10}),input=snapshot(),at=new Date(now.getTime()+10000);
+  const a={...demoAnalysis(input,s,now),expires_at:new Date(now.getTime()+605000).toISOString()};
   assert.throws(()=>validateAnalysis(a,input,at,s),code('REPLY_DEADLINE_EXCEEDED'));
   assert.equal(decisionDeadline(input,s),decisionDeadline({...input,asof:'2026-10-08T10:00:00+08:00'},s));
 });

@@ -253,7 +253,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
           analysis.summary=`流程示範檢討（非 Codex）：最近 ${c.sample_count} 筆經驗，已實現損益=${c.realized_pnl??'未賣出'}；費用與執行需納入策略，未以此證明有效。`;}}
       if(signal.aborted)return;stage='ACTIVATION';progress(stage,`${twClock(now)} 驗證選股、設定觀測門檻與進出場條件`);
       await engine.activate(analysis,snapshot,now);successes++;lastError='';if(!review)quality.successful_strategies++;
-      if(!review)entryDiagnostics.strategy(analysis,snapshot.features,snapshot.instruments??{},now);
+      if(!review)entryDiagnostics.strategy(analysis,snapshot.features,snapshot.instruments??{},now,engine.plan!.id);
       strategyLog.push({at:now.toISOString(),review,stance:analysis.stance,expires_at:analysis.expires_at,
         ...(!review?{lifecycle:engine.plan!.lifecycle}:{}),summary:analysis.summary,selected:analysis.candidates});
       activity(now.toISOString(),review?'REVIEW':'ACTIVATION',analysis.summary,{symbols:analysis.candidates,screening:analysis.screening});
