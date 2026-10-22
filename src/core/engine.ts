@@ -343,7 +343,7 @@ export class Engine {
       const pendingBuy = this.account.orders.some(o => active(o) && o.symbol === protection.symbol && o.action === 'BUY');
       const plannedBuy = this.plan && planActive(this.plan,now)
         && this.plan.analysis.decisions.some(d => d.symbol === protection.symbol && d.action === 'BUY')
-        && !(this.store.order(createHash('sha256').update(`${this.plan.id}:${protection.symbol}:BUY`).digest('hex').slice(0,32))?.filled);
+        && !this.store.planOrders(this.plan.id,protection.symbol,'BUY').some(o=>o.filled>0);
       if (!p?.shares) { if (!pendingBuy && !plannedBuy) {this.store.removeProtection(protection.symbol);this.store.removeEntryTracks(protection.symbol);} continue; }
       const protectionLot = this.settings.whole_lots && p.sellable >= 1000 ? 'COMMON' : 'ODD';
       if(!this.calendar.inSession(now,protectionLot))continue;
@@ -424,9 +424,16 @@ export class Engine {
       }
       const guardIssue=conditionIssue(decision,q,this.watchFeatures[decision.symbol],now);
       if(guardIssue){state('WAIT',guardIssue);continue;}
-      const id = createHash('sha256').update(`${plan.id}:${decision.symbol}:${decision.action}`).digest('hex').slice(0,32);
-      const prior=this.store.order(id);
-      if(prior){state(prior.status,`${prior.filled}/${prior.shares} 股；本輪已執行，不重送`);continue;}
+      const attempts=this.store.planOrders(plan.id,decision.symbol,decision.action),prior=attempts.at(-1);
+      // A confirmed, entirely unfilled ROD cancellation may be retried on a later session.
+      // Any fill consumes this plan's signal; unknown, rejected and same-day intents never auto-retry.
+      const consumed=attempts.find(o=>o.filled>0),unresolved=attempts.find(o=>o.status!=='CANCELLED');
+      if(prior&&(consumed||unresolved||twDay(new Date(prior.created_at))>=twDay(now))){
+        const blocked=consumed??unresolved??prior;
+        state(blocked.status,`${blocked.filled}/${blocked.shares} 股；本輪已成交、委託待核對或今日已嘗試，不重送`);continue;
+      }
+      const key=`${plan.id}:${decision.symbol}:${decision.action}${prior?':'+twDay(now):''}`;
+      const id=createHash('sha256').update(key).digest('hex').slice(0,32);
       if(this.pendingExecutions.size&&[...this.pendingExecutions.values()].some(t=>t.order.symbol===decision.symbol))continue;
       const sent=await this.requestExecution(this.newOrder(decision.symbol,decision.action,decision.shares,decision.limit_price,lot,now,plan.id,
         decision.action === 'BUY' ? 'ENTRY' : 'EXIT',id),now,source,decision,decision.smart??undefined);

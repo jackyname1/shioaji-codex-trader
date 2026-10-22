@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {planActive,planDeadline} from '../src/core/plan-lifecycle.js';
 import {Store} from '../src/core/store.js';
+import {Engine} from '../src/core/engine.js';
 import {runBacktest,type ReplayFrame} from '../src/core/backtest.js';
 import {syntheticDataset} from '../src/core/backtest-data.js';
 import {SettingsSchema,twDay,twClock,type Analysis,type Snapshot} from '../src/core/models.js';
@@ -32,6 +33,61 @@ test('activated strategy survives its reply deadline, persists on disk, and only
     assert.equal(restored.plan()!.id,id);assert.equal(restored.plan()!.lifecycle,'UNTIL_REPLACED');
     assert.ok(planActive(restored.plan(),'2026-10-19T02:00:00Z'));
   }finally{restored.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test('an unfilled confirmed ROD cancellation retries next session after restart, then any fill consumes the plan signal',async()=>{
+  const r=await rig();let engine=r.engine;
+  try{
+    engine.setSettings({...r.s,auto_watchlist:false});r.market.marketPrice='30.1';
+    await engine.tick(now);assert.equal(r.store.orders().length,1);
+    await engine.cancel(r.store.orders()[0]!.local_id,new Date(now.getTime()+1000));
+    await engine.tick(new Date(now.getTime()+2000));assert.equal(r.store.orders().length,1,'no same-day retry');
+    const planId=engine.plan!.id;await engine.close();
+    engine=new Engine(r.store,r.broker,engine.settings,r.calendar);
+    const next=new Date('2026-10-12T10:00:00+08:00');await engine.start(next);r.market.marketPrice='30';
+    await engine.tick(next);assert.equal(engine.plan!.id,planId);assert.equal(r.store.orders().length,2);
+    await engine.tick(new Date(next.getTime()+1000));assert.equal(r.store.orders()[1]!.filled,17);
+    await engine.tick(new Date(next.getTime()+2000));assert.equal(r.store.orders()[1]!.filled,30);
+    await engine.tick(new Date('2026-10-13T10:00:00+08:00'));
+    assert.equal(r.store.orders().length,2,'the replacement fill must be found even though the original intent never filled');
+    assert.equal(engine.account!.positions[0]!.shares,30);
+  }finally{await engine.close();r.store.close();}
+});
+
+test('a partially filled cancelled intent is not automatically bought again on a later session',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,auto_watchlist:false});await r.engine.tick(now);
+    await r.engine.tick(new Date(now.getTime()+1000));assert.equal(r.store.orders()[0]!.filled,17);
+    await r.engine.cancel(r.store.orders()[0]!.local_id,new Date(now.getTime()+2000));
+    await r.engine.tick(new Date('2026-10-12T10:00:00+08:00'));
+    assert.equal(r.store.orders().length,1);assert.equal(r.engine.account!.positions[0]!.shares,17);
+  }finally{await r.engine.close();r.store.close();}
+});
+
+test('unknown submission results cannot create a cross-session replacement intent',async()=>{
+  const r=await rig();try{
+    r.engine.setSettings({...r.s,auto_watchlist:false});r.market.marketPrice='30.1';await r.engine.tick(now);
+    r.broker.reconcile=async orders=>orders.map(o=>({...o,status:'UNKNOWN'}));
+    await r.engine.tick(new Date('2026-10-12T10:00:00+08:00'));
+    assert.equal(r.store.orders().length,1);assert.equal(r.store.orders()[0]!.status,'UNKNOWN');
+  }finally{await r.engine.close();r.store.close();}
+});
+
+test('the complete replay cancels an unfilled ROD, retries next day and does not spend another strategy call',async()=>{
+  const data=syntheticDataset('2026-01-05','2026-01-07');
+  data.points=data.points.filter(p=>p.symbol==='9001'&&['09:10','10:00','10:10','13:30'].includes(twClock(new Date(p.at))));
+  for(const p of data.points){const day=twDay(new Date(p.at)),price=day==='2026-01-05'?'30.1':day==='2026-01-06'?'29.9':'30';
+    p.open=p.high=p.low=p.close=price;p.volume_shares=1000000;}
+  const r=await runBacktest({start:'2026-01-05',end:'2026-01-07',source:'sample',strategy:'codex',strategy_every_sessions:5,
+    max_codex_calls:1,strategy_schedule:'fixed',strategy_times:['09:15'],entry_cadence:'market',execution_sizing:'deterministic'},data,
+    SettingsSchema.parse({codex_enabled:true,auto_watchlist:false}),async s=>({snapshot_id:s.snapshot_id,
+      expires_at:new Date(Date.parse(s.asof)+60000).toISOString(),stance:'BUY_ALLOWED',candidates:['9001'],screening:null,
+      decisions:[{symbol:'9001',action:'BUY',shares:30,limit_price:'30.05',entry_when:'IMMEDIATE',trigger_price:'0',
+        smart:{stop_price:'27',take_profit:'40',trailing_activate:null,trailing_fraction:null},reason:'Synthetic ROD retry fixture'}],summary:'Synthetic fixture'}),new AbortController().signal);
+  assert.equal(r.status,'COMPLETED');assert.equal(r.metrics.codex_calls,1);assert.equal(r.orders.length,2);
+  assert.equal(r.orders[0]!.status,'CANCELLED');assert.equal(r.orders[0]!.filled,0);
+  assert.equal(r.orders[1]!.status,'FILLED');assert.equal(r.orders[1]!.filled,30);
+  assert.equal(twDay(new Date(r.orders[1]!.created_at)),'2026-01-06');assert.equal(r.diagnostics!.audit.passed,true);
 });
 
 test('a first-session strategy can buy on session four without extra analysis, then a valid session-six plan replaces it',async()=>{

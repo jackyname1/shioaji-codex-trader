@@ -308,7 +308,9 @@ function renderBacktest(state:DesktopState):void {
   text('bt-capital',m.average_exposure_pct===undefined?'舊報表未統計持倉比例':`持倉：行情時點平均 ${fmt(m.average_exposure_pct)}% · 最高 ${fmt(m.max_exposure_pct??'0')}% · ${r.request.capital_profile==='active'?'標準風控':r.request.capital_profile==='balanced'?'標準風控':'自訂風控'}`);
   text('bt-entry-diagnostics',entryDiagnosticText(r.entry_diagnostics));
   const diag=r.diagnostics;
-  text('bt-diagnosis',diag?`完整平倉 ${diag.trades.closed_trades} 筆 · 勝率 ${diag.trades.win_rate_pct??'無'}% · 平均淨損益 ${diag.trades.expectancy??'無'}\n`+diag.findings.map(f=>f.message).join('\n'):'舊報表可匯出損益診斷重新計算');
+  text('bt-diagnosis',diag?(diag.evaluation?`績效檢核：${diag.evaluation.message}\n`:'')+
+    (diag.audit?`獨立帳務重算：${diag.audit.passed?'通過':'未通過'} · 再扣期末估計賣出費稅後淨損益 ${diag.audit.net_pnl_after_estimated_exit_costs??'無法估計'}\n`:'')+
+    `完整平倉 ${diag.trades.closed_trades} 筆 · 勝率 ${diag.trades.win_rate_pct??'無'}% · 平均淨損益 ${diag.trades.expectancy??'無'}\n`+diag.findings.map(f=>f.message).join('\n'):'舊報表可匯出損益診斷重新計算');
   text('bt-quality',`近似成交 · ${r.quality.universe_mode==='DAILY_HISTORICAL'?'每日歷史股票池':'固定股票池'} · 行情 ${r.quality.covered_sessions}/${r.quality.sessions} 日 · 有效策略 ${r.quality.successful_strategies}/${r.quality.strategy_slots}`);
   table('bt-fills',['台北時間','股票','方向','股數','價格','手續費 / 稅','已實現損益'],r.fills.slice().reverse().map(f=>[stamp(f.at),f.symbol,action[f.action]??f.action,f.shares,fmt(f.price),`${fmt(f.fee)} / ${fmt(f.tax)}`,f.realized_pnl===null?'—':fmt(f.realized_pnl)]),'本次無成交；請核對策略、資料與風控紀錄');
   table('bt-daily',['日期','淨值','現金','待收交割'],r.daily_equity.map(d=>[d.day,fmt(d.equity),fmt(d.cash),fmt(d.settlement_credits)]));

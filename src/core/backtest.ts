@@ -392,7 +392,9 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
         average_exposure_pct:exposureSamples?exposureSum.div(exposureSamples).toFixed(4):'0.0000',max_exposure_pct:maxExposure.toFixed(4),exposure_samples:exposureSamples},
       quality,positions:account.positions,strategy_log:strategyLog,workflow,failures:failureLog,normalization:dataset.normalization,watch_changes:engine.watch.changes,daily_equity:daily,fills,orders:store.orders(),
       reviews:store.reviews('backtest:'+id,now.toISOString(),2000),logs:store.logs(2000),limitations};
-    report.diagnostics=backtestDiagnostics(report);return report;
+    report.diagnostics=backtestDiagnostics(report);
+    if(!report.diagnostics.audit.passed){report.status='FAILED';report.limitations.push('獨立成交帳務重算未通過；本次績效不可採用，請匯出完整紀錄檢查。');report.diagnostics=backtestDiagnostics(report);}
+    return report;
   }finally{await engine.close();store.close();}
 }
 export function formatBacktestReport(r:BacktestReport):string{const m=r.metrics;

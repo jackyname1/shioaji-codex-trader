@@ -152,6 +152,10 @@ export class Store {
   }
   order(id:string):Order|undefined {const row=this.db.prepare('SELECT value FROM orders WHERE id=?').get(id) as {value:string}|undefined;
     return row?OrderSchema.parse(JSON.parse(row.value)):undefined;}
+  planOrders(planId:string,symbol:string,action:Order['action']):Order[]{
+    return (this.db.prepare("SELECT value FROM orders WHERE json_extract(value,'$.plan_id')=? AND json_extract(value,'$.symbol')=? AND json_extract(value,'$.action')=? AND json_extract(value,'$.purpose') IN ('ENTRY','EXIT') ORDER BY rowid").all(planId,symbol,action) as {value:string}[])
+      .map(row=>OrderSchema.parse(JSON.parse(row.value)));
+  }
   orderByBroker(id:string):Order|undefined {if(!id)return;const row=this.db.prepare("SELECT value FROM orders WHERE json_extract(value,'$.broker_id')=? ORDER BY rowid DESC LIMIT 1").get(id) as {value:string}|undefined;
     return row?OrderSchema.parse(JSON.parse(row.value)):undefined;}
   lastOrder(symbol:string):Order|undefined {

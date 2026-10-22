@@ -554,7 +554,8 @@ async function smokeTest(): Promise<void> {
   // Exercise the real preload/IPC/save path for every export in source and packaged builds.
   await window.webContents.executeJavaScript(`document.querySelector('#bt-export').click()`);
   const exportUi=await window.webContents.executeJavaScript(`({open:document.querySelector('#backtest-export-dialog').open,count:document.querySelectorAll('#backtest-export-dialog [data-backtest-export]:not(:disabled)').length,diagnosis:document.querySelector('#bt-diagnosis').textContent})`);
-  if(!exportUi.open||exportUi.count!==5||!exportUi.diagnosis.includes('完整平倉'))throw new Error('回測匯出入口或損益診斷未通過');
+  if(!exportUi.open||exportUi.count!==5||!exportUi.diagnosis.includes('完整平倉')||!exportUi.diagnosis.includes('績效檢核')
+    ||!exportUi.diagnosis.includes('獨立帳務重算：通過')||!backtest.report.diagnostics?.audit.passed)throw new Error('回測匯出入口或損益診斷未通過');
   const replaySave=dialog.showSaveDialog;
   try{
     for(const format of ['json','csv','trades','daily','audit'] as const){
