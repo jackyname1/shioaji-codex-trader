@@ -77,3 +77,10 @@ test('new CSV exports agree with raw unique funnel, strategy and execution attri
  assert.equal(r.diagnostics!.attribution!.closed.length,r.metrics.trades!.closed_trades);
  assert.equal(r.diagnostics!.attribution!.reconciled,true);assert.match(r.dataset_sha256!,/^[a-f0-9]{64}$/);
 });
+test('stale final marks expose symbol, cutoff, stage and error code in both UI diagnostics and error CSV',async()=>{
+ const r=await report();r.positions=[{symbol:'9001',shares:1,sellable:1,average_price:'30',last_price:'31'}];
+ r.quality.last_marks['9001']='2026-10-01T01:00:00Z';
+ const diagnostics=backtestDiagnostics(r),issue=diagnostics.completeness.find(f=>f.code==='STALE_VALUATION');
+ assert.ok(issue);assert.equal(issue.at,r.asof);assert.equal(issue.stage,'VALUATION');assert.match(issue.issue,/9001/);
+ assert.match(backtestExport(r,'failures').content,/STALE_VALUATION/);assert.match(backtestExport(r,'audit').content,/不完整原因/);
+});

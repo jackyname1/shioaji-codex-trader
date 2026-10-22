@@ -6,7 +6,8 @@ import {spawn} from 'node:child_process';
 import {runBacktest} from '../dist/src/core/backtest.js';
 import {SettingsSchema} from '../dist/src/core/models.js';
 import {tradeAttribution} from '../dist/src/core/trade-attribution.js';
-const protocolBytes=readFileSync('validation/repair-20261023/history-protocol.json'),protocol=JSON.parse(protocolBytes),sha=b=>createHash('sha256').update(b).digest('hex');
+const protocolPath=resolve(process.argv[3]??'validation/repair-20261023/history-protocol.json');
+const protocolBytes=readFileSync(protocolPath),protocol=JSON.parse(protocolBytes),sha=b=>createHash('sha256').update(b).digest('hex');
 const output=resolve(process.argv[2]??'private/repair-validation/historical'),index=process.env.TRADER_HISTORY_CASE;
 const cases=protocol.folds.flatMap(fold=>protocol.scenarios.flatMap(scenario=>protocol.arms.map(arm=>({fold,scenario,arm}))));
 for(const settings of protocol.sensitivity.settings)cases.push({fold:protocol.folds.find(f=>f.label===protocol.sensitivity.fold),scenario:protocol.scenarios.find(s=>s.fill_assumption===protocol.sensitivity.scenario),arm:{name:'sensitivity_'+Object.entries(settings).map(x=>x.join('_')).join('_'),settings}});
@@ -15,7 +16,7 @@ const raw=readFileSync(protocol.dataset),codeHash=createHash('sha256');for(const
 const metadata={execution_started_at:new Date().toISOString(),protocol_sha256:sha(protocolBytes),dataset_file_sha256:sha(raw),engine_sha256:codeHash.digest('hex'),protocol};
 if(index===undefined){
  let next=0;await Promise.all(Array.from({length:2},async()=>{for(;;){const i=next++;if(i>=cases.length)return;
-  await new Promise((done,fail)=>{const child=spawn(process.execPath,[process.argv[1],output],{env:{...process.env,TRADER_HISTORY_CASE:String(i)},stdio:'inherit',timeout:300000});child.once('error',fail);child.once('exit',code=>code===0?done():fail(new Error('Historical worker failed: '+i)));});
+  await new Promise((done,fail)=>{const child=spawn(process.execPath,[process.argv[1],output,protocolPath],{env:{...process.env,TRADER_HISTORY_CASE:String(i)},stdio:'inherit',timeout:300000});child.once('error',fail);child.once('exit',code=>code===0?done():fail(new Error('Historical worker failed: '+i)));});
  }}));
  const results=cases.map((_,i)=>JSON.parse(readFileSync(join(output,'case-'+i+'.json'))));
  writeFileSync(join(output,'summary.json'),JSON.stringify({...metadata,results},null,2));if(results.some(r=>r.error||!r.audit?.passed))process.exitCode=1;

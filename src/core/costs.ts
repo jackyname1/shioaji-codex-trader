@@ -1,5 +1,6 @@
+import {remainingBuyReservation} from './buy-reservation.js';
 import {Decimal} from 'decimal.js';
-import {d,equity,remaining,type Account,type Order,type Settings,type SmartSpec} from './models.js';
+import {d,equity,type Account,type Order,type Settings,type SmartSpec} from './models.js';
 
 export const fee=(amount:Decimal.Value,s:Settings):Decimal=>Decimal.max(s.minimum_fee,d(amount).times(s.fee_rate).ceil());
 /** Upper bound on the remaining cash obligation of a limit buy. Once any part fills,
@@ -7,10 +8,7 @@ export const fee=(amount:Decimal.Value,s:Settings):Decimal=>Decimal.max(s.minimu
  * than the limit, so only that known lower bound is deducted, never an invented fee.
  */
 export function remainingBuyCost(order:Order,s:Settings):Decimal {
-  const amount=d(order.limit_price).times(remaining(order));
-  if(amount.lte(0))return d(0);
-  const extra=order.filled>0?Decimal.max(0,fee(d(order.limit_price).times(order.shares),s).minus(s.minimum_fee)):fee(amount,s);
-  return amount.plus(extra);
+  return d(remainingBuyReservation(order,s));
 }
 export function rewardTarget(s:SmartSpec|undefined):string|null {
   if(!s)return null;

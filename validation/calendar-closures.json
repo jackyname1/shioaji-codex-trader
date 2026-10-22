@@ -1,0 +1,35 @@
+[
+  {
+    "day": "2023-08-03",
+    "known_at": "2023-08-03T00:00:00+08:00",
+    "source": "https://investoredu.twse.com.tw/FileSystem/FileUpload/be0109d1-76a0-4412-a00d-58a88c6e1714.pdf",
+    "evidence_sha256": "13e991f1b4b97c7e9e1e6b39b5a20b0fa5134f82b3de8fd7393baa54f0c9f126",
+    "announcement_date": "2023-08-02",
+    "note": "Dated exchange announcement verifies both market closure and settlement postponement. Visibility conservatively begins at midnight on the affected day."
+  },
+  {
+    "day": "2024-07-24",
+    "known_at": "2024-07-24T00:00:00+08:00",
+    "source": "https://www.twsa.org.tw/F01/F011.html"
+  },
+  {
+    "day": "2024-07-25",
+    "known_at": "2024-07-25T00:00:00+08:00",
+    "source": "https://www.twse.com.tw/staticFiles/news/news/tsecnews/8a8216d6906d4d340190e4a4ef640174.pdf"
+  },
+  {
+    "day": "2024-10-02",
+    "known_at": "2024-10-02T00:00:00+08:00",
+    "source": "https://www.twse.com.tw/staticFiles/news/news/tsecnews/8a8216d69236c2e301924806d5b4004e.pdf"
+  },
+  {
+    "day": "2024-10-03",
+    "known_at": "2024-10-03T00:00:00+08:00",
+    "source": "https://investoredu.twse.com.tw/FileSystem/FileUpload/2c6e50d4-a390-439c-a2c4-823937dee4b2.pdf"
+  },
+  {
+    "day": "2024-10-31",
+    "known_at": "2024-10-31T00:00:00+08:00",
+    "source": "https://www.twsa.org.tw/F01/F011.html"
+  }
+]

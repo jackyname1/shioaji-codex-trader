@@ -1,3 +1,4 @@
+import {reservedBuyCash} from '../core/buy-reservation.js';
 import {backtestSeries} from '../core/backtest-series.js';
 import {planActive,planDeadline} from '../core/plan-lifecycle.js';
 import {connectionLabel} from './connection-state.js';
@@ -188,8 +189,7 @@ function renderRuntime(state:DesktopState):void {
   if(a){const stocks=a.positions.reduce((sum,p)=>sum+Number(p.last_price)*p.shares,0);
     const have=a.available??{cash:true,settlements:true,positions:true,orders:true};
     text('equity',have.cash&&have.positions&&have.settlements?fmt(Number(a.cash)-Number(a.settlement_debits)+Number(a.settlement_credits)+stocks):'—');
-    const reserves=a.orders.filter(o=>o.action==='BUY'&&!['FILLED','CANCELLED','REJECTED'].includes(o.status))
-      .reduce((sum,o)=>sum+Number(o.limit_price)*(o.shares-o.filled)+Math.max(Number(s.minimum_fee),Math.ceil(Number(o.limit_price)*(o.shares-o.filled)*Number(s.fee_rate))),0);
+    const reserves=Number(reservedBuyCash(a.orders,s));
     text('cash',have.cash&&have.settlements&&have.orders?fmt(Math.max(0,Number(a.cash)-Number(a.settlement_debits)-reserves)):have.cash?fmt(a.cash):'—');
     text('cash-detail',have.cash&&(!have.settlements||!have.orders)?'交割戶餘額 · 可用資金仍在核對':have.positions?`股票市值 ${fmt(stocks)} · ${a.complete?'帳務已更新':'部分資料待更新'}`:'持倉正在載入');
     text('settlement-detail',have.settlements?`交割預留 ${fmt(a.settlement_debits)} · 待收 ${fmt(a.settlement_credits)}`:'交割資料正在載入');
@@ -210,7 +210,7 @@ function renderRuntime(state:DesktopState):void {
   text('live-state',r.killed?'交易已停止':r.auto&&live.authorized?'自動交易執行中':live.ready?'實盤帳戶已就緒':r.connected?'實盤已連線 · 資料更新中':'等待帳戶連線');
   text('live-account',live.account);text('live-issues',live.issues[0]??'帳務持續更新 · 自動交易依策略與風控執行');
   el('live-issues').title=live.issues.join('；');
-  text('live-settings-status',live.issues.length?live.issues.join('；'):'實盤帳戶已就緒；不需另外啟動或確認授權');
+  text('live-settings-status',live.issues.length?live.issues.join('；'):'帳戶核對完成；正式交易仍需策略驗證及本次明確授權');
   text('start-live',state.connection.busy?'正在核對…':r.auto&&!r.killed?'▶ 自動交易中':'▶ 開始自動交易');
   el<HTMLButtonElement>('start-live').disabled=state.connection.busy||r.auto&&!r.paused&&!r.killed;
   el<HTMLButtonElement>('lock-live').disabled=!live.authorized&&!r.auto;
@@ -313,6 +313,7 @@ function renderBacktest(state:DesktopState):void {
   table('bt-funnel',['階段','已觀測','曾通過','無此要求','曾阻擋','未觀測','依序轉換'],(r.entry_funnel?.stages??[]).map(s=>[stageNames[s.stage]??s.stage,s.observed,s.passed,s.not_required,s.blocked,s.unknown,s.converted]),'未記錄實際檢查事件');
   table('bt-rejections',['階段','錯誤碼','唯一訊號','重複觀測'],(r.entry_funnel?.rejections??[]).map(s=>[stageNames[s.stage]??s.stage,s.code,s.signals,s.samples]),'沒有已記錄的拒絕事件');
   const diag=r.diagnostics;
+  table('bt-completeness',['台北時間','階段','錯誤碼','原因'],(diag?.completeness??[]).map(f=>[stamp(f.at),phase[f.stage]??f.stage,f.code,f.issue]),r.status==='COMPLETED'?'必要流程完整，仍須核對資料與成交模型限制':'舊報表未提供完整原因，請匯出診斷重算');
   text('bt-attribution-limits',diag?.attribution?.limitation??'舊報表未保存執行歸因，可匯出診斷重算；無原始報價時不推算滑價。');
   table('bt-attribution',['股票','進場台北時間','出場台北時間','價差損益','費／稅','淨損益','報價差成本','模型價格影響','出場原因'],(diag?.attribution?.closed??[]).map(e=>[e.symbol,stamp(e.entry_at),stamp(e.exit_at!),fmt(e.gross_pnl),fmt(e.fees)+' / '+fmt(e.taxes),fmt(e.net_pnl),e.spread_cost===null?'未提供':fmt(e.spread_cost),e.modeled_price_impact===null?'未提供':fmt(e.modeled_price_impact),e.exit_reasons.join('、')]),'沒有完整平倉交易');
   table('bt-exit-attribution',['出場原因','交易數','淨損益'],Object.entries(diag?.attribution?.by_exit??{}).map(([reason,e])=>[reason,e.trades,fmt(e.net_pnl)]),'沒有完整平倉交易');

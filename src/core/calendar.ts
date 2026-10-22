@@ -8,6 +8,7 @@ const closed2026 = new Set(['2026-01-01','2026-02-12','2026-02-13','2026-02-15',
 const weekday = (day: string): boolean => ![0, 6].includes(new Date(day + 'T00:00:00Z').getUTCDay());
 // Unscheduled closures are explicit official announcements, never inferred from absent prices.
 const exceptionalClosures:Record<string,{source:string;verified_at:string}>={
+  '2023-08-03':{source:'https://investoredu.twse.com.tw/FileSystem/FileUpload/be0109d1-76a0-4412-a00d-58a88c6e1714.pdf',verified_at:'2023-08-03T00:00:00+08:00'},
   '2026-07-10':{source:'https://www.twse.com.tw/staticFiles/news/news/tsecnews/8a8216d69ef76943019f46cb86ae0110.pdf',verified_at:'2026-07-09T20:11:00+08:00'},
 };
 export const applyCalendarExceptions=(days:SessionDay[]):SessionDay[]=>days.map(day=>exceptionalClosures[day.day]

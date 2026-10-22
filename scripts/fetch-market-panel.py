@@ -79,7 +79,7 @@ def main():
         if date.isoformat() not in known:dataset['calendar'].append(dict(day=date.isoformat(),open=False,source='Weekend',verified_at=dt.datetime.now(dt.timezone.utc).isoformat()))
     # Annual exchange/settlement calendar is independent of missing price rows.
     verified_calendar=[];calendar_sources=[]
-    closures_path=pathlib.Path(__file__).parents[1]/'validation'/'v025'/'closures2024.json'
+    closures_path=pathlib.Path(__file__).parents[1]/'validation'/'calendar-closures.json'
     closures={r['day']:r for r in json.loads(closures_path.read_text())} if closures_path.exists() else {}
     for year in range(start.year,end.year+1):
         url=f'https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?response=json&date={year}0101'
@@ -97,7 +97,7 @@ def main():
             verified_calendar.append(r)
         calendar_sources.append(dict(year=year,url=url,sha256=hashlib.sha256(raw_calendar).hexdigest()))
     dataset['calendar']=verified_calendar
-    calendar_sources.append(dict(file='validation/v025/closures2024.json',sha256=hashlib.sha256(closures_path.read_bytes()).hexdigest(),note='Dated announcement evidence; visibility is conservative midnight on the closure day, exact prior-evening minute unavailable.'))
+    calendar_sources.append(dict(file='validation/calendar-closures.json',sha256=hashlib.sha256(closures_path.read_bytes()).hexdigest(),note='Dated announcement evidence; visibility is conservative midnight on the closure day, exact prior-evening minute unavailable.'))
     args.output.parent.mkdir(parents=True,exist_ok=True)
     raw=json.dumps(dataset,ensure_ascii=False,separators=(',',':')).encode();args.output.write_bytes(gzip.compress(raw,mtime=0))
     args.output.with_suffix('.provenance.json').write_text(json.dumps(dict(retrieved_at=dt.datetime.now(dt.timezone.utc).isoformat(),dataset_sha256=hashlib.sha256(raw).hexdigest(),sources=provenance,calendar_sources=calendar_sources,benchmark=benchmark),ensure_ascii=False,indent=2)+'\n')

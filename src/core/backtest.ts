@@ -71,6 +71,7 @@ export interface ReplayActivity {at:string;stage:string;message:string;symbols?:
 export interface BacktestQuality {sessions:number;covered_sessions:number;calendar_verified:boolean;missing_sessions:string[];warmup:Record<string,number>;
   insufficient_symbols:string[];last_marks:Record<string,string>;strategy_slots:number;successful_strategies:number;skipped_strategies:number;
   universe_mode?:'DAILY_HISTORICAL'|'FIXED';universe_sessions?:number;execution_model?:'APPROXIMATE';
+  corporate_action_exposure?:{day:string;at:string;symbol:string;opening_shares:number}[];
   halted_at?:string;halt_reason?:'CODEX_BUDGET'|'CODEX_QUOTA'|'CODEX_RATE_LIMIT'|'CODEX_NETWORK'|'CODEX_AUTH'|'CODEX_ACCESS'|'CODEX_MODEL'|'CODEX_RUNTIME'|'CODEX_TIMEOUT';processed_sessions?:number}
 export interface BacktestReport {
   version:'0.2.5'|'0.2.3'|'0.2.2'|'0.2.1'|'0.2.0'|'0.1.0'|'0.4.0'|'0.5.0';entry_diagnostics?:EntryDiagnostics;entry_funnel?:import('./entry-funnel.js').EntryFunnelReport;final_frame?:ReplayFrame;dataset_id?:string;dataset_sha256?:string;timeline?:{at:string;equity:string;cash:string;exposure_pct?:string}[];id:string;created_at:string;asof:string;status:'COMPLETED'|'PARTIAL'|'CANCELLED'|'FAILED';request:BacktestRequest;
@@ -207,6 +208,10 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   const timeline:NonNullable<BacktestReport['timeline']>=[];
   let exposureSum=d(0),maxExposure=d(0),exposureSamples=0;
   const daily:BacktestReport['daily_equity']=[],strategyLog:BacktestReport['strategy_log']=[],completedDays=new Set<string>();
+  let openingShares=new Map<string,number>();
+  const actionFlags=new Map<string,Map<string,string>>();
+  for(const p of dataset.points)if(p.corporate_action){const day=twDay(new Date(p.at)),rows=actionFlags.get(day)??new Map<string,string>();
+    if(!rows.has(p.symbol))rows.set(p.symbol,p.at);actionFlags.set(day,rows);}
   const workflow:ReplayActivity[]=[],failureLog:NonNullable<BacktestReport['failures']>=[];
   const activity=(at:string,stage:string,message:string,details:Partial<ReplayActivity>={}):void=>{
     const item={...details,at,stage,message};workflow.push(item);onActivity?.(item);};
@@ -300,6 +305,12 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
   };
   const finishDay=async(day:string,partialAt?:Date):Promise<void>=>{if(completedDays.has(day))return;completedDays.add(day);
     const now=partialAt??new Date(day+'T13:30:00+08:00');for(const o of store.orders(true))await engine.cancel(o.local_id,now);
+    // Retrospective integrity diagnosis only. These flags never change decisions or old fills.
+    // A fresh later mark cannot repair missing dividends, share adjustments or rights entitlements.
+    for(const [symbol,at] of actionFlags.get(day)??[])if((openingShares.get(symbol)??0)>0&&at<=now.toISOString()){
+      (quality.corporate_action_exposure??=[]).push({day,at,symbol,opening_shares:openingShares.get(symbol)!});
+      activity(at,'DATA',`UNRESOLVED_CORPORATE_ACTION：${symbol} 隔夜持倉遇未處理公司行動／價格不連續旗標；沒有股利或股數調整事件，績效不完整`,{symbols:[symbol]});
+    }
     const account=await engine.refreshAccount(now);daily.push({day,cash:account.cash,settlement_credits:account.settlement_credits,equity:equity(account).toFixed(2),asof:now.toISOString(),complete:!partialAt,
       exposure_pct:equity(account).gt(0)?marketValue(account).div(equity(account)).times(100).toFixed(4):'0'});
     activity(now.toISOString(),'CLOSE',`${partialAt?'區間結束':'收盤'}：撤銷未完成委託並核對模擬現金、庫存與交割款`);};
@@ -324,7 +335,9 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
           if(e.check||e.watch||e.decision!==undefined||e.close||e.market&&includeMarket)return e.at;}
         return '';
       };
-      const now=new Date(event.at),day=twDay(now);calendar.setAsOf(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);currentDay=day;lastTime=event.at;steps++;nextEvent=nextVisible();
+      const now=new Date(event.at),day=twDay(now);calendar.setAsOf(now);if(currentDay&&day!==currentDay)await finishDay(currentDay);
+      if(day!==currentDay)openingShares=new Map((engine.account?.positions??[]).map(p=>[p.symbol,p.shares]));
+      currentDay=day;lastTime=event.at;steps++;nextEvent=nextVisible();
       const freshQuote=[...engine.quotes.values()].some(q=>ageSeconds(now,q.trade_at)>=0&&ageSeconds(now,q.trade_at)<=settings.quote_max_age);
       // Offline runs may elide repeated stale-data checks. Never skip a price, decision, expiry, settlement clock, close or GUI frame.
       const expiryPending=engine.plan&&!planActive(engine.plan,now)&&store.orders(true).some(o=>o.purpose==='ENTRY');
@@ -402,6 +415,7 @@ export async function runBacktest(input:unknown,datasetInput:HistoryDataset,base
       quality,positions:account.positions,strategy_log:strategyLog,workflow,failures:failureLog,normalization:dataset.normalization,watch_changes:store.watchChanges(),daily_equity:daily,fills,orders:store.orders(),
       reviews:store.reviews('backtest:'+id,now.toISOString(),2000),logs:store.logs(2000),limitations};
     if(report.status==='COMPLETED'&&!report.entry_funnel!.complete){report.status='PARTIAL';report.limitations.push('ENTRY_FUNNEL_TRUNCATED：唯一訊號診斷超過容量，未完整保存。');}
+    if(report.quality.corporate_action_exposure?.length){if(report.status==='COMPLETED')report.status='PARTIAL';report.limitations.push('UNRESOLVED_CORPORATE_ACTION：隔夜庫存遇公司行動／價格不連續旗標，未提供權益調整帳務事件；不能以之後價格恢復更新視為完整績效。');}
     report.diagnostics=backtestDiagnostics(report);
     if(report.status==='COMPLETED'&&report.diagnostics.audit.stale_valuation_symbols.length){
       report.status='PARTIAL';

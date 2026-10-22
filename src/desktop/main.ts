@@ -556,6 +556,15 @@ async function smokeTest(): Promise<void> {
   const exportUi=await window.webContents.executeJavaScript(`({open:document.querySelector('#backtest-export-dialog').open,count:document.querySelectorAll('#backtest-export-dialog [data-backtest-export]:not(:disabled)').length,diagnosis:document.querySelector('#bt-diagnosis').textContent})`);
   if(!exportUi.open||exportUi.count!==12||!exportUi.diagnosis.includes('完整平倉')||!exportUi.diagnosis.includes('績效檢核')
     ||!exportUi.diagnosis.includes('獨立帳務重算：通過')||!backtest.report.diagnostics?.audit.passed)throw new Error('回測匯出入口或損益診斷未通過');
+  const detailUi=await window.webContents.executeJavaScript(`({
+    stages:[...document.querySelectorAll('#bt-funnel tbody tr')].map(r=>[...r.cells].map(c=>c.textContent)),
+    attributionRows:[...document.querySelectorAll('#bt-attribution tbody tr')].filter(r=>!r.querySelector('.empty')).length,
+    charts:['drawdown-chart','cost-chart','exposure-chart'].map(id=>!!document.querySelector('#'+id+' svg'))
+  })`);
+  const funnel=backtest.report.entry_funnel;
+  if(!funnel||detailUi.stages.length!==8||detailUi.stages.some((row:string[],i:number)=>JSON.stringify(row.slice(1))!==JSON.stringify(
+    [funnel.stages[i]!.observed,funnel.stages[i]!.passed,funnel.stages[i]!.not_required,funnel.stages[i]!.blocked,funnel.stages[i]!.unknown,funnel.stages[i]!.converted].map(String)))
+    ||detailUi.attributionRows!==backtest.report.diagnostics!.attribution?.closed.length||!detailUi.charts.every(Boolean))throw new Error('漏斗、交易歸因或三項圖表與回測紀錄不一致');
   const replaySave=dialog.showSaveDialog;
   try{
     for(const format of ['json','csv','trades','daily','audit','orders','failures','funnel','rejections','strategies','decisions','attribution'] as const){

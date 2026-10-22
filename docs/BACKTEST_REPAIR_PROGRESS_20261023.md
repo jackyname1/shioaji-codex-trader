@@ -27,3 +27,34 @@
 工作環境目前只有 v0.1.3 的舊附件，缺少本次 v0.1.5 的兩份原始 JSON 與同次完整行情。不能替代獨立重算原始 14 筆交易、判定 9/9 真正完整呼叫根因、重現原始 64 日 PARTIAL 的全部原因，也不能用程式策略代理冒充原始 AI 策略重跑。
 
 2026/07/22–10/22 已用於診斷；既有十檔公開日線面板也已研究，不稱為新 OOS。正在補取官方 2023–2024 橫斷面；歷史證券主檔、零股簿、排隊、公司行動調整與 OTC 仍有限制。沒有使用者正式交易授權，沒有真實下單。既有使用者電腦上的舊程式不在本工作階段控制範圍，不能宣稱已遠端關閉。
+
+## 後續故障重現與修正
+
+- CI 39831405709：Linux／Windows 單元檢查通過，但 `npm run demo` 失敗。固定合成 200 股於當輪較高價格超過既有單筆本金上限；改依原限額決定合成參考股數，增加 `cli-demo.test.ts`，實際部分成交驗證通過。未降低費用、報酬風險要求或交易限制。
+- CI 39832395725：Linux 全流程通過，Windows 439/439 測試通過；來源 GUI 在即時模擬現金一致性檢查失敗。根因為畫面及系統匣仍各自使用舊保留公式，部分成交重扣最低費。新增無 Node 依賴的精確 BigInt 十進位 `buy-reservation.ts`，引擎及兩個畫面共用；不以刪除 GUI 現金斷言處理。新增 tick／費用 rounding／多筆掛單核對。
+- 2023/08/03 年度表沒有涵蓋卡努颱風停市。取得交易所 2023/08/02 新聞稿，確認市場休市及交割順延：<https://investoredu.twse.com.tw/FileSystem/FileUpload/be0109d1-76a0-4412-a00d-58a88c6e1714.pdf>，SHA256 `13e991f1b4b97c7e9e1e6b39b5a20b0fa5134f82b3de8fd7393baa54f0c9f126`。以該日午夜作保守可見邊界，不讓 8/2 盤中偷知未公開的例外；新增行事曆刷新與 T+2 投影回歸。不是只憑沒有 K 線就改休市。
+- 公司行動／價格不連續旗標下的隔夜庫存未提供股利、權益或股數調整事件。即使後續價格恢復新鮮，損益仍可能錯誤。新增逐日開盤前庫存診斷，標記 `UNRESOLVED_CORPORATE_ACTION`／PARTIAL，保留所有原始成交；不創造股利、分割比例或更動價格。此診斷只影響完整性判定，不作交易決策資訊。無旗標的未知公司行動仍屬資料供應限制。
+- 失敗 CSV 及畫面列出估值／公司行動／缺交易日／診斷截斷／中止的時點、階段、錯誤碼。實際 Windows GUI 另核對八階段數字、交易歸因筆數及三張圖與同份報表一致。
+
+### 研究旗標的實際作用
+
+| 設定 | 關閉的作用 | 不會關閉的必要檢查 |
+|---|---|---|
+| portfolio_risk_enabled=false | 不以研究用高點回撤、股票池市場代理及連敗縮減新增配置 | 現金、單筆、單檔、總曝險、單日、1% 風險與成本 |
+| entry_quality_enabled=false | 不用研究評分重排候選 | 資料、候選資格、條件、合法限價、淨收益與風險核對 |
+| dynamic_allocation=false | 不額外依目標曝險缺口重新縮減配置 | 原定本金及股數上限；不強制把 50% 軟目標填滿 |
+| research_cost_aware=false | 不額外要求淨目標收益至少為預估費稅兩倍 | 雙邊成本後正收益、有效停損／目標、設定的淨 RR 與 1% 風險 |
+
+### 主要回歸對應
+
+| 項目 | 測試 |
+|---|---|
+| 9/9、7/22、明示時區、錯誤碼與原策略保存 | strategy-admission.test.ts、plan-lifecycle.test.ts |
+| 費用、現金、部分成交保留、風控零設定 | cost-reservation.test.ts、buy-reservation.test.ts、capital-policy.test.ts |
+| 原始 FIFO 與執行歸因 | trade-attribution.test.ts、backtest-audit.test.ts |
+| 唯一八階段與完整觀測歷史 | entry-funnel.test.ts、watch-journal.test.ts |
+| 不使用未來決策、原始回覆不可修補 | frozen-decisions.test.ts、replay-pipeline.test.ts |
+| 公司行動、估值及不完整錯誤碼 | corporate-action.test.ts、strategy-admission.test.ts、backtest-export.test.ts |
+| 休市可見性及 T+2 | calendar-evidence.test.ts、v023-optimization.test.ts |
+| 正式交易停用、撤單、重啟不授權 | live-session.test.ts、startup-recovery.test.ts |
+| 畫面與 12 匯出 | backtest-export.test.ts、backtest-series.test.ts、Windows source/packaged smokeTest |

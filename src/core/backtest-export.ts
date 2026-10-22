@@ -13,6 +13,7 @@ export interface BacktestDiagnostics {
   evaluation:{status:'ACCOUNTING_ERROR'|'FLOW_TEST'|'INCOMPLETE'|'NOT_PROFITABLE'|'INSUFFICIENT_SAMPLE'|'VALIDATION_REQUIRED';message:string};
   coverage:{observed_sessions:number;valid_plan_sessions:number;buy_allowed_sessions:number;no_valid_plan_days:string[]};
   findings:{code:string;message:string}[];
+  completeness:{at:string;stage:string;code:string;issue:string}[];
 }
 /** Describes observed results only; never tunes parameters or extends an expired plan. */
 export function backtestDiagnostics(r:BacktestReport):BacktestDiagnostics {
@@ -58,7 +59,15 @@ export function backtestDiagnostics(r:BacktestReport):BacktestDiagnostics {
   if(gaps.length)findings.push({code:'PLAN_COVERAGE_GAP',message:`${days.length} 個已觀測交易日中，${gaps.length} 日盤中沒有有效策略；舊版限時策略或尚未啟用首輪策略可能留下空窗。新版持續策略直到下一輪成功接替。此處僅統計策略覆蓋，不代表缺少行情或一定錯失獲利；既有持倉保護仍持續。`});
   if(r.settings.portfolio_risk_enabled===false)findings.push({code:'PORTFOLIO_GATE_OFF',message:'組合研究風控未啟用；平倉統計仍須顯示，不能把 scale=1 解讀為風險檢查已通過。'});
   if(r.quality.execution_model==='APPROXIMATE')findings.push({code:'APPROXIMATE_FILLS',message:`成交模型為近似（${r.request.fill_assumption??'legacy'}），尚非真實零股排隊與成交證據。`});
-  return {version:1,trades,audit,attribution,evaluation,coverage:{observed_sessions:days.length,valid_plan_sessions:valid,buy_allowed_sessions:buyAllowed,no_valid_plan_days:gaps},findings};
+  const completeness=(r.failures??[]).map(f=>({at:f.at,stage:f.stage,code:f.diagnostic?.code??'UNCLASSIFIED',issue:f.issue}));
+  for(const day of r.quality.missing_sessions)completeness.push({at:day+'T09:00:00+08:00',stage:'DATA',code:'MISSING_SESSION',issue:'交易日缺少行情'});
+  for(const symbol of audit.stale_valuation_symbols)completeness.push({at:r.asof,stage:'VALUATION',code:'STALE_VALUATION',issue:symbol+' 期末估值過期；最後行情 '+(r.quality.last_marks[symbol]??'未提供')});
+  for(const event of r.quality.corporate_action_exposure??[])completeness.push({at:event.at,stage:'CORPORATE_ACTION',code:'UNRESOLVED_CORPORATE_ACTION',issue:`${event.symbol} 隔夜 ${event.opening_shares} 股未完成公司行動權益／股數核對`});
+  if(r.entry_funnel&&!r.entry_funnel.complete)completeness.push({at:r.asof,stage:'DIAGNOSTICS',code:'ENTRY_FUNNEL_TRUNCATED',issue:'未完整保存 '+r.entry_funnel.omitted_signals+' 個唯一訊號'});
+  if(r.quality.halt_reason)completeness.push({at:r.asof,stage:'HALT',code:r.quality.halt_reason,issue:'必要決策未完成，回測提前停止'});
+  if(r.status==='CANCELLED')completeness.push({at:r.asof,stage:'CANCEL',code:'USER_CANCELLED',issue:'使用者主動停止'});
+  if(r.status==='FAILED'&&!completeness.length)completeness.push({at:r.asof,stage:'STRATEGY',code:'NO_VALID_STRATEGY',issue:'沒有有效盤中策略，無法產生可信的策略結果'});
+  return {version:1,trades,audit,attribution,evaluation,completeness,coverage:{observed_sessions:days.length,valid_plan_sessions:valid,buy_allowed_sessions:buyAllowed,no_valid_plan_days:gaps},findings};
 }
 // Protect free-text CSV cells from spreadsheet formulas while retaining negative numeric amounts.
 export function csvCell(value:unknown):string {
@@ -81,7 +90,7 @@ export function diagnosticMarkdown(r:BacktestReport):string {
       ['期末庫存估計賣出費稅',diag.audit.estimated_remaining_exit_costs],['再扣期末估計賣出費稅後淨損益',diag.audit.net_pnl_after_estimated_exit_costs],
     ]),'## 績效檢核',diag.evaluation.message,
     '## 獨立帳務稽核',table(['檢查','結果','說明'],diag.audit.checks.map(c=>[c.code,c.passed?'通過':'未通過',c.message])),
-    '## 策略失敗',table(['日期 UTC','階段','錯誤碼','原因'],(r.failures??[]).map(f=>[f.at,f.stage,f.diagnostic?.code??'UNCLASSIFIED',f.issue])),
+    '## 不完整原因',table(['時點（明示時區）','階段','錯誤碼','原因'],diag.completeness.map(f=>[f.at,f.stage,f.code,f.issue])),
     '## 診斷',...diag.findings.map(f=>`- ${f.code}：${f.message}`),
     ...(diag.coverage.no_valid_plan_days.length?['無有效策略日期：'+diag.coverage.no_valid_plan_days.join('、')]:[]),
     '## 完整交易明細（含成本，未平倉不計入勝率）',table(['股票','進場 UTC','出場 UTC','持有小時','淨損益','出場原因'],t.episodes.map(e=>[e.symbol,e.entry_at,e.exit_at,e.holding_hours.toFixed(2),e.pnl,e.exit_reason])),
@@ -122,8 +131,7 @@ export function backtestExport(r:BacktestReport,format:BacktestExportFormat):{ex
   }
   if(format==='failures'){
     return {extension:'csv',label:'策略失敗與缺資料',content:csv(['at','review','stage','code','issue'],[
-      ...(r.failures??[]).map(f=>[f.at,f.review,f.stage,f.diagnostic?.code??'UNCLASSIFIED',f.issue]),
-      ...r.quality.missing_sessions.map(day=>[day,false,'DATA','MISSING_SESSION','交易日缺少行情']),
+      ...backtestDiagnostics(r).completeness.map(f=>[f.at,(r.failures??[]).find(e=>e.at===f.at&&e.stage===f.stage)?.review??false,f.stage,f.code,f.issue]),
     ])};
   }
   if(format!=='csv')throw new Error('回測匯出格式不合法');
