@@ -121,3 +121,29 @@ test('stale held-stock valuation makes a fully processed replay PARTIAL even if 
   assert.ok(r.diagnostics!.audit.stale_valuation_symbols.includes('9001'));
   assert.ok(r.limitations.some(l=>l.includes('STALE_VALUATION')));
 });
+
+test('failed durable activation cannot cancel the previous strategy pending order',async()=>{
+  const r=await rig();try{
+    r.market.marketPrice='30.1';await r.engine.tick(now);
+    const before=structuredClone(r.store.orders()),old=structuredClone(r.engine.plan!),protections=structuredClone(r.store.protections());
+    const input=await r.engine.snapshot(now),save=r.store.activatePlan.bind(r.store);
+    r.store.activatePlan=()=>{throw new Error('injected persistence failure');};
+    try{
+      await assert.rejects(r.engine.activate({...old.analysis,snapshot_id:input.snapshot_id},input,now),/persistence failure/);
+    }finally{r.store.activatePlan=save;}
+    assert.deepEqual(r.store.orders(),before);assert.deepEqual(r.engine.plan,old);
+    assert.deepEqual(r.store.plan(),old);assert.deepEqual(r.store.protections(),protections);
+  }finally{await r.engine.close();r.store.close();}
+});
+test('post-commit subscription failure reports the actual saved plan and blocks new entries',async()=>{
+  const r=await rig();try{
+    const input=await r.engine.snapshot(now),oldId=r.engine.plan!.id,protections=structuredClone(r.store.protections());
+    r.engine.refreshWatch=async()=>{throw new Error('injected subscription failure');};
+    const issue=await r.engine.activate({...r.engine.plan!.analysis,snapshot_id:input.snapshot_id,stance:'HOLD_ONLY',
+      candidates:[],decisions:[],screening:null},input,now);
+    assert.match(String(issue),/ACTIVATION_CLEANUP_FAILED/);
+    assert.notEqual(r.engine.plan!.id,oldId);assert.equal(r.store.plan()!.id,r.engine.plan!.id);
+    assert.equal(r.engine.entryBlocked,true);assert.equal(r.engine.account!.complete,false);
+    assert.equal(r.engine.watch.healthy,false);assert.deepEqual(r.store.protections(),protections);
+  }finally{await r.engine.close();r.store.close();}
+});

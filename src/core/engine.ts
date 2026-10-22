@@ -285,7 +285,7 @@ export class Engine {
     const bundle = await this.collectBundle(now); await this.reconcile(now); await this.refreshAccount(now);
     return this.snapshotFromBundle(bundle,now,review);
   }
-  async activate(analysis: Analysis, snapshot: Snapshot, now: Date): Promise<void> {
+  async activate(analysis: Analysis, snapshot: Snapshot, now: Date): Promise<void|string> {
     const plan = validateAnalysis(analysis,snapshot,now,this.settings);
     if(snapshot.review_only) {
       if(analysis.decisions.some(d=>d.smart!==null))this.log('REVIEW_NOTE','盤後 HOLD 附帶的智慧單已轉為說明資料；檢討不更新交易保護');
@@ -296,13 +296,21 @@ export class Engine {
     const existing = new Map(this.store.protections().map(p => [p.symbol,p]));
     const protections = plan.analysis.decisions.filter(d => d.smart !== null)
       .map(d => updateProtection(this.account?.positions.some(p=>p.symbol===d.symbol&&p.shares>0)?existing.get(d.symbol):undefined,d.symbol,d.smart!,plan.id));
-    if (this.canExecute()) for (const order of this.store.orders(true))
-      if (order.purpose === 'ENTRY' && order.plan_id !== plan.id) await this.cancel(order.local_id,now);
+    // The durable plan/protection transaction must succeed before any old entry is cancelled.
     this.store.activatePlan(plan,protections); this.plan = plan; this.entryBlocked = false;
     this.clearExecutions('Codex 已更新條件，舊的數量建議作廢');
     this.decisionStates.clear();
-    await this.refreshWatch({pool:snapshot.universe,features:snapshot.features,metadata:this.metadata},now);
     this.log('PLAN',`啟用 ${plan.id.slice(0,8)}，持續有效直到新策略成功接替；${plan.analysis.screening?.entry?'含自動選股進場規則':'依個股決策執行'}`);
+    try {
+      if (this.canExecute()) for (const order of this.store.orders(true))
+        if (order.purpose === 'ENTRY' && order.plan_id !== plan.id) await this.cancel(order.local_id,now);
+      await this.refreshWatch({pool:snapshot.universe,features:snapshot.features,metadata:this.metadata},now);
+    } catch(error) {
+      // Commit already succeeded: report degradation, never pretend the rejected old plan is still active.
+      this.entryBlocked=true;this.dataUnavailable(error,now);this.watchFailed();
+      const issue='策略已保存 [ACTIVATION_CLEANUP_FAILED]：委託或行情監測核對失敗；新買進停止，持倉保護保留';
+      this.log('ACTIVATION_CLEANUP',issue);return issue;
+    }
   }
   private observeEntries(now:Date):void {
     if(!planActive(this.plan,now))return;

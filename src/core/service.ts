@@ -238,8 +238,9 @@ export class TradingService {
         signal.throwIfAborted();
         analysis = await this.analyst.analyze(snapshot,signal);
       }
-      await this.enqueue(async () => { signal.throwIfAborted();await this.engine.activate(analysis,snapshot,this.now());this.clearCodexFailure(); });
-      this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
+      const activationIssue=await this.enqueue(async () => { signal.throwIfAborted();
+        const issue=await this.engine.activate(analysis,snapshot,this.now());this.clearCodexFailure();return issue; });
+      this.analysisStatus=activationIssue||(review?'盤後檢討已保存':'策略已啟用，程式持續監測');
     } catch (error) {
       const issue=signal.aborted?'Codex 分析已停止':error instanceof StrategyValidationError?error.message:error instanceof CodexError?codexIssue(error):
         error instanceof BrokerError?brokerIssue(error):error instanceof Error&&/^(帳戶快照|Codex 使用|Codex 決策|計畫有效|候選|買進標的|盤後檢討|策略|行情|歷史|觀測)/.test(error.message)?error.message:'策略資料或分析結果尚未通過核對';
