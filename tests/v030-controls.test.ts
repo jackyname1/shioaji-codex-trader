@@ -29,13 +29,13 @@ test('confirmed trend cannot buy below MA5, falling long trend or missing inputs
   assert.ok(confirmationIssues('breakout',{...features,volume_ratio20:1.1},quote()).length);
   assert.equal(breadthState({'9001':features}),'UNKNOWN');
 });
-test('strict admission independently caps cooldown, additions, limit-down stops, unknown correlated sectors and pending risk',()=>{
+test('strict admission independently caps cooldown, additions, invalid stops, unknown correlated sectors and pending risk',()=>{
   const store=new Store(':memory:'),calendar=new TradingCalendar(store,true),s=SettingsSchema.parse({...settings(),entry_policy:'trend'});
   const f=Object.fromEntries(['9001','9002','9003','9004','9005'].map(k=>[k,features]));
   const check=(a=account(),spec={stop_price:'29',take_profit:'33',trailing_activate:null,trailing_fraction:null},lastSell?:string)=>admissionIssues(order(),a,s,spec,{9001:instrument()},f,quote(),undefined,calendar,now,lastSell,{'9002':'28'});
   try{
     assert.deepEqual(check(),[]);
-    assert.match(check(account(),{stop_price:'0',take_profit:'33',trailing_activate:null,trailing_fraction:null}).join(),/跌停/);
+    assert.match(check(account(),{stop_price:'0',take_profit:'33',trailing_activate:null,trailing_fraction:null}).join(),/有效進場停損/);
     assert.match(check(account(),undefined,'2026-10-07T02:00:00Z').join(),/冷卻/);
     const held={symbol:'9001',shares:1,sellable:1,average_price:'31',last_price:'30'};
     assert.match(check({...account(),positions:[held]}).join(),/禁止同股加碼/);

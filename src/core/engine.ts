@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {portfolioDecision,type PortfolioState,type PortfolioDecision} from './portfolio-risk.js';
-import {admissionIssues,confirmationIssues,breadthState} from './entry-policy.js';
+import {admissionIssues,confirmationIssues,breadthState,entryProtectionIssues} from './entry-policy.js';
 import {candidateScore} from './entry-quality.js';
 import {Decimal} from 'decimal.js';
 import {authorizedRisk} from './risk-policy.js';
@@ -441,8 +441,7 @@ export class Engine {
     if(this.settings.codex_enabled&&order.action==='BUY'){
       // Reject already-known invalid signals before paying for a quantity turn; final admission still reruns after refresh.
       const issues=confirmationIssues(this.settings.entry_policy,this.watchFeatures[order.symbol],this.quotes.get(`${order.symbol}:${order.lot==='ODD'}`),condition);
-      const instrument=this.metadata[order.symbol];
-      if(smart&&instrument&&d(smart.stop_price).lte(instrument.limit_down))issues.push('停損不得位於或低於跌停價，不能視為可成交的保護');
+      issues.push(...entryProtectionIssues(order.limit_price,smart));
       if(this.settings.entry_policy!=='legacy'){
         if(breadthState(this.watchFeatures)!=='NORMAL')issues.push('股票池廣度風險偏高或資料不足');
         if(this.account?.positions.some(p=>p.symbol===order.symbol&&p.shares>0))issues.push('確認策略禁止同股加碼');
