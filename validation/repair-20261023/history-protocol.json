@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "frozen_at": "2026-10-22T18:28:29.763151+00:00",
+  "dataset": "private/repair-validation/twse-2023-2024.json.gz",
+  "source": "Official dated TWSE ALLBUT0999; prior-session top40 turnover",
+  "initial_cash": "100000",
+  "folds": [
+    {
+      "label": "2023_Q2",
+      "start": "2023-04-01",
+      "end": "2023-06-30"
+    },
+    {
+      "label": "2023_H2",
+      "start": "2023-07-01",
+      "end": "2023-12-31"
+    },
+    {
+      "label": "2024_H1",
+      "start": "2024-01-01",
+      "end": "2024-06-30"
+    },
+    {
+      "label": "2024_H2",
+      "start": "2024-07-01",
+      "end": "2024-12-31"
+    }
+  ],
+  "arms": [
+    {
+      "name": "bug_fixes_only"
+    },
+    {
+      "name": "exit_atr",
+      "research": {
+        "exit_mode": "atr_trail"
+      }
+    },
+    {
+      "name": "combined_candidate",
+      "settings": {
+        "entry_policy": "trend"
+      },
+      "research": {
+        "portfolio": true,
+        "cost_aware": true,
+        "exit_mode": "atr_trail"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "fill_assumption": "optimistic",
+      "execution_slippage_bps": 0
+    },
+    {
+      "fill_assumption": "neutral",
+      "execution_slippage_bps": 10
+    },
+    {
+      "fill_assumption": "conservative",
+      "execution_slippage_bps": 30
+    }
+  ],
+  "sensitivity": {
+    "fold": "2024_H2",
+    "arm": "bug_fixes_only",
+    "scenario": "neutral",
+    "settings": [
+      {
+        "min_entry_reward_risk": "1.5"
+      },
+      {
+        "min_entry_reward_risk": "1.8"
+      },
+      {
+        "max_trade_risk_fraction": "0.008"
+      },
+      {
+        "watch_remove_after_scans": 6
+      }
+    ]
+  },
+  "limitations": [
+    "No training or parameter fitting. Chronological rolling evaluation of frozen candidates; not trained walk-forward optimization.",
+    "Although these prices were newly retrieved and had not been inspected for performance, hypotheses were informed by 2026 data. Earlier historical periods are robustness checks, not pristine forward OOS.",
+    "All source rows and prior-session universes retained; memory subsets are exact unions of dated members plus preceding 150 completed daily bars for each potential member. No performance-based symbol exclusion.",
+    "TWSE only; four-digit IDs are a proxy, not fully verified historical security master. Unadjusted corporate actions and unknown odd-lot queues preclude live qualification.",
+    "Conservative daily fills have no inferred intraday liquidity. Zero trades is not positive expectancy.",
+    "Persist every error/result. Do not select a strategy, tune parameters after results, or enable live trading."
+  ]
+}

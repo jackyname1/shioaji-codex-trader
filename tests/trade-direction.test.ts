@@ -64,7 +64,7 @@ test('changing to reduce-only invalidates an in-flight quantity answer and block
 });
 test('reduce-only cancels a local resting entry and retains the confirmed cancellation record',async()=>{
   const r=await rig();try{
-    const order=r.engine.newOrder('9001','BUY',5,'29.5','ODD',now,r.engine.plan!.id,'ENTRY');
+    const order=r.engine.newOrder('9001','BUY',10,'29.5','ODD',now,r.engine.plan!.id,'ENTRY');
     assert.equal(await r.engine.submit(order,now,r.engine.plan!.analysis.decisions[0]!.smart!),true);
     assert.equal(r.store.orders(true).length,1);
     r.engine.setSettings({...r.engine.settings,trade_direction:'reduce_only'});

@@ -32,6 +32,9 @@ jobs:
         if: runner.os != 'Windows'
       - run: npm run test:windows
         if: runner.os == 'Windows'
+      - name: Independent accounting regression on previously studied public data
+        if: runner.os == 'Linux'
+        run: node scripts/check-backtest-accounting.mjs
       - name: Windows Authenticode report verification
         if: runner.os == 'Windows'
         shell: powershell

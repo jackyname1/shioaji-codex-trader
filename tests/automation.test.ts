@@ -98,6 +98,7 @@ test('screening cannot exceed the local allocation or liquidity floors and revie
 test('automatic rule entry protects a newly discovered stock, submits once per strategy and survives reload',async()=>{
   const r=await rig();try{const b=await r.engine.collectBundle(now);const snap=r.engine.snapshotFromBundle(b,now),p=plan();
     p.analysis.snapshot_id=snap.snapshot_id;p.analysis.candidates=snap.universe.map(c=>c.symbol);
+    p.analysis.screening!.entry!.take_profit_fraction='0.15'; // Cost-viable synthetic flow fixture.
     p.analysis.screening!.min_amount='20000000';for(const f of Object.values(snap.features)){f.daily_amount='50000000';f.ma5=f.ma20=30;f.resistance20=31;f.return20=0;}
     await r.engine.activate(p.analysis,snap,now);await r.engine.tick(now);await r.engine.tick(new Date(now.getTime()+3000));
     const buys=r.store.orders().filter(o=>o.symbol==='9001'&&o.action==='BUY');assert.equal(buys.length,1);assert.ok(buys[0]!.filled>0);

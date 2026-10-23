@@ -1,3 +1,4 @@
+import {StrategyValidationError,mayRetainStrategy} from './strategy-admission.js';
 import {planActive} from './plan-lifecycle.js';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -24,7 +25,6 @@ export class TradingService {
   readonly engine: Engine;
   readonly liveSession = new LiveSession();
   private liveEpoch = 0;
-  private automaticLive:boolean;
   readonly persistenceIssue:string;
   private queue: Promise<unknown> = Promise.resolve();
   private timer?: NodeJS.Timeout;
@@ -43,7 +43,6 @@ export class TradingService {
   private bundleTask?:Promise<Bundle>;
   private lastWatchAttempt=0;
   private lastConnectAttempt=0;
-  private lastLiveReadyAttempt=0;
   lastMonitorAt='';
   analysisStatus='等待策略排程';
   analystEvents:AnalystEvent[]=[];
@@ -56,7 +55,6 @@ export class TradingService {
     options:{automaticLive?:boolean;now?:()=>Date;executionAdvisor?:(request:ExecutionRequest,signal:AbortSignal)=>Promise<ExecutionAdvice>;settings?:Settings;persistenceIssue?:string}={}) {
     this.now=options.now??(()=>new Date());this.executionAdvisor=options.executionAdvisor;
     this.persistenceIssue=options.persistenceIssue??'';
-    this.automaticLive=!this.persistenceIssue&&(options.automaticLive??false);
     this.store = new Store(path);
     try {
     const stored = options.settings??this.store.settings(), settings = SettingsSchema.parse({...stored,...(mode ? {mode} : {}),auto_execute:false});
@@ -83,7 +81,6 @@ export class TradingService {
     this.lastConnectAttempt=Date.now();
     try { await this.enqueue(() => this.engine.start(this.now())); }
     catch(error) { this.engine.dataUnavailable(error,this.now()); if(!runTimer)throw error; }
-    await this.syncLiveSession();
     if(runTimer){void this.refreshObservations().catch(()=>undefined);void this.ensureCalendar();}
     if (runTimer) this.timer = setInterval(() => {
       if (this.tickPending || this.stopping) return;
@@ -100,7 +97,7 @@ export class TradingService {
         if(!this.calendarTask)void this.ensureCalendar();
         if(this.engine.settings.auto_watchlist&&!this.watchTask&&this.calendar.inSession(this.now(),'COMMON')
           &&Date.now()-this.lastWatchAttempt>=this.engine.settings.watch_refresh_minutes*60000)void this.refreshObservations().catch(()=>undefined);
-      }).then(()=>{void this.processExecutions().catch(()=>undefined);return this.syncLiveSession();}).finally(() => { this.tickPending = false; }).catch(() => undefined);
+      }).then(()=>{void this.processExecutions().catch(()=>undefined);}).finally(() => { this.tickPending = false; }).catch(() => undefined);
     },1000);
   }
   private schedule(now: Date): void {
@@ -237,22 +234,24 @@ export class TradingService {
         signal.throwIfAborted();
         analysis = await this.analyst.analyze(snapshot,signal);
       }
-      await this.enqueue(async () => { signal.throwIfAborted();await this.engine.activate(analysis,snapshot,this.now());this.clearCodexFailure(); });
-      this.analysisStatus=review?'盤後檢討已保存':'策略已啟用，程式持續監測';
+      const activationIssue=await this.enqueue(async () => { signal.throwIfAborted();
+        const issue=await this.engine.activate(analysis,snapshot,this.now());this.clearCodexFailure();return issue; });
+      this.analysisStatus=activationIssue||(review?'盤後檢討已保存':'策略已啟用，程式持續監測');
     } catch (error) {
-      const issue=signal.aborted?'Codex 分析已停止':error instanceof CodexError?codexIssue(error):
+      const issue=signal.aborted?'Codex 分析已停止':error instanceof StrategyValidationError?error.message:error instanceof CodexError?codexIssue(error):
         error instanceof BrokerError?brokerIssue(error):error instanceof Error&&/^(帳戶快照|Codex 使用|Codex 決策|計畫有效|候選|買進標的|盤後檢討|策略|行情|歷史|觀測)/.test(error.message)?error.message:'策略資料或分析結果尚未通過核對';
       this.analysisStatus=issue;
       if(!this.analystEvents.some(e=>e.stage==='FAILED'&&Date.parse(e.at)>=this.now().getTime()-2000))this.analystEvent({id:randomUUID(),at:this.now().toISOString(),asof:this.now().toISOString(),stage:'FAILED',message:issue,model:this.analyst?.selection?.model||s.codex_model||'Codex 預設模型',reasoning:s.codex_reasoning,purpose:'STRATEGY'});
       if (!this.stopping) await this.enqueue(async () => {
         this.blockCodexFailure(error);
-        if(!review)this.engine.entryBlocked = true;
+        const retained=mayRetainStrategy(this.engine.plan,error,this.now());
+        if(!review&&!retained)this.engine.entryBlocked = true;
         this.store.recordExperience({id:'analysis-failure:'+randomUUID(),at:this.now().toISOString(),mode:this.engine.settings.mode,
           kind:'ANALYSIS_FAILURE',symbol:'',action:'NONE',shares:0,price:null,fee:null,tax:null,realized_pnl:null,
           note:'分析逾時、資料不足或 schema／快照核對失敗；未採用該輪結果'});
-        this.engine.log('ANALYSIS_FAIL',issue+'；停止新買進，既有保護條件保留，委託仍需數量確認');
-        // A failed analysis must also cancel owned outstanding entry orders when execution is enabled.
-        if (!review&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,this.now());
+        this.engine.log('ANALYSIS_FAIL',issue+(retained?'；上一份已驗證策略繼續運作，未採用本輪訊號':'；停止新買進')+'；既有保護條件保留，委託仍需數量確認');
+        // Preserve validated entries on proposal rejection; data/broker/runtime failures still cancel.
+        if (!review&&!retained&&this.engine.canExecute()) for (const o of this.store.orders(true)) if (o.purpose === 'ENTRY') await this.engine.cancel(o.local_id,this.now());
       });
       throw new Error('本輪決策未啟用：'+issue);
     }
@@ -352,7 +351,7 @@ export class TradingService {
   }
   get liveAuthorized(): boolean { return this.liveSession.authorized(this.store.get('account_fingerprint')); }
   get liveCancelAuthorized(): boolean { return this.liveSession.authorized(this.store.get('account_fingerprint'),'cancel'); }
-  liveReadiness(now = this.now()): LiveReadiness {
+  liveReadiness(now = this.now(),scope:'trade'|'cancel'='trade'): LiveReadiness {
     const s=this.engine.settings,broker=this.broker instanceof ShioajiHttpBroker?this.broker.liveStatus():{account:'尚未連接實盤帳戶',issues:['請切換至實盤模式']};
     const issues=[...broker.issues,...(this.persistenceIssue?[this.persistenceIssue]:[])];
     if(!this.engine.connected)issues.push('請先連接 Shioaji');
@@ -360,39 +359,35 @@ export class TradingService {
     if(!a?.complete)issues.push(a?.issue||'帳戶快照尚未完整');
     else if(!(ageSeconds(now,a.asof)>=0&&ageSeconds(now,a.asof)<=s.account_max_age))issues.push('帳戶快照已過期，請重新核對');
     if(a?.orders.some(o=>['UNKNOWN','PREPARED','SUBMITTING','CANCEL_PENDING'].includes(o.status)))issues.push('仍有待核對委託');
+    // This release has no independently qualified strategy or shadow-trading evidence.
+    // Deliberately no persisted checkbox/environment switch can certify that evidence.
+    // Cancel-only access still permits removal of already resting broker orders.
+    if(scope==='trade')issues.push('LIVE_VALIDATION_PENDING：尚未通過獨立樣本外正期望值、成交穩健性、足量樣本與 Shadow Trading 驗證，正式下單停用');
     return {authorized:this.liveAuthorized,ready:!issues.length,account:broker.account,issues:[...new Set(issues)]};
   }
-  async prepareLive(): Promise<LiveReadiness> {
+  async prepareLive(scope:'trade'|'cancel'='trade'): Promise<LiveReadiness> {
     return this.enqueue(async()=>{
       if(this.persistenceIssue)throw new BrokerError(this.persistenceIssue);
       if(!(this.broker instanceof ShioajiHttpBroker)||this.engine.settings.mode!=='live'||!this.engine.connected)
         throw new Error('請先連接實盤帳戶');
       await this.broker.verifyLiveConnection();const now=this.now();
       await this.engine.reconcile(now,true);await this.engine.refreshAccount(now);
-      const state=this.liveReadiness();if(!state.ready)throw new BrokerError('實盤尚未就緒：'+state.issues.join('；'),true);
+      const state=this.liveReadiness(this.now(),scope);if(!state.ready)throw new BrokerError('實盤尚未就緒：'+state.issues.join('；'),true);
       return state;
     });
   }
   async activateLive(scope:'trade'|'cancel'='trade'): Promise<void> {
     const epoch=this.liveEpoch;
-    await this.prepareLive();
+    await this.prepareLive(scope);
     await this.enqueue(()=>{
       if(epoch!==this.liveEpoch)throw new Error('實盤啟動已停止');
-      const state=this.liveReadiness();if(!state.ready)throw new BrokerError('實盤尚未就緒：'+state.issues.join('；'),true);
+      const state=this.liveReadiness(this.now(),scope);if(!state.ready)throw new BrokerError('實盤尚未就緒：'+state.issues.join('；'),true);
       this.liveSession.grant(this.store.get<string>('account_fingerprint')??'',scope);
       this.engine.log('LIVE_CONSENT',`${scope==='trade'?'本次實盤':'本次撤單'}授權已開啟；重新連線、重啟、鎖定或變更交易風控後失效`);
     });
   }
-  private async syncLiveSession():Promise<void>{
-    // Desktop live-mode selection is the user's intent. Establish readiness independently of Codex/automation.
-    // Never restore a running strategy or undo an explicit stop/lock; grants remain account-bound and in memory.
-    if(!this.automaticLive||this.stopping||this.liveAuthorized||this.engine.killed||!this.liveReadiness().ready||Date.now()-this.lastLiveReadyAttempt<5000)return;
-    this.lastLiveReadyAttempt=Date.now();
-    try {await this.activateLive();}
-    catch(error){if(!this.stopping)this.engine.logOnce('LIVE_READY',brokerIssue(error));}
-  }
   private lockLive(): void {
-    this.automaticLive=false;this.liveEpoch++;this.liveSession.revoke();this.engine.setSettings({...this.engine.settings,auto_execute:false});
+    this.liveEpoch++;this.liveSession.revoke();this.engine.setSettings({...this.engine.settings,auto_execute:false});
     this.engine.log('LIVE_LOCK','實盤授權已關閉；不影響券商既有掛單');
   }
   close(): Promise<void> {

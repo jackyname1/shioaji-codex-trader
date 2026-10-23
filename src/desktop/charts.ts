@@ -74,19 +74,19 @@ export function candles(host: HTMLElement, data: ChartData, options: ChartOption
   });
   svg.addEventListener('pointerleave', () => {for(const line of [cursor,horizontal,priceLabel])line.setAttribute('visibility','hidden');}); host.replaceChildren(svg);
 }
-export function equityChart(host: HTMLElement, rows: { at: string; equity: string }[], initial: number): void {
-  if (!rows.length) { host.textContent = '模擬執行後會顯示資產曲線'; return; }
+export function equityChart(host: HTMLElement, rows: { at: string; equity: string }[], initial: number, options:{label?:string;format?:(value:number)=>string;color?:string}={}): void {
+  if (!rows.length) { host.textContent = '尚無可繪製資料'; return; }
   const width=Math.max(300,host.clientWidth||1000),height=Math.max(48,host.clientHeight||190),right=width-65,bottom=height-15;
   const stride=Math.max(1,Math.ceil(rows.length/1000)),display=rows.filter((_,i)=>i%stride===0||i===rows.length-1);
   const values=[initial,...display.map(r=>Number(r.equity))];let min=initial,max=initial;
   for(const value of values){min=Math.min(min,value);max=Math.max(max,value);}
-  const pad=Math.max((max-min)*.15,initial*.002),lo=min-pad,hi=max+pad;
+  const pad=Math.max((max-min)*.15,Math.abs(initial)*.002,.01),lo=min-pad,hi=max+pad;
   const y=(v:number):number=>bottom-(v-lo)/(hi-lo)*(bottom-7),x=(i:number):number=>8+i/Math.max(1,values.length-1)*(right-8);
-  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio:'none', role: 'img', 'aria-label': '模擬資產與初始本金比較' });
+  const svg = node('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio:'none', role: 'img', 'aria-label': options.label??'模擬資產與初始本金比較' });
   for (let i = 0; i <= 3; i++) { const v = lo + (hi - lo) * i / 3; svg.append(node('line', { x1: 8, x2: right, y1: y(v), y2: y(v), stroke: 'var(--chart-grid)' }),
-    node('text', { x: right+7, y: y(v) + 3, fill: 'var(--muted)', 'font-size': 10 }, Math.round(v).toLocaleString())); }
+    node('text', { x: right+7, y: y(v) + 3, fill: 'var(--muted)', 'font-size': 10 }, options.format?options.format(v):Math.round(v).toLocaleString())); }
   svg.append(node('line', { x1: 8, x2: right, y1: y(initial), y2: y(initial), stroke: 'var(--muted)', 'stroke-dasharray': '5 5' }));
-  const line = values.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' '), color = values.at(-1)! >= initial ? 'var(--down)' : 'var(--up)';
+  const line = values.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' '), color = options.color??(values.at(-1)! >= initial ? 'var(--down)' : 'var(--up)');
   svg.append(node('path', { d: line + ` L${right},${bottom} L8,${bottom} Z`, fill: color, opacity: .07 }), node('path', { d: line, fill: 'none', stroke: color, 'stroke-width': 2.5 }));
   for (const [i, row] of display.entries()) if (i === 0 || i === display.length - 1) svg.append(node('text', { x: x(i + 1), y: height-3, fill: 'var(--muted)', 'font-size': 10, 'text-anchor': i ? 'end' : 'start' },
     new Date(row.at).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' })));

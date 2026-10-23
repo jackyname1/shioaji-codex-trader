@@ -103,8 +103,9 @@ test('v023 a held stock outside the ranked pool may be reviewed; an unknown cand
   assert.doesNotThrow(()=>validateAnalysis(a,input,now,s));assert.throws(()=>validateAnalysis({...a,candidates:['9999']},input,now,s),/資料範圍/);
 });
 test('v023 partial fills count as one completed round trip, with zero-loss profit factor kept explicit',()=>{
-  const fill=(action:'BUY'|'SELL',shares:number,pnl:string|null)=>({id:'x',order_id:'x',at:now.toISOString(),symbol:'9001',action,lot:'ODD' as const,purpose:'ENTRY' as const,shares,price:'100',amount:'100',fee:'20',tax:'0',realized_pnl:pnl});
-  const stats=tradeStatistics([fill('BUY',10,null),fill('SELL',4,'20'),fill('SELL',6,'30')]);
+  let sequence=0;
+  const fill=(action:'BUY'|'SELL',shares:number,pnl:string|null)=>({id:String(sequence++),order_id:String(sequence),at:now.toISOString(),symbol:'9001',action,lot:'ODD' as const,purpose:'ENTRY' as const,shares,price:action==='BUY'?'100':'111',amount:String(shares*(action==='BUY'?100:111)),fee:'20',tax:'0',realized_pnl:pnl});
+  const stats=tradeStatistics([fill('BUY',10,null),fill('SELL',4,'16'),fill('SELL',6,'34')]);
   assert.equal(stats.closed_trades,1);assert.equal(stats.win_rate_pct,'100.0000');assert.equal(stats.profit_factor,null);assert.equal(stats.profit_factor_unbounded,true);
   assert.equal(tradeStatistics([fill('BUY',10,null),fill('SELL',4,'20')]).closed_trades,0);
 });

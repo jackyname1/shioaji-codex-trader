@@ -1,17 +1,12 @@
+import {tradeAttribution} from './trade-attribution.js';
 import {d,type Order} from './models.js';
 import type {SimulatedFill} from '../broker/paper.js';
 
 /** Completed flat-to-flat symbol episodes, grouping partial fills and scale-outs. Open episodes are excluded. */
 export function tradeStatistics(fills:SimulatedFill[],orders:Order[]=[]){
-  const positions=new Map<string,{shares:number;pnl:string;entry_at:string;exits:string[]}>(),closed:string[]=[],episodes:{symbol:string;entry_at:string;exit_at:string;holding_hours:number;pnl:string;exit_reason:string}[]=[];
-  for(const f of fills){
-    const p=positions.get(f.symbol)??{shares:0,pnl:'0',entry_at:f.at,exits:[]};
-    if(f.action==='BUY')p.shares+=f.shares;
-    else {p.exits.push(orders.find(o=>o.local_id===f.order_id)?.exit_trigger??'EXPLICIT');p.shares-=f.shares;p.pnl=d(p.pnl).plus(f.realized_pnl??0).toFixed();
-      if(p.shares<0)throw new Error('績效計算出現負庫存');
-      if(p.shares===0){closed.push(p.pnl);episodes.push({symbol:f.symbol,entry_at:p.entry_at,exit_at:f.at,holding_hours:(Date.parse(f.at)-Date.parse(p.entry_at))/3600000,pnl:p.pnl,exit_reason:new Set(p.exits).size===1?p.exits[0]!:'MIXED'});positions.delete(f.symbol);continue;}}
-    positions.set(f.symbol,p);
-  }
+  const rows=tradeAttribution(fills,orders).closed,closed=rows.map(e=>e.net_pnl),episodes=rows.map(e=>({
+    symbol:e.symbol,entry_at:e.entry_at,exit_at:e.exit_at!,holding_hours:(Date.parse(e.exit_at!)-Date.parse(e.entry_at))/3600000,
+    pnl:e.net_pnl,exit_reason:e.exit_reasons.length===1?e.exit_reasons[0]!:'MIXED'}));
   const wins=closed.map(d).filter(x=>x.gt(0)),losses=closed.map(d).filter(x=>x.lt(0));
   const gains=wins.reduce((a,b)=>a.plus(b),d(0)),loss=losses.reduce((a,b)=>a.minus(b),d(0));
   return {closed_trades:closed.length,winning_trades:wins.length,losing_trades:losses.length,

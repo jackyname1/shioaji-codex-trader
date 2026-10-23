@@ -26,8 +26,8 @@
 | `max_order_fraction` | 單筆上限 · 比率 | `0.10` | 設定頁 |
 | `order_budget_basis` | 單筆計算基準 | `AFTER_RESERVE` | 設定頁 |
 | `target_exposure_fraction` | 目標持倉 · 比率 | `0.50` | 設定頁 |
-| `min_entry_reward_risk` | 扣費報酬風險比門檻 | `0` | 設定頁 |
-| `max_trade_risk_fraction` | 單筆停損風險 · 比率 | `0` | 設定頁 |
+| `min_entry_reward_risk` | 扣費報酬風險比門檻 | `1.2` | 設定頁 |
+| `max_trade_risk_fraction` | 單筆含成本停損風險 · 比率 | `0.01` | 設定頁 |
 | `max_symbol_fraction` | 單檔上限 · 比率 | `0.20` | 設定頁 |
 | `max_exposure_fraction` | 總持倉上限 · 比率 | `0.75` | 設定頁 |
 | `max_daily_buy_fraction` | 每日新增買進上限 · 比率 | `0.20` | 設定頁 |
@@ -115,3 +115,11 @@
 固定停損與移動保護先於一般策略減碼檢查，且獨立於策略替換；舊版限時策略到期後也仍監測。保護賣出不等待第二個模型，仍受自動交易啟停、有效行情、可賣庫存及風控限制。今日新增零股不當日賣出；程式停止全部新委託時，新的保護委託也會停止。
 
 此處「減碼」表示減少已持有股票；Shioaji 的 `update_order(..., qty=...)` 則是減少既有未成交委託數量，兩者用途不同。減碼透過明確的現股 Sell 委託執行，不涉及賣空。[官方股票委託文件](https://sinotrade.github.io/tutor/order/Stock/)
+
+## v0.1.6 必要核對
+
+單筆風險上限最多 1%；舊零設定不能停用，較嚴格正值保留。即使淨 RR 門檻設為零，也不能繞過有效停損、收益目標及扣雙邊成本後正淨收益。`min_net_profit_twd=60` 只是成本效益門檻，不是統計正期望值證據。
+
+`research_cost_aware` 預設 false；回放研究表單可另要求目標淨收益至少為預估費稅兩倍，禁止用於 live／readonly。既有組合、選股品質及動態配置仍預設停用。所有硬資金與交易限制持續生效。
+
+本版正式下單以 `LIVE_VALIDATION_PENDING` 停用，沒有可切換的設定或環境變數能宣告驗證完成。切換模式、連線恢復及重啟均不會授權新交易。

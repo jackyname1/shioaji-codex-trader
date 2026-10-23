@@ -29,6 +29,8 @@ export const QuoteSchema = z.strictObject({
   trade_at: timestamp, book_at: timestamp, odd: z.boolean(), simulated: z.boolean(),
   bid_shares: quantity, ask_shares: quantity,
   book_source:z.enum(['OBSERVED','APPROXIMATE']).optional(),
+  // Historical fill audit only; never a future quote or an input to entry decisions.
+  unadjusted_book:z.strictObject({bid:nonnegative,ask:nonnegative}).optional(),
   bid_levels:z.array(z.strictObject({price:nonnegative,shares:quantity})).max(5).optional(),
   ask_levels:z.array(z.strictObject({price:nonnegative,shares:quantity})).max(5).optional(),
 });
@@ -148,8 +150,8 @@ export const SettingsSchema = z.strictObject({
   min_cash_fraction: fraction.default('0.25'), max_order_fraction: positiveFraction.default('0.10'),
   order_budget_basis:z.enum(['EQUITY','AFTER_RESERVE']).default('AFTER_RESERVE'),
   target_exposure_fraction:fraction.default('0.50'),
-  min_entry_reward_risk:nonnegative.refine(v=>d(v).lte(10)).default('0'),
-  max_trade_risk_fraction:fraction.default('0'),
+  min_entry_reward_risk:nonnegative.refine(v=>d(v).lte(10)).default('1.2'),
+  max_trade_risk_fraction:fraction.default('0.01'),
   max_symbol_fraction: positiveFraction.default('0.20'), max_exposure_fraction: positiveFraction.default('0.75'),
   max_daily_buy_fraction: positiveFraction.default('0.20'), max_daily_buy_orders: quantity.min(1).max(100).default(5),
   daily_loss_fraction: positiveFraction.default('0.02'), price_deviation_fraction: positiveFraction.default('0.03'),
@@ -175,6 +177,7 @@ export const SettingsSchema = z.strictObject({
   entry_quality_enabled:z.boolean().default(false),
   max_portfolio_stop_fraction:fraction.default('0'),
   prompt_compaction:z.boolean().default(false),
+  research_cost_aware:z.boolean().default(false),
   research_exit_mode:z.enum(['baseline','fixed','atr_trail']).default('baseline'),
   allow_attention: z.boolean().default(false), codex_enabled: z.boolean().default(false),
   experience_enabled: z.boolean().default(true), experience_limit: quantity.min(5).max(100).default(40),
@@ -209,7 +212,7 @@ export const SettingsSchema = z.strictObject({
   candidate_pool_size: quantity.min(20).max(100).default(40), demo_cash: positive.default('100000'),
   start_minimized: z.boolean().default(false), keep_awake: z.boolean().default(true),
 }).refine(s => d(s.max_exposure_fraction).plus(s.min_cash_fraction).lte(1), '現金保留加持倉上限不得超過 100%')
-  .refine(s => !['live','readonly'].includes(s.mode)||s.entry_policy==='legacy'&&!s.portfolio_risk_enabled&&!s.entry_quality_enabled&&!s.prompt_compaction&&s.research_exit_mode==='baseline', '研究風險與選股功能僅供回放或模擬')
+  .refine(s => !['live','readonly'].includes(s.mode)||s.entry_policy==='legacy'&&!s.portfolio_risk_enabled&&!s.entry_quality_enabled&&!s.prompt_compaction&&!s.research_cost_aware&&s.research_exit_mode==='baseline', '研究風險與選股功能僅供回放或模擬')
   .refine(s => s.postmarket_time >= '13:40' && s.postmarket_time <= '17:00', '盤後檢討時間須為 13:40–17:00');
 export type Settings = z.infer<typeof SettingsSchema>;
 /** Upgrade persisted 0.1 settings without carrying manual confirmation gates forward. */

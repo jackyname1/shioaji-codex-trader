@@ -4,7 +4,7 @@ import { active, ageSeconds, d, equity, marketValue, remaining, twDay,
 import { TradingCalendar } from './calendar.js';
 import {authorizedRisk} from './risk-policy.js';
 import {orderBudget} from './capital.js';
-import {fee} from './costs.js';
+import {fee,remainingBuyCost} from './costs.js';
 import {lotQuantityIssues,stockInstrumentKind} from './stock-lot.js';
 export {fee} from './costs.js';
 
@@ -68,8 +68,7 @@ export class Risk {
     const e = equity(account);
     if (e.lte(0)) return [...reasons, '淨資產不明或非正數'];
     const buys = others.filter(o => o.action === 'BUY');
-    const reserved = buys.reduce((sum, o) => { const amount = d(o.limit_price).times(remaining(o));
-      return sum.plus(amount).plus(fee(amount, s)); }, d(0));
+    const reserved = buys.reduce((sum,o)=>sum.plus(remainingBuyCost(o,s)),d(0));
     const available = d(account.cash).minus(account.settlement_debits).minus(reserved);
     const amount = d(order.limit_price).times(order.shares), cost = amount.plus(fee(amount, s));
     if (cost.gt(available)) reasons.push('資金不足，已扣除交割款及掛單占用');

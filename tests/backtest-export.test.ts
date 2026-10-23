@@ -49,3 +49,38 @@ test('old reports identify trigger-band rejections and distinguish marked invent
   assert.ok(codes.includes('OPEN_POSITION_MARKS'));assert.ok(codes.includes('LEGACY_TRIGGER_BAND_REJECTION'));
   assert.match(backtestExport(r,'audit').content,/不能直接把遭拒訊號補算為獲利/);
 });
+
+test('order and failure CSV preserve rejected/unfilled orders and specific error and missing-data codes',async()=>{
+  const r=await report();
+  const orders=backtestExport(r,'orders');assert.equal(orders.extension,'csv');
+  assert.match(orders.content,/local_id.*plan_id.*shares.*status/);
+  // Synthetic reasons contain no newline, so each physical row corresponds to one complete order.
+  assert.equal(orders.content.split('\r\n').length,r.orders.length+1);
+  r.failures=[{at:'2026-09-09T01:15:00Z',review:false,stage:'ACTIVATION',issue:'策略驗證失敗',
+    diagnostic:{kind:'OTHER',code:'REPLY_EXPIRED',validation_phase:'SEMANTIC'}}];
+  r.quality.missing_sessions=['2026-09-10'];
+  const failures=backtestExport(r,'failures').content;
+  assert.match(failures,/REPLY_EXPIRED/);assert.match(failures,/MISSING_SESSION/);
+  assert.equal(failures.split('\r\n').length,3);
+  assert.match(backtestExport(r,'audit').content,/REPLY_EXPIRED/);
+});
+
+test('new CSV exports agree with raw unique funnel, strategy and execution attribution records',async()=>{
+ const r=await report();
+ for(const format of ['funnel','rejections','strategies','decisions','attribution'] as const){
+  const output=backtestExport(r,format);assert.equal(output.extension,'csv');assert.ok(output.content.length>0);
+ }
+ assert.ok(r.entry_funnel);assert.match(backtestExport(r,'funnel').content,/signal_id.*stage.*not_required/);
+ assert.match(backtestExport(r,'rejections').content,/signal_id.*code.*samples/);
+ assert.match(backtestExport(r,'strategies').content,/lifecycle/);assert.match(backtestExport(r,'decisions').content,/run_id/);
+ assert.match(backtestExport(r,'attribution').content,/reference_gross_pnl.*spread_cost.*modeled_price_impact/);
+ assert.equal(r.diagnostics!.attribution!.closed.length,r.metrics.trades!.closed_trades);
+ assert.equal(r.diagnostics!.attribution!.reconciled,true);assert.match(r.dataset_sha256!,/^[a-f0-9]{64}$/);
+});
+test('stale final marks expose symbol, cutoff, stage and error code in both UI diagnostics and error CSV',async()=>{
+ const r=await report();r.positions=[{symbol:'9001',shares:1,sellable:1,average_price:'30',last_price:'31'}];
+ r.quality.last_marks['9001']='2026-10-01T01:00:00Z';
+ const diagnostics=backtestDiagnostics(r),issue=diagnostics.completeness.find(f=>f.code==='STALE_VALUATION');
+ assert.ok(issue);assert.equal(issue.at,r.asof);assert.equal(issue.stage,'VALUATION');assert.match(issue.issue,/9001/);
+ assert.match(backtestExport(r,'failures').content,/STALE_VALUATION/);assert.match(backtestExport(r,'audit').content,/不完整原因/);
+});

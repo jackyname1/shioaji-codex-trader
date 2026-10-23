@@ -167,6 +167,7 @@ export class HistoricalMarket implements Broker {
           ask=roundPrice(d(book?p.ask??d(last).plus(tick):d(last).plus(tick)).times(d(1).plus(this.slippageFraction)),false);
         const capacity=this.wholeLots?Math.floor(depth/2):depth;
         return assumedQuote({symbol,last,bid,ask,odd,simulated:false,
+        unadjusted_book:{bid:roundPrice(book?p.bid??d(last).minus(tick):d(last).minus(tick)),ask:roundPrice(book?p.ask??d(last).plus(tick):d(last).plus(tick),false)},
         book_source:p.book_lot===(odd?'ODD':'COMMON')&&p.bid!==undefined&&p.ask!==undefined&&p.bid_shares!==undefined&&p.ask_shares!==undefined?'OBSERVED' as const:'APPROXIMATE' as const,
         trade_at:p.at,book_at:p.at,
         bid_shares:d(bid).lt(roundPrice(d(reference).times('.9'),false))?0:(book?p.bid_shares:undefined)??(d(last).lte(roundPrice(d(reference).times('.9'),false))?0:capacity),

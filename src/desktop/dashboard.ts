@@ -1,3 +1,4 @@
+import {reservedBuyCash} from '../core/buy-reservation.js';
 import {planActive,planDeadline} from '../core/plan-lifecycle.js';
 import type {Settings} from '../core/models.js';
 import type {DesktopState,RuntimeView} from './shared.js';
@@ -49,8 +50,7 @@ export function traySnapshot(state:DesktopState):TraySnapshot {
   const available=a?.available??{cash:true,settlements:true,positions:true,orders:true};
   const settings=JSON.parse(state.settings) as {fee_rate:string;minimum_fee:string;account_max_age:number;quote_max_age:number;trade_direction:Settings['trade_direction']};
   const fresh=!!a&&Number.isFinite(Date.parse(cutoff))&&Date.parse(cutoff)>=Date.parse(a.asof)&&Date.parse(cutoff)-Date.parse(a.asof)<=settings.account_max_age*1000;
-  const reserved=(a?.orders??[]).filter(o=>o.action==='BUY'&&!['FILLED','CANCELLED','REJECTED'].includes(o.status)).reduce((sum,o)=>{
-    const amount=Number(o.limit_price)*(o.shares-o.filled);return sum+amount+Math.max(Number(settings.minimum_fee),Math.ceil(amount*Number(settings.fee_rate)));},0);
+  const reserved=Number(reservedBuyCash(a?.orders??[],settings));
   const full=!!a&&available.cash&&available.settlements&&available.positions&&available.orders&&fresh;
   const orders=(a&&available.orders?a.orders:r?.orders??[]).filter(o=>!['FILLED','CANCELLED','REJECTED'].includes(o.status));
   return {workspace:state.workspace_mode==='live'?'正式交易 · 真實帳戶':replay?'歷史回放 · 模擬時間':'即時模擬 · 虛擬資金',

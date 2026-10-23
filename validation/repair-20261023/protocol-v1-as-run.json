@@ -1,0 +1,28 @@
+{
+ "version":1,
+ "frozen_at":"2026-10-23T00:00:00Z",
+ "baseline_commit":"fa966d8f69f9f52fc13f4fce16abd1de47d30302",
+ "dataset":"validation/twse-daily.json.gz",
+ "initial_cash":"100000",
+ "periods":[{"label":"earlier_studied","start":"2025-04-01","end":"2025-06-30"},{"label":"later_studied","start":"2026-08-20","end":"2026-10-15"}],
+ "scenarios":[{"fill_assumption":"optimistic","execution_slippage_bps":0},{"fill_assumption":"neutral","execution_slippage_bps":10},{"fill_assumption":"conservative","execution_slippage_bps":30}],
+ "arms":[
+  {"name":"original_engine_rules_proxy","engine":"baseline","hypothesis":"Reference engine; original Codex replay unavailable, deterministic rules are a proxy only."},
+  {"name":"bug_fixes_only","engine":"current","hypothesis":"Correctness changes alone, with identical program selection rules and risk/cost settings."},
+  {"name":"entry_confirmation","engine":"current","settings":{"entry_policy":"trend"},"hypothesis":"Prior-session trend and breadth confirmation plus 2 ATR chase guard may avoid weak entries; may reduce opportunities."},
+  {"name":"exit_atr","engine":"current","research":{"exit_mode":"atr_trail"},"hypothesis":"ATR trailing may reduce noise exits; must retain the original maximum loss bound."},
+  {"name":"cost_aware","engine":"current","research":{"cost_aware":true},"hypothesis":"Require projected net target gain at least twice estimated round-trip fees/tax in addition to existing net RR; this is a research hurdle, not proof of edge."},
+  {"name":"portfolio_research","engine":"current","research":{"portfolio":true},"hypothesis":"Existing regime/drawdown/loss-streak brakes may reduce losses without widening any authorized limit."},
+  {"name":"combined_candidate","engine":"current","settings":{"entry_policy":"trend"},"research":{"portfolio":true,"cost_aware":true,"exit_mode":"atr_trail"},"hypothesis":"Fixed combination, no tuning or selection after results; no automatic promotion."}
+ ],
+ "rules":[
+  "Protocol fixed before executing these cases. No parameter search, excluded tickers or deleted losing experiments.",
+  "Identical 100000 cash, five-session decisions, five-minute monitoring, odd-lot limits and 1% trade risk / 25% reserve across arms.",
+  "All arms explicitly use minimum fee20, net RR1.2, min net gain60; this prevents the original disabled-risk defaults from creating an unfair comparison.",
+  "Original engine arm is not the user's original AI strategy, and not its supplied v0.1.5 baseline.",
+  "Public fixed ten-stock daily panel has already been studied and has survivorship/corporate-action/odd-lot-book limitations. Neither period is pristine OOS.",
+  "Conservative DAILY execution has no inferred intraday depth. Zero trades or cash preservation is not strategy profitability.",
+  "Save every full report and failure. Recompute FIFO statistics and accounting outside each engine.",
+  "Do not enable any research setting in live/readonly or call any real broker/model. No strategy is promoted without independent validation."
+ ]
+}

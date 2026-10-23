@@ -8,7 +8,8 @@ import type { Broker } from './types.js';
 interface Lot { symbol: string; shares: number; price: string; acquired: string; cost?: string }
 export interface SimulatedFill { id: string; order_id: string; at: string; symbol: string; action: 'BUY'|'SELL';
   lot: 'ODD'|'COMMON'; purpose: Order['purpose']; shares: number; price: string; amount: string;
-  fee: string; tax: string; realized_pnl: string | null;book_source?:Quote['book_source'];exit_trigger?:Order['exit_trigger'] }
+  fee: string; tax: string; realized_pnl: string | null;book_source?:Quote['book_source'];exit_trigger?:Order['exit_trigger'];
+  execution?:{last:string;bid:string;ask:string;trade_at:string;book_at:string;unadjusted_book?:Quote['unadjusted_book']} }
 interface Ledger { cash: string; lots: Lot[]; orders: Order[]; lastEvents: Record<string,string>;
   charges: Record<string,{ amount: string; fee: string; tax: string }>; fills?: SimulatedFill[];
   credits?: {due:string;amount:string;sold_day?:string}[] }
@@ -129,6 +130,7 @@ export class PaperBroker implements Broker {
         const fill: SimulatedFill = {id:`${order.local_id}:${order.filled}`,order_id:order.local_id,
           at:now.toISOString(),symbol:order.symbol,action:order.action,lot:order.lot,purpose:order.purpose,
           shares,price,book_source:q.book_source,amount:amount.toFixed(),fee:extraFee.toFixed(),tax:extraTax.toFixed(),realized_pnl:realized,
+          execution:{last:q.last,bid:q.bid,ask:q.ask,trade_at:q.trade_at,book_at:q.book_at,...(q.unadjusted_book?{unadjusted_book:q.unadjusted_book}:{})},
           ...(order.exit_trigger?{exit_trigger:order.exit_trigger}:{})};
         this.ledger.fills!.push(fill);
         const plan=this.store.plan(),reason=plan?.id===order.plan_id?plan.analysis.decisions.find(x=>x.symbol===order.symbol)?.reason:undefined;

@@ -1,3 +1,4 @@
+import type {EntryObserver,EntryStage} from './entry-funnel.js';
 import { active, ageSeconds, d, equity, marketValue, remaining, twDay, type Account, type Candidate, type Decision, type Features,
   type Instrument, type Order, type Plan, type Protection, type Quote, type Settings } from './models.js';
 import {confirmationIssues} from './entry-policy.js';
@@ -7,6 +8,7 @@ import {researchExit} from './smart.js';
 import {orderBudget} from './capital.js';
 import {multiOpportunity,type Opportunity} from './opportunities.js';
 import type {EntryTrack} from './models.js';
+import {remainingBuyCost} from './costs.js';
 import {COMMON_MAX_SHARES} from './stock-lot.js';
 
 export interface WatchEntry {
@@ -97,7 +99,9 @@ export function selectWatchlist(previous:WatchState,bundle:WatchBundle,settings:
     removes:(previous.removes??0)+changes.filter(c=>c.action==='REMOVE').length,
     entries:entries.sort((a,b)=>a.state.localeCompare(b.state)||b.score-a.score),changes:[...previous.changes,...changes].slice(-120)};
 }
-export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|undefined,a:Account,s:Settings,now:Date,track?:EntryTrack):Opportunity {
+export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|undefined,a:Account,s:Settings,now:Date,track?:EntryTrack,observe?:EntryObserver):Opportunity {
+  let stage:EntryStage='DATA',delegated=false;
+  const run=():Opportunity=>{
   const rule=plan.analysis.screening?.entry;
   if(!rule||plan.analysis.stance!=='BUY_ALLOWED')return {reason:'等待 Codex 個股決策'};
   if(!w.eligible||w.state!=='OBSERVE')return {reason:w.reason};
@@ -105,17 +109,23 @@ export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|un
   if(!q||q.simulated||ageSeconds(now,q.trade_at)<0||ageSeconds(now,q.trade_at)>s.quote_max_age
     ||ageSeconds(now,q.book_at)<0||ageSeconds(now,q.book_at)>s.quote_max_age||!d(q.ask).gt(0))return {reason:'等待新鮮成交與五檔行情'};
   if(rule.signal==='MULTI'||s.entry_policy!=='legacy'){
-    const result=multiOpportunity(plan,w.symbol,f,q,a,s,now,track);
-    if(result.decision){const issues=confirmationIssues(s.entry_policy,f,q,result.decision);if(issues.length)return {track:result.track,reason:issues.join('；')};}
+    delegated=true;const result=multiOpportunity(plan,w.symbol,f,q,a,s,now,track,observe);
+    if(result.decision){const issues=confirmationIssues(s.entry_policy,f,q,result.decision);if(issues.length){observe?.({stage:'TREND',status:'BLOCK',code:'ENTRY_CONFIRMATION',reason:issues.join('；')});return {track:result.track,reason:issues.join('；')};}}
     return result;
   }
+  observe?.({stage:'DATA',status:'PASS',code:'RULE_DATA_READY'});
+  stage='TREND';
+  if((rule.signal==='TREND'||rule.signal==='PULLBACK20')&&!d(f.ma5).gte(f.ma20))return {reason:'等待多頭趨勢條件'};
+  observe?.({stage:'TREND',status:rule.signal==='BREAKOUT20'?'NOT_REQUIRED':'PASS',code:'RULE_TREND'});
+  stage='TRIGGER';
   const last=d(q.last),distance=last.minus(f.ma20).abs().div(f.ma20);
   if(distance.gt(rule.max_ma20_distance))return {reason:'價格距離 MA20 超過策略範圍'};
-  if(rule.signal==='TREND'&&!(last.gte(f.ma20)&&d(f.ma5).gte(f.ma20)))return {reason:'等待多頭趨勢條件'};
+  if(rule.signal==='TREND'&&!last.gte(f.ma20))return {reason:'等待多頭趨勢條件'};
   if(rule.signal==='BREAKOUT20'&&!last.gt(f.resistance20))return {reason:'等待突破此前 20 日壓力'};
   if(rule.signal==='PULLBACK20'&&!(d(f.ma5).gte(f.ma20)&&last.gte(f.ma20)&&last.lte(d(f.ma20).times('1.01'))))return {reason:'等待回測 MA20 條件'};
+  observe?.({stage:'TRIGGER',status:'PASS',code:'RULE_PRICE_TRIGGER'});stage='RISK';
   const limit=roundPrice(q.ask,false),e=equity(a),buys=a.orders.filter(o=>active(o)&&o.action==='BUY');
-  const reserved=buys.reduce((sum,o)=>sum.plus(d(o.limit_price).times(remaining(o))).plus(fee(d(o.limit_price).times(remaining(o)),s)),d(0));
+  const reserved=buys.reduce((sum,o)=>sum.plus(remainingBuyCost(o,s)),d(0));
   const reservedAmount=buys.reduce((sum,o)=>sum.plus(d(o.limit_price).times(remaining(o))),d(0));
   const cashRoom=d(a.cash).minus(a.settlement_debits).minus(reserved).minus(e.times(s.min_cash_fraction));
   const held=a.positions.find(p=>p.symbol===w.symbol),symbolHeld=held?d(held.last_price).times(held.shares):d(0);
@@ -129,10 +139,15 @@ export function ruleEntry(plan:Plan,w:WatchEntry,f:Features|undefined,q:Quote|un
   shares=!q.odd?Math.floor(shares/1000)*1000:Math.min(999,shares);
   while(shares>0&&d(limit).times(shares).plus(fee(d(limit).times(shares).toFixed(),s)).gt(cashRoom))shares-=q.odd?1:1000;
   if(!shares)return {reason:'可用預算不足一股或最低手續費'};
+  stage='COST';
   const stop=roundPrice(d(limit).times(d(1).minus(rule.stop_fraction))),take=roundPrice(d(limit).times(d(1).plus(rule.take_profit_fraction)));
   if(!d(stop).gt(0)||!d(stop).lt(limit)||!d(take).gt(limit))return {reason:'跳動單位使保護價不合法'};
   return {reason:'策略條件成立，送單前仍須通過硬性風控',decision:{symbol:w.symbol,action:'BUY',shares,limit_price:limit,
     entry_when:'IMMEDIATE',trigger_price:'0',smart:researchExit({stop_price:stop,take_profit:rule.trailing_fraction?null:take,reward_target:take,
       trailing_activate:rule.trailing_fraction?roundPrice(d(limit).times(d(1).plus(d(rule.take_profit_fraction).div(2)))):null,
       trailing_fraction:rule.trailing_fraction},limit,f.atr14,s),reason:`Codex 規則 ${rule.signal}；${w.reason}；單輪每檔限一次進場`}};
+  };
+  const result=run();
+  if(!result.decision&&!delegated)observe?.({stage,status:'BLOCK',code:'RULE_'+stage,reason:result.reason});
+  return result;
 }
