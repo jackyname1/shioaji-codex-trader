@@ -1,14 +1,14 @@
 # Shioaji Codex Trader
 
-**開發版 v0.1.6：回測審計與正式交易停用保障（尚未發行）**
+**v0.1.6 回測審計預發行版** · Windows x64 免安裝
 
-目前可下載的上一版：[v0.1.5 預發行版](https://github.com/jackyname1/shioaji-codex-trader/releases/tag/v0.1.5) · Windows x64 免安裝
+下載版本與資產以 [GitHub Releases](https://github.com/jackyname1/shioaji-codex-trader/releases) 頁面的實際內容及 SHA256SUMS 為準。
 
 台灣股票桌面工作台。Shioaji 提供行情與帳務，Codex 設定股票策略，由程式逐筆核算股數、費稅、庫存及風控。提供即時模擬、歷史回測與實盤介面；啟動預設模擬模式，自動交易關閉。
 
 ## 下載與開始
 
-1. 下載 [Shioaji-Codex-Trader-0.1.5-Windows-x64.exe](https://github.com/jackyname1/shioaji-codex-trader/releases/download/v0.1.5/Shioaji-Codex-Trader-0.1.5-Windows-x64.exe)。先結束舊程式，再開新版；右下角可核對版本。
+1. 從版本頁取得 v0.1.6 的 Windows x64 EXE 並核對 SHA256SUMS；資產尚未列出時，表示發布流程尚未完成。先結束舊程式，再開新版；右下角可核對版本。
 2. 開啟「帳戶與設定 → 帳戶連線」，輸入 API Key、Secret Key。實盤需要有效 CA 憑證及密碼；記住設定時使用系統加密保存。
 3. 在右側 Codex 控制台登入並測試連線。模型及推理強度可直接修改，儲存後於下一輪生效；留空使用帳戶預設模型。
 4. 先使用「模擬 → 即時模擬」或「歷史回放」。日常排程與回測用量各自設定、各自保存。回測預設每 5 個交易日分析一次，可調整為 1–20 個交易日。
@@ -23,9 +23,9 @@
 - 「減碼優先」會禁止本輪新買進，依明確賣出條件及股數減少持倉；策略方向旁可開啟完整說明。交易風控另可保存「僅減碼」，持續禁止新買進；預設依有效策略決定。
 - 設定頁分成帳戶連線、日常排程、歷史回測、交易風控及進階與桌面。
 
-![v0.1.5 歷史回放工作台](docs/screenshots/workbench-v0.1.5.png)
+![v0.1.6 歷史回放工作台](docs/screenshots/workbench-v0.1.6.png)
 
-![v0.1.5 系統匣速覽](docs/screenshots/tray-v0.1.5.png)
+![v0.1.6 系統匣速覽](docs/screenshots/tray-v0.1.6.png)
 
 ## 兩組 Codex 設定
 
@@ -39,11 +39,11 @@
 
 啟動、手動分析、失敗嘗試與額外股數模型均計入對應策略上限。登入測試另外使用少量模型用量。行情更新、條件偵測及持倉保護不呼叫模型。回測以拉長分析間隔降低用量：休市不計，額外檢討也只在分析日執行；已啟用策略持續有效，直到下一份盤中策略成功驗證並啟用；收盤、跨日及下一輪排程本身不會使策略到期，盤後檢討也不替換策略。若下一個必要模型步驟已無剩餘預算，會停止並標記 PARTIAL，不再模擬剩餘期間。回放倍速不增加模型頻率。執行中的回測固定使用啟動時設定，修改預設供後續測試使用。
 
-![v0.1.5 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.5.png)
+![v0.1.6 可獨立調整的歷史回測設定](docs/screenshots/replay-settings-v0.1.6.png)
 
-![v0.1.5 帳戶連線設定](docs/screenshots/connection-v0.1.5.png)
+![v0.1.6 帳戶連線設定](docs/screenshots/connection-v0.1.6.png)
 
-以下現有截圖來自 v0.1.5 Windows 隔離測試，使用合成資料；v0.1.6 截圖須經最新來源與封裝 GUI 驗證後更新。[截圖來源與雜湊](docs/screenshots/provenance.json)
+截圖來自 v0.1.6 實際 Windows 隔離 GUI 測試，使用合成資料；來源提交、工作流程與影像雜湊均保留。[截圖來源與雜湊](docs/screenshots/provenance.json)
 
 預設每 5 個交易日分析，約 20–22 個交易日的一個月需 4–5 次、60–65 個交易日的三個月需 12–13 次策略分析；額外檢討與股數模型另計。這是呼叫次數估算，實際方案用量取決於輸入、輸出及推理強度。次數上限只作預算保護。舊 API 請求未提供跨日欄位時保留每日行為。
 
@@ -60,7 +60,7 @@
 - 三成交情境及固定 ablation 會保留失敗和零成交結果。研究成本門檻只適用回放／模擬，未證明獲利，也禁止套用實盤。
 - 可用 `node scripts/replay-export.mjs REPORT.json DATASET.json.gz OUTPUT_DIR` 重播完整原始 AI 紀錄；缺決策時明確失敗，不補算舊交易或換用未來回覆。需先 `npm run build`。
 
-[本次工程紀錄與未通過項目](docs/BACKTEST_REPAIR_PROGRESS_20261023.md)。原始 v0.1.5 附件與同次行情尚未在工作環境取得；程式策略研究不能替代原始 AI 基準。所有研究均未通過正式交易資格。
+[工程紀錄與未通過項目](docs/BACKTEST_REPAIR_PROGRESS_20261023.md) · [全部研究比較](docs/research/repair-20261023/REPORT.md)。原始 v0.1.5 附件與同次行情尚未在工作環境取得；程式策略研究不能替代原始 AI 基準。所有研究均未通過正式交易資格。
 
 ## 資金與保護
 
@@ -92,7 +92,7 @@
 - 新增獨立帳務重算：成交時序、重複成交、委託股數／限價、FIFO 成本、費稅、交割款及淨損益共九項核對；新回測未通過會標為 FAILED。報表另外顯示期末庫存估計賣出費稅、扣除後淨損益與過期估值股票。績效檢核區分虛構流程、帳務錯誤、不完整、未獲利、樣本不足及仍待獨立驗證；單一正報酬不標為實盤合格。詳見 [回測稽核與驗證範圍](docs/BACKTEST_AUDIT.md)。
 - 歷史零股五檔、排隊、企業行動及滑價存在近似；分鐘收盤價不能重建 K 線內路徑。測試畫面與小樣本結果不能當作實盤獲利證明。
 
-![v0.1.5 報表視窗內直接匯出](docs/screenshots/history-export-v0.1.5.png)
+![v0.1.6 報表視窗內直接匯出](docs/screenshots/history-v0.1.6.png)
 
 ## 開發與驗證
 

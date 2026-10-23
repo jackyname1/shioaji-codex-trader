@@ -42,7 +42,7 @@
 |---|---|---|
 | portfolio_risk_enabled=false | 不以研究用高點回撤、股票池市場代理及連敗縮減新增配置 | 現金、單筆、單檔、總曝險、單日、1% 風險與成本 |
 | entry_quality_enabled=false | 不用研究評分重排候選 | 資料、候選資格、條件、合法限價、淨收益與風險核對 |
-| dynamic_allocation=false | 不額外依目標曝險缺口重新縮減配置 | 原定本金及股數上限；不強制把 50% 軟目標填滿 |
+| dynamic_allocation=false | 不執行送單前動態配置縮量；規則提案本身仍可使用目標曝險缺口與配置比例 | 原定本金及股數上限；不強制把 50% 軟目標填滿 |
 | research_cost_aware=false | 不額外要求淨目標收益至少為預估費稅兩倍 | 雙邊成本後正收益、有效停損／目標、設定的淨 RR 與 1% 風險 |
 
 ### 主要回歸對應
@@ -58,3 +58,11 @@
 | 休市可見性及 T+2 | calendar-evidence.test.ts、v023-optimization.test.ts |
 | 正式交易停用、撤單、重啟不授權 | live-session.test.ts、startup-recovery.test.ts |
 | 畫面與 12 匯出 | backtest-export.test.ts、backtest-series.test.ts、Windows source/packaged smokeTest |
+
+## 固定程式版本的 CI 證據
+
+來源提交 `b95de61253ad88b3e325d8811239023f4086e457`，Actions [39834203890](https://github.com/jackyname1/shioaji-codex-trader/actions/runs/39834203890)：Linux **444/444**、Windows **444/444**，均零跳過；獨立帳務回歸、CLI 示範及 Windows 來源 GUI 通過。來源 GUI 已實際核對三張圖、八階段數字、交易歸因與 12 種匯出。截圖由工作流程另存 Git capture commit `7e000deb4b2cefecac2b32641e3810647ec045fa`；11 張尺寸／SHA256 已逐一核對並人工檢視工作台及歷史報表。封裝結果另以最終工作流程狀態核對，不以來源通過代替。
+
+Windows 封裝工作亦已通過（同 run `39834203890`，job `120021087341`），smoke 結果 `packaged=true / status=PASSED`；來源與封裝均包含所有 12 匯出。沒有把來源通過代替封裝驗證，也沒有發布失敗的前次建置。
+
+固定版研究 42 + 40 = **82 組全部帳務核對通過**，73 COMPLETED、9 PARTIAL。詳見 [完整結果](research/repair-20261023/REPORT.md)。較早初步結果、元資料時間筆誤修正、休市資料修正前結果及兩次 CI 故障均保留；沒有刪除不利方案。沒有研究版本晉升為正式交易策略。
